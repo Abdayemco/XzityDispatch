@@ -1,0 +1,34 @@
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env
+.env.*
+
+# OS or IDE files
+.DS_Store
+Thumbs.db
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+
+# Optional: Ignore SQLite and Prisma artifacts
+*.db
+*.sqlite
+prisma/dev.db
+prisma/migrations/
+
+# Optional: Ignore Docker files if not using Docker Compose overrides
+docker-compose.override.yml
