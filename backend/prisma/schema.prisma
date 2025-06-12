@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phone       String   @unique
+  email       String?  @unique
+  name        String
+  password    String
+  role        Role
+  status      Status   @default(PENDING)
+  verificationCode String?
+  trialEndsAt  DateTime?
+  createdAt    DateTime @default(now())
+  rides        Ride[]   @relation("UserRides")
+  driverRides  Ride[]   @relation("DriverRides")
+  chats        Chat[]
+  // ---------- ADDED FIELDS ----------
+  vehicleType  VehicleType? // Only for DRIVERs
+  isAvailable  Boolean?     // Only for DRIVERs
+  isBusy       Boolean?     // Only for DRIVERs
+  lat          Float?       // Only for DRIVERs
+  lng          Float?       // Only for DRIVERs
+}
+
+model Ride {
+  id           String   @id @default(uuid())
+  customer     User     @relation("UserRides", fields: [customerId], references: [id])
+  customerId   String
+  driver       User?    @relation("DriverRides", fields: [driverId], references: [id])
+  driverId     String?
+  status       RideStatus
+  originLat    Float
+  originLng    Float
+  destLat      Float
+  destLng      Float
+  requestedAt  DateTime @default(now())
+  acceptedAt   DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  price        Float?
+  chats        Chat[]
+  // ---------- ADDED FIELD ----------
+  vehicleType  VehicleType // Type of vehicle requested for this ride
+}
+
+model Chat {
+  id        String   @id @default(uuid())
+  message   String
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  String
+  ride      Ride     @relation(fields: [rideId], references: [id])
+  rideId    String
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  DRIVER
+  CUSTOMER
+  ADMIN
+}
+
+enum Status {
+  PENDING
+  VERIFIED
+  APPROVED
+  REJECTED
+}
+
+enum RideStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+
+// ----------- NEW ENUM -----------
+enum VehicleType {
+  CAR
+  BIKE
+  TUKTUK
+  TRUCK
+}

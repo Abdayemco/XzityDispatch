@@ -1,0 +1,131 @@
+import { Request, Response } from "express";
+import { prisma } from "../utils/prisma";
+import { Role, VehicleType, RideStatus } from "@prisma/client";
+
+// Get available rides for drivers (pending status, for their vehicle type)
+export const getAvailableRides = async (req: Request, res: Response) => {
+  try {
+    const driverId = req.user?.id;
+    if (!driverId) {
+      return res.status(401).json({ error: "Unauthorized: Missing driver id" });
+    }
+    // Find driver's vehicle type
+    const driver = await prisma.user.findUnique({
+      where: { id: driverId },
+      select: { vehicleType: true },
+    });
+    if (!driver) {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+
+    // Only show rides for this vehicle type and not yet assigned to any driver
+    const where: any = {
+      status: RideStatus.PENDING,
+      driverId: null
+    };
+    if (driver.vehicleType) {
+      where.vehicleType = driver.vehicleType;
+    }
+
+    const rides = await prisma.ride.findMany({
+      where,
+      select: {
+        id: true,
+        originLat: true,
+        originLng: true,
+        destLat: true,
+        destLng: true,
+        requestedAt: true,
+        customer: { select: { name: true, phone: true } },
+      },
+    });
+    res.json(rides);
+  } catch (error) {
+    console.error("Error fetching available rides:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Driver accepts a ride
+export const acceptRide = async (req: Request, res: Response) => {
+  try {
+    const { rideId } = req.params;
+    const driverId = req.user?.id; // Should be set by auth middleware
+
+    if (!driverId) {
+      return res.status(401).json({ error: "Unauthorized: Missing driver id" });
+    }
+
+    // Only allow accepting if ride is still pending and unassigned
+    const ride = await prisma.ride.updateMany({
+      where: { id: rideId, status: RideStatus.PENDING, driverId: null },
+      data: { status: RideStatus.ACCEPTED, driverId, acceptedAt: new Date() },
+    });
+
+    if (ride.count === 0) {
+      return res.status(400).json({ error: "Ride already assigned or not available." });
+    }
+
+    // Mark the driver as busy
+    await prisma.user.update({
+      where: { id: driverId },
+      data: { isBusy: true },
+    });
+
+    const updatedRide = await prisma.ride.findUnique({
+      where: { id: rideId },
+      include: { customer: true, driver: true }
+    });
+
+    res.json(updatedRide);
+  } catch (error) {
+    console.error("Error accepting ride:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Customer requests a ride with vehicle type and location
+export const requestRide = async (req: Request, res: Response) => {
+  try {
+    const {
+      customerId,
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+      vehicleType,
+    } = req.body;
+
+    if (
+      !customerId ||
+      typeof originLat !== "number" ||
+      typeof originLng !== "number" ||
+      typeof destLat !== "number" ||
+      typeof destLng !== "number" ||
+      !vehicleType
+    ) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // No driver availability check for now (to ensure ride is always created for testing)
+    const ride = await prisma.ride.create({
+      data: {
+        customer: { connect: { id: customerId } },
+        status: RideStatus.PENDING,
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+        vehicleType: vehicleType as VehicleType,
+      },
+    });
+
+    res.json({
+      rideId: ride.id,
+      status: ride.status,
+    });
+  } catch (error) {
+    console.error("Error creating ride:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
