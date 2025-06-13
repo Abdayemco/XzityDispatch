@@ -1,9 +1,66 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
-import { Role, VehicleType, RideStatus } from "@prisma/client";
+import { VehicleType, RideStatus } from "@prisma/client";
+
+// Helper to normalize and validate vehicleType input (case-insensitive)
+function normalizeVehicleType(input: any): VehicleType | undefined {
+  if (!input || typeof input !== "string") return undefined;
+  const upper = input.trim().toUpperCase();
+  if (Object.values(VehicleType).includes(upper as VehicleType)) {
+    return upper as VehicleType;
+  }
+  return undefined;
+}
+
+// Customer requests a ride with vehicle type and location
+export const requestRide = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {
+      customerId,
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+      vehicleType,
+    } = req.body;
+
+    const normalizedVehicleType = normalizeVehicleType(vehicleType);
+
+    if (
+      !customerId ||
+      typeof originLat !== "number" ||
+      typeof originLng !== "number" ||
+      typeof destLat !== "number" ||
+      typeof destLng !== "number" ||
+      !normalizedVehicleType
+    ) {
+      return res.status(400).json({ error: "Missing or invalid required fields" });
+    }
+
+    const ride = await prisma.ride.create({
+      data: {
+        customer: { connect: { id: customerId } },
+        status: RideStatus.PENDING,
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+        vehicleType: normalizedVehicleType,
+      },
+    });
+
+    res.json({
+      rideId: ride.id,
+      status: ride.status,
+    });
+  } catch (error) {
+    console.error("Error creating ride:", error);
+    next(error);
+  }
+};
 
 // Get available rides for drivers (pending status, for their vehicle type)
-export const getAvailableRides = async (req: Request, res: Response) => {
+export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const driverId = req.user?.id;
     if (!driverId) {
@@ -42,12 +99,12 @@ export const getAvailableRides = async (req: Request, res: Response) => {
     res.json(rides);
   } catch (error) {
     console.error("Error fetching available rides:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 };
 
 // Driver accepts a ride
-export const acceptRide = async (req: Request, res: Response) => {
+export const acceptRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { rideId } = req.params;
     const driverId = req.user?.id; // Should be set by auth middleware
@@ -80,52 +137,6 @@ export const acceptRide = async (req: Request, res: Response) => {
     res.json(updatedRide);
   } catch (error) {
     console.error("Error accepting ride:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Customer requests a ride with vehicle type and location
-export const requestRide = async (req: Request, res: Response) => {
-  try {
-    const {
-      customerId,
-      originLat,
-      originLng,
-      destLat,
-      destLng,
-      vehicleType,
-    } = req.body;
-
-    if (
-      !customerId ||
-      typeof originLat !== "number" ||
-      typeof originLng !== "number" ||
-      typeof destLat !== "number" ||
-      typeof destLng !== "number" ||
-      !vehicleType
-    ) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    // No driver availability check for now (to ensure ride is always created for testing)
-    const ride = await prisma.ride.create({
-      data: {
-        customer: { connect: { id: customerId } },
-        status: RideStatus.PENDING,
-        originLat,
-        originLng,
-        destLat,
-        destLng,
-        vehicleType: vehicleType as VehicleType,
-      },
-    });
-
-    res.json({
-      rideId: ride.id,
-      status: ride.status,
-    });
-  } catch (error) {
-    console.error("Error creating ride:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 };

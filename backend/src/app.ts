@@ -3,7 +3,7 @@ import cors from "cors";
 import { errorHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/auth.routes";
 import rideRoutes from "./routes/ride.routes";
-import testRoutes from "./routes/test.routes"; // <--- Add this line
+import testRoutes from "./routes/test.routes";
 
 const app = express();
 
@@ -21,12 +21,24 @@ app.use(
   })
 );
 
+// Optional: Basic request logger (for debugging)
+app.use((req, res, next) => {
+  console.log(`[${req.method}] ${req.originalUrl}`);
+  next();
+});
+
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
-app.use("/test", testRoutes); // <--- Add this line
+app.use("/test", testRoutes);
 
+// 404 handler for undefined routes
+app.use((req, res, next) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+// Error handler (should be last)
 app.use(errorHandler);
 
 export default app;
