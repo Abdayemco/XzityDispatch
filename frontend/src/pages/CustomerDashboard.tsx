@@ -8,13 +8,13 @@ import bikeIcon from "../assets/marker-bike.png";
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 
-// Utility: Get icon URL for a given vehicleType
+// Utility: Get icon URL for a given vehicleType (enum values)
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType) {
-    case "car": return carIcon;
-    case "bike": return bikeIcon;
-    case "toktok": return tuktukIcon;
-    case "truck": return truckIcon;
+    case "CAR": return carIcon;
+    case "BIKE": return bikeIcon;
+    case "TUKTUK": return tuktukIcon;
+    case "TRUCK": return truckIcon;
     default: return carIcon;
   }
 }
@@ -30,12 +30,13 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
   });
 }
 
+// Dropdown options now match Prisma enum exactly
 const vehicleOptions = [
   { value: "", label: "Select type", icon: "" },
-  { value: "car", label: "Car", icon: carIcon },
-  { value: "bike", label: "Bike", icon: bikeIcon },
-  { value: "toktok", label: "Tuktuk", icon: tuktukIcon },
-  { value: "truck", label: "Truck", icon: truckIcon }
+  { value: "CAR", label: "Car", icon: carIcon },
+  { value: "BIKE", label: "Bike", icon: bikeIcon },
+  { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
+  { value: "TRUCK", label: "Truck", icon: truckIcon }
 ];
 
 function getCustomerIdFromStorage() {
@@ -105,7 +106,7 @@ export default function CustomerDashboard() {
           customerId,
           originLat: pickupLocation.lat,
           originLng: pickupLocation.lng,
-          destLat: pickupLocation.lat, // For demo, use pickup as dest as well; update for real dest!
+          destLat: pickupLocation.lat, // For demo, use pickup as dest; update for real dest!
           destLng: pickupLocation.lng,
           vehicleType,
         }),
