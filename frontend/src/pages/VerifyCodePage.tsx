@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
+// Helper to get or generate a deviceId (same as in LoginPage)
+function getDeviceId() {
+  let deviceId = localStorage.getItem("deviceId");
+  if (!deviceId) {
+    deviceId = "dev-" + Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem("deviceId", deviceId);
+  }
+  return deviceId;
+}
+
 export default function VerifyCodePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,10 +35,11 @@ export default function VerifyCodePage() {
     setLoading(true);
     setMessage("");
     try {
+      const deviceId = getDeviceId();
       const res = await fetch("http://localhost:5000/api/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code }),
+        body: JSON.stringify({ phone, code, deviceId }),
       });
       const data = await res.json();
       if (res.ok) {
