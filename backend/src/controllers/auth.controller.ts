@@ -1,14 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
 import transporter from "../config/email";
-import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
 
-// --- REGISTER CONTROLLER (unchanged, as before) ---
+// --- REGISTER CONTROLLER ---
 export const register = async (req: Request, res: Response, next: NextFunction) => {
-  // ... your existing registration code ...
   try {
     const { name, phone, email, password, role, vehicleType } = req.body;
 
@@ -27,7 +25,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const hashedPassword = password; // If you don't want passwords, you can skip hashing and ignore this field
 
     const user = await prisma.user.create({
       data: {
@@ -68,10 +67,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
   }
 };
 
-// --- LOGIN CONTROLLER WITH TRUSTED DEVICE SUPPORT ---
+// --- LOGIN CONTROLLER ---
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { phone, deviceId, password } = req.body;
+    const { phone, deviceId } = req.body;
 
     if (!phone || !deviceId) {
       return res.status(400).json({ error: "Phone and deviceId are required." });
@@ -113,30 +112,14 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    // 2. If device is not trusted, require password (optional: or send verification code)
-    if (!password) {
-      // User is on new device, ask frontend to show code input or password input
-      return res.status(202).json({ action: "verification_required", message: "New device. Please verify." });
-    }
-
-    // Password login for new device (existing flow)
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid phone or password." });
-    }
-
-    if (user.status !== "ACTIVE") {
-      return res.status(403).json({ error: "Account not active. Please verify your account." });
-    }
-
-    // If password correct, proceed to send verification code for new device
+    // 2. If device is not trusted, require verification code (not password)
+    // Send verification code to admin email
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     await prisma.user.update({
       where: { id: user.id },
       data: { verificationCode }
     });
 
-    // Send code (e.g., to admin email or SMS)
     await transporter.sendMail({
       from: process.env.GMAIL_USER,
       to: process.env.ADMIN_EMAIL,
@@ -152,13 +135,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       ].join('\n')
     });
 
-    return res.status(202).json({ action: "code_sent", message: "Verification code sent. Please verify." });
+    return res.status(202).json({ action: "verification_required", message: "Verification code sent. Please verify." });
   } catch (error) {
     next(error);
   }
 };
 
-// --- VERIFY CODE CONTROLLER, NOW ADDS TRUSTED DEVICE ---
+// --- VERIFY CODE CONTROLLER ---
 export const verifyCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone, code, deviceId } = req.body;
