@@ -123,7 +123,7 @@ export default function RegisterPage() {
               </option>
               <option value="car">Car</option>
               <option value="bike">Bike</option>
-              <option value="toktok">Three-wheel Bike (Toktok)</option>
+              <option value="tuktuk">Three-wheel Bike (Tuktuk)</option>
               <option value="truck">Truck</option>
             </select>
           </div>

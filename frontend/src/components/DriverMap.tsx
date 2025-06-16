@@ -9,7 +9,7 @@ type Job = {
   pickupLng: number;
   customerName: string;
   status: "pending" | "accepted" | "cancelled" | "done";
-  vehicleType: "car" | "bike" | "toktok" | "truck";
+  vehicleType: "car" | "bike" | "tuktuk" | "truck";
   assignedDriverId?: string;
 };
 
