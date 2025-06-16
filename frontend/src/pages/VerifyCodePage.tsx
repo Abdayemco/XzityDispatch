@@ -21,7 +21,7 @@ export default function VerifyCodePage() {
 
   // Retrieve phone and role from location state or localStorage
   const phone = location.state?.phone || localStorage.getItem("pendingPhone");
-  const role = location.state?.role || localStorage.getItem("pendingRole");
+  let role = location.state?.role || localStorage.getItem("pendingRole");
 
   useEffect(() => {
     if (!phone || !role) {
@@ -43,6 +43,10 @@ export default function VerifyCodePage() {
       });
       const data = await res.json();
       if (res.ok) {
+        // Use backend role if present, fallback to frontend role
+        if (data.role) {
+          role = data.role;
+        }
         localStorage.setItem("token", data.token);
 
         // Save userId and driverId as integer-string if backend provides it
@@ -66,11 +70,13 @@ export default function VerifyCodePage() {
         localStorage.setItem("role", (role || "").toLowerCase());
 
         setMessage("Verification successful! Redirecting...");
-        if (role === "CUSTOMER") {
+        // Normalize role for redirect
+        const roleNorm = (role || "").toUpperCase();
+        if (roleNorm === "CUSTOMER") {
           setRedirectTo("/customer");
-        } else if (role === "DRIVER") {
+        } else if (roleNorm === "DRIVER") {
           setRedirectTo("/driver");
-        } else if (role === "ADMIN") {
+        } else if (roleNorm === "ADMIN") {
           setRedirectTo("/admin");
         } else {
           setRedirectTo("/");

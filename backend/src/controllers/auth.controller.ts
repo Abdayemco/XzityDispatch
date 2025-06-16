@@ -81,18 +81,43 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "Invalid phone." });
     }
 
-    // 1. Check if device is already trusted
+    // Check if device is trusted
     const trustedDevice = await prisma.trustedDevice.findFirst({
       where: { userId: user.id, deviceId }
     });
 
-    if (trustedDevice) {
-      // Device is trusted, allow passwordless login
-      if (user.status !== "ACTIVE") {
-        return res.status(403).json({ error: "Account not active. Please verify your account." });
-      }
+    // If user is not active, always require verification
+    if (user.status !== "ACTIVE") {
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { verificationCode }
+      });
 
-      // Generate JWT
+      await transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: process.env.ADMIN_EMAIL,
+        subject: `Account Verification Required – ${user.phone}`,
+        text: [
+          `Verification code for account activation:`,
+          "",
+          `Name: ${user.name}`,
+          `Phone: ${user.phone}`,
+          `Code: ${verificationCode}`,
+          "",
+          "Send this code to the user via SMS/WhatsApp."
+        ].join('\n')
+      });
+
+      return res.status(202).json({
+        action: "verification_required",
+        role: user.role, // Include for frontend compatibility!
+        message: "Account not active. Verification code sent."
+      });
+    }
+
+    // If device is trusted and user is active, allow login
+    if (trustedDevice) {
       const token = jwt.sign(
         { id: user.id, phone: user.phone, role: user.role },
         JWT_SECRET,
@@ -112,8 +137,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    // 2. If device is not trusted, require verification code (not password)
-    // Send verification code to admin email
+    // If device is not trusted (but user is active), require verification
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     await prisma.user.update({
       where: { id: user.id },
@@ -135,7 +159,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       ].join('\n')
     });
 
-    return res.status(202).json({ action: "verification_required", message: "Verification code sent. Please verify." });
+    return res.status(202).json({
+      action: "verification_required",
+      role: user.role, // Include for frontend compatibility!
+      message: "Verification code sent. Please verify."
+    });
   } catch (error) {
     next(error);
   }

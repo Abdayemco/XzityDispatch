@@ -9,7 +9,7 @@ type Job = {
   pickupLng: number;
   customerName: string;
   status: "pending" | "accepted" | "cancelled" | "done";
-  vehicleType: "car" | "bike" | "tuktuk" | "truck";
+  vehicleType: "car" | "bike" | "toktok" | "tuktuk" | "truck";
   assignedDriverId?: string | number;
 };
 
@@ -30,7 +30,7 @@ export default function DriverDashboard() {
   const navigate = useNavigate();
 
   const driverId = getDriverIdFromStorage();
-  const driverVehicleType = localStorage.getItem("vehicleType") || "car";
+  const driverVehicleType = (localStorage.getItem("vehicleType") || "car").toLowerCase();
   const token = localStorage.getItem("token");
 
   // Auth guard: redirect to login if no token
@@ -39,6 +39,17 @@ export default function DriverDashboard() {
       navigate("/login", { replace: true });
     }
   }, [navigate, token]);
+
+  // On mount, check for verification success and role, and redirect to /driver if needed
+  useEffect(() => {
+    // If redirected from verification, backend or verification page should set role and token
+    const verificationStatus = localStorage.getItem("verificationStatus");
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    if (verificationStatus === "success" && role === "driver") {
+      localStorage.removeItem("verificationStatus");
+      navigate("/driver", { replace: true });
+    }
+  }, [navigate]);
 
   // Get driver's location
   useEffect(() => {
@@ -125,7 +136,10 @@ export default function DriverDashboard() {
   // Only show jobs matching driver's vehicle type or accepted by this driver
   const visibleJobs = jobs.filter(
     (job) =>
-      (job.status === "pending" && job.vehicleType === driverVehicleType) ||
+      (job.status === "pending" &&
+        (job.vehicleType === driverVehicleType ||
+          // Support both "toktok" (frontend) and "tuktuk" (backend) for safety
+          (driverVehicleType === "tuktuk" && job.vehicleType === "toktok"))) ||
       (job.status === "accepted" && String(job.assignedDriverId) === String(driverId))
   );
 
