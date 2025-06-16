@@ -1,6 +1,16 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png"; // Adjusted import for logo in src/assets
+import logo from "../assets/logo.png";
+
+// Helper to get or generate a deviceId
+function getDeviceId() {
+  let deviceId = localStorage.getItem("deviceId");
+  if (!deviceId) {
+    deviceId = "dev-" + Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem("deviceId", deviceId);
+  }
+  return deviceId;
+}
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -22,10 +32,18 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("");
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const deviceId = getDeviceId();
+      const endpoint = showCode
+        ? "http://localhost:5000/api/auth/verify"
+        : "http://localhost:5000/api/auth/login";
+      const body = showCode
+        ? { phone, code, deviceId }
+        : { phone, deviceId };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code: showCode ? code : undefined }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
@@ -39,7 +57,10 @@ export default function LoginPage() {
         if (data.role && data.role.toLowerCase() === "driver" && data.user) {
           localStorage.setItem("driverId", String(data.user.id));
           if (data.user.vehicleType) {
-            localStorage.setItem("vehicleType", data.user.vehicleType.toLowerCase());
+            localStorage.setItem(
+              "vehicleType",
+              data.user.vehicleType.toLowerCase()
+            );
           }
         }
         setMessage("Login successful! Redirecting...");
@@ -55,9 +76,14 @@ export default function LoginPage() {
           }
         }, 600);
         return;
-      } else if (data.error === "Verification code required") {
+      } else if (
+        data.action === "verification_required" ||
+        data.error === "Verification code required"
+      ) {
         setShowCode(true);
-        setMessage("Please enter the verification code you received from the admin.");
+        setMessage(
+          "Please enter the verification code you received from the admin."
+        );
       } else if (data.error && data.error.toLowerCase().includes("not found")) {
         setMessage("Phone number not registered. Please register below.");
       } else {
@@ -70,14 +96,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{
-      maxWidth: 340,
-      margin: "40px auto",
-      padding: "2em",
-      borderRadius: 8,
-      background: "#fff",
-      boxShadow: "0 2px 16px #0001"
-    }}>
+    <div
+      style={{
+        maxWidth: 340,
+        margin: "40px auto",
+        padding: "2em",
+        borderRadius: 8,
+        background: "#fff",
+        boxShadow: "0 2px 16px #0001",
+      }}
+    >
       <div style={{ textAlign: "center", marginBottom: 16 }}>
         <img src={logo} alt="XZity Dispatch" style={{ height: 70 }} />
       </div>
@@ -89,7 +117,7 @@ export default function LoginPage() {
             autoFocus
             type="tel"
             value={phone}
-            onChange={e => setPhone(e.target.value)}
+            onChange={(e) => setPhone(e.target.value)}
             required
             minLength={10}
             maxLength={16}
@@ -105,7 +133,7 @@ export default function LoginPage() {
             <input
               type="text"
               value={code}
-              onChange={e => setCode(e.target.value)}
+              onChange={(e) => setCode(e.target.value)}
               required
               placeholder="Enter verification code"
               style={{ width: "100%", margin: "8px 0", padding: "0.5em" }}
@@ -124,7 +152,7 @@ export default function LoginPage() {
             border: "none",
             borderRadius: 6,
             marginTop: 12,
-            fontSize: 16
+            fontSize: 16,
           }}
         >
           {loading ? "Logging in..." : "Login"}
@@ -133,7 +161,13 @@ export default function LoginPage() {
           <Link to="/register">Don't have an account? Register</Link>
         </div>
         {message && (
-          <div style={{ marginTop: 14, color: message.includes("success") ? "#388e3c" : "#d32f2f", textAlign: "center" }}>
+          <div
+            style={{
+              marginTop: 14,
+              color: message.includes("success") ? "#388e3c" : "#d32f2f",
+              textAlign: "center",
+            }}
+          >
             {message}
           </div>
         )}
