@@ -33,11 +33,34 @@ export default function VerifyCodePage() {
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem("token", data.token);
+
+        // Save userId and driverId as integer-string if backend provides it
+        if (data.user && typeof data.user.id === "number") {
+          localStorage.setItem("userId", String(data.user.id));
+        }
+        if (
+          role &&
+          role.toUpperCase() === "DRIVER" &&
+          data.user &&
+          typeof data.user.id === "number"
+        ) {
+          localStorage.setItem("driverId", String(data.user.id));
+          if (data.user.vehicleType) {
+            localStorage.setItem(
+              "vehicleType",
+              data.user.vehicleType.toLowerCase()
+            );
+          }
+        }
+        localStorage.setItem("role", (role || "").toLowerCase());
+
         setMessage("Verification successful! Redirecting...");
         if (role === "CUSTOMER") {
           setRedirectTo("/customer");
         } else if (role === "DRIVER") {
           setRedirectTo("/driver");
+        } else if (role === "ADMIN") {
+          setRedirectTo("/admin");
         } else {
           setRedirectTo("/");
         }

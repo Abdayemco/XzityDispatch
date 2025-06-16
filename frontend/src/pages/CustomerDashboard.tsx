@@ -39,8 +39,12 @@ const vehicleOptions = [
   { value: "TRUCK", label: "Truck", icon: truckIcon }
 ];
 
-function getCustomerIdFromStorage() {
-  return localStorage.getItem("userId");
+// This function now parses userId as integer, or returns null if invalid
+function getCustomerIdFromStorage(): number | null {
+  const raw = localStorage.getItem("userId");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
 }
 
 export default function CustomerDashboard() {
@@ -89,7 +93,7 @@ export default function CustomerDashboard() {
     }
     const token = localStorage.getItem("token");
     const customerId = getCustomerIdFromStorage();
-    if (!token || !customerId) {
+    if (!token || customerId === null) {
       setError("Not logged in.");
       setWaiting(false);
       return;
@@ -103,7 +107,7 @@ export default function CustomerDashboard() {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          customerId,
+          customerId, // This is now always a number
           originLat: pickupLocation.lat,
           originLng: pickupLocation.lng,
           destLat: pickupLocation.lat, // For demo, use pickup as dest; update for real dest!

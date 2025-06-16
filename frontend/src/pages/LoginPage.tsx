@@ -31,11 +31,13 @@ export default function LoginPage() {
       if (res.ok) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", (data.role || "").toLowerCase());
-        if (data.user && data.user.id) {
-          localStorage.setItem("userId", data.user.id);
+        // Always store userId as a stringified integer if backend provides it
+        if (data.user && typeof data.user.id === "number") {
+          localStorage.setItem("userId", String(data.user.id));
         }
+        // If driver, also store driverId and vehicleType for future use
         if (data.role && data.role.toLowerCase() === "driver" && data.user) {
-          localStorage.setItem("driverId", data.user.id);
+          localStorage.setItem("driverId", String(data.user.id));
           if (data.user.vehicleType) {
             localStorage.setItem("vehicleType", data.user.vehicleType.toLowerCase());
           }

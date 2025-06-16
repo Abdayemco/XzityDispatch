@@ -26,8 +26,12 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
 
+    // Ensure customerId is an integer and not a string/UUID
+    const numericCustomerId = Number(customerId);
     if (
-      !customerId ||
+      !numericCustomerId ||
+      typeof numericCustomerId !== "number" ||
+      isNaN(numericCustomerId) ||
       typeof originLat !== "number" ||
       typeof originLng !== "number" ||
       typeof destLat !== "number" ||
@@ -39,7 +43,7 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
 
     const ride = await prisma.ride.create({
       data: {
-        customer: { connect: { id: customerId } },
+        customer: { connect: { id: numericCustomerId } },
         status: RideStatus.PENDING,
         originLat,
         originLng,
@@ -106,7 +110,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
 // Driver accepts a ride
 export const acceptRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { rideId } = req.params;
+    // Make sure to convert rideId to a number!
+    const rideId = Number(req.params.rideId);
     const driverId = req.user?.id; // Should be set by auth middleware
 
     if (!driverId) {

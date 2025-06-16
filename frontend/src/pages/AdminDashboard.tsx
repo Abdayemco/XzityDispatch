@@ -1,7 +1,19 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { FaUsers, FaCar, FaUserShield } from "react-icons/fa";
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+  const role = localStorage.getItem("role");
+
+  // Optional: Auth guard to block access if not admin
+  useEffect(() => {
+    if (!token || role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, token, role]);
+
   return (
     <div>
       <h2 style={{ textAlign: "center" }}>Admin Panel</h2>

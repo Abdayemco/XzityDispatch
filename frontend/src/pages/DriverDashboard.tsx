@@ -10,8 +10,16 @@ type Job = {
   customerName: string;
   status: "pending" | "accepted" | "cancelled" | "done";
   vehicleType: "car" | "bike" | "toktok" | "truck";
-  assignedDriverId?: string;
+  assignedDriverId?: string | number;
 };
+
+// Utility to get driverId as integer, or null if invalid
+function getDriverIdFromStorage(): number | null {
+  const raw = localStorage.getItem("driverId");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
+}
 
 export default function DriverDashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -21,7 +29,7 @@ export default function DriverDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const driverId = localStorage.getItem("driverId") || "";
+  const driverId = getDriverIdFromStorage();
   const driverVehicleType = localStorage.getItem("vehicleType") || "car";
   const token = localStorage.getItem("token");
 
@@ -118,12 +126,12 @@ export default function DriverDashboard() {
   const visibleJobs = jobs.filter(
     (job) =>
       (job.status === "pending" && job.vehicleType === driverVehicleType) ||
-      (job.status === "accepted" && job.assignedDriverId === driverId)
+      (job.status === "accepted" && String(job.assignedDriverId) === String(driverId))
   );
 
   // Job in progress: accepted but not yet marked as done
   const jobInProgress = jobs.find(
-    (job) => job.status === "accepted" && job.assignedDriverId === driverId
+    (job) => job.status === "accepted" && String(job.assignedDriverId) === String(driverId)
   );
 
   return (

@@ -8,7 +8,7 @@ export default function RegisterPage() {
     email: "",
     password: "",
     role: "CUSTOMER",
-    vehicleType: "", // Default is empty now!
+    vehicleType: "",
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -23,12 +23,10 @@ export default function RegisterPage() {
     setLoading(true);
     setMessage("");
     try {
-      // Only include vehicleType if role is DRIVER
       const submitData = { ...form };
       if (form.role !== "DRIVER") {
         delete submitData.vehicleType;
       } else {
-        // Send uppercase to backend for compatibility with the enum
         submitData.vehicleType = form.vehicleType.toUpperCase();
       }
       const res = await fetch("http://localhost:5000/api/auth/register", {
@@ -42,9 +40,14 @@ export default function RegisterPage() {
         localStorage.setItem("pendingPhone", form.phone);
         localStorage.setItem("pendingRole", form.role);
 
-        // If registering as a driver, also store id and vehicleType in localStorage for future use
+        // Store user ID as stringified integer for ALL users if backend returns it
+        if (data?.user && typeof data.user.id === "number") {
+          localStorage.setItem("userId", String(data.user.id));
+        }
+
+        // If registering as a driver, also store driverId and vehicleType
         if (form.role === "DRIVER" && data?.user) {
-          localStorage.setItem("driverId", data.user.id);
+          localStorage.setItem("driverId", String(data.user.id));
           localStorage.setItem("vehicleType", form.vehicleType.toLowerCase());
         }
 
@@ -61,7 +64,6 @@ export default function RegisterPage() {
     setLoading(false);
   }
 
-  // Button disables if driver and vehicleType not selected, or if loading
   const registerDisabled =
     loading ||
     (form.role === "DRIVER" && !form.vehicleType);
