@@ -34,8 +34,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         phone: phone.trim(),
         email: email?.trim() || null,
         password: hashedPassword,
-        role: role.trim(),
-        vehicleType: role.trim() === "DRIVER" ? vehicleType?.toUpperCase() : null,
+        role: role.trim().toUpperCase(),
+        vehicleType: role.trim().toUpperCase() === "DRIVER" ? vehicleType?.toUpperCase() : null,
         verificationCode,
         status: "PENDING",
       },
@@ -81,7 +81,6 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "Invalid phone." });
     }
 
-    // Check if device is trusted
     const trustedDevice = await prisma.trustedDevice.findFirst({
       where: { userId: user.id, deviceId }
     });
@@ -111,7 +110,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
       return res.status(202).json({
         action: "verification_required",
-        role: user.role, // Include for frontend compatibility!
+        role: user.role ? user.role.toUpperCase() : null,
         message: "Account not active. Verification code sent."
       });
     }
@@ -126,7 +125,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
       return res.json({
         token,
-        role: user.role?.toLowerCase(),
+        role: user.role ? user.role.toUpperCase() : null,
         user: {
           id: user.id,
           name: user.name,
@@ -161,7 +160,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     return res.status(202).json({
       action: "verification_required",
-      role: user.role, // Include for frontend compatibility!
+      role: user.role ? user.role.toUpperCase() : null,
       message: "Verification code sent. Please verify."
     });
   } catch (error) {
@@ -222,7 +221,7 @@ export const verifyCode = async (req: Request, res: Response, next: NextFunction
 
     return res.json({
       token,
-      role: updatedUser.role?.toLowerCase(),
+      role: updatedUser.role ? updatedUser.role.toUpperCase() : null,
       user: {
         id: updatedUser.id,
         name: updatedUser.name,
