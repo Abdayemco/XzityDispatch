@@ -1,15 +1,14 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png"; // Adjusted import for logo in src/assets
+import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png"; // <-- Update this path if needed
 
-// Helper to get or generate a deviceId
 function getDeviceId() {
-  let deviceId = localStorage.getItem("deviceId");
-  if (!deviceId) {
-    deviceId = "dev-" + Math.random().toString(36).slice(2) + Date.now();
-    localStorage.setItem("deviceId", deviceId);
+  let id = localStorage.getItem("deviceId");
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem("deviceId", id);
   }
-  return deviceId;
+  return id;
 }
 
 export default function LoginPage() {
@@ -17,11 +16,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
+  const phonePattern = /^\+?\d{10,15}$/;
 
-  // Accepts + at start and 10-15 digits after
-  const phonePattern = /^\+?[0-9]{10,15}$/;
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!phonePattern.test(phone)) {
       setMessage("Please enter a valid phone number, with or without '+'.");
@@ -37,8 +34,16 @@ export default function LoginPage() {
         body: JSON.stringify({ phone, deviceId }),
       });
       const data = await res.json();
+      console.log("[LOGIN RESPONSE]", data);
+
       if (res.ok) {
-        localStorage.setItem("token", data.token);
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        } else {
+          setMessage("Login failed: No token received from server.");
+          setLoading(false);
+          return;
+        }
         localStorage.setItem("role", (data.role || "").toLowerCase());
         // Always store userId as a stringified integer if backend provides it
         if (data.user && typeof data.user.id === "number") {
@@ -67,11 +72,11 @@ export default function LoginPage() {
       } else if (data.action === "verification_required" || data.error === "Verification code required") {
         // Save info for verification page
         localStorage.setItem("pendingPhone", phone);
-        localStorage.setItem("pendingRole", data.role || "");
-        navigate("/verify", { state: { phone, role: data.role || "" } });
+        setMessage("Verification required. Redirecting...");
+        setTimeout(() => {
+          navigate("/verify", { state: { phone } });
+        }, 600);
         return;
-      } else if (data.error && data.error.toLowerCase().includes("not found")) {
-        setMessage("Phone number not registered. Please register below.");
       } else {
         setMessage(data.error || "Login failed.");
       }
@@ -83,59 +88,65 @@ export default function LoginPage() {
 
   return (
     <div style={{
-      maxWidth: 340,
-      margin: "40px auto",
-      padding: "2em",
-      borderRadius: 8,
+      maxWidth: 400,
+      margin: "80px auto",
+      boxShadow: "0 2px 24px #0002",
+      padding: 32,
+      borderRadius: 16,
       background: "#fff",
-      boxShadow: "0 2px 16px #0001"
+      textAlign: "center"
     }}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <img src={logo} alt="XZity Dispatch" style={{ height: 70 }} />
-      </div>
-      <h2 style={{ textAlign: "center" }}>Login</h2>
-      <form onSubmit={handleSubmit} autoComplete="off">
-        <label>
-          Phone Number:
-          <input
-            autoFocus
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            required
-            minLength={10}
-            maxLength={16}
-            placeholder="e.g. +12345678901"
-            style={{ width: "100%", margin: "8px 0", padding: "0.5em" }}
-            pattern="^\+?[0-9]{10,15}$"
-            inputMode="tel"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={loading || !phone}
+      <img src={logo} alt="Logo" style={{ width: 90, marginBottom: 16 }} />
+      <h2 style={{ marginBottom: 28, color: "#1976D2", fontWeight: 700, letterSpacing: 1 }}>Login</h2>
+      <form onSubmit={handleLogin} autoComplete="off">
+        <input
+          type="text"
+          placeholder="Phone number"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
           style={{
             width: "100%",
-            padding: "0.7em 0",
+            marginBottom: 18,
+            padding: "12px 10px",
+            fontSize: 17,
+            border: "1px solid #ccc",
+            borderRadius: 8,
+            outline: "none",
+            fontFamily: "inherit"
+          }}
+          autoFocus
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: "100%",
             background: "#1976D2",
             color: "#fff",
             border: "none",
-            borderRadius: 6,
-            marginTop: 12,
-            fontSize: 16
+            padding: "12px 0",
+            borderRadius: 8,
+            fontSize: 18,
+            fontWeight: 600,
+            cursor: loading ? "not-allowed" : "pointer",
+            transition: "background 0.2s"
           }}
         >
           {loading ? "Logging in..." : "Login"}
         </button>
-        <div style={{ marginTop: 12, textAlign: "center" }}>
-          <Link to="/register">Don't have an account? Register</Link>
-        </div>
-        {message && (
-          <div style={{ marginTop: 14, color: message.includes("success") ? "#388e3c" : "#d32f2f", textAlign: "center" }}>
-            {message}
-          </div>
-        )}
       </form>
+      {message && (
+        <div style={{
+          color: message.toLowerCase().includes("success") ? "#388e3c" : "#d32f2f",
+          marginTop: 16,
+          fontWeight: 500
+        }}>
+          {message}
+        </div>
+      )}
+      <div style={{ marginTop: 18 }}>
+        <a href="/register" style={{ color: "#1976D2", textDecoration: "none" }}>Don't have an account? Register</a>
+      </div>
     </div>
   );
 }
