@@ -160,6 +160,44 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
   }
 };
 
+// Driver starts a ride (NEW ENDPOINT FOR IN_PROGRESS STATUS)
+export const startRide = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const driverId = Number(req.query.driverId);
+    const rideId = Number(req.params.rideId);
+
+    if (!driverId || !rideId) {
+      return res.status(400).json({ error: "Invalid driverId or rideId" });
+    }
+
+    // Only allow starting a ride if it is accepted by this driver
+    const ride = await prisma.ride.findFirst({
+      where: {
+        id: rideId,
+        driverId,
+        status: RideStatus.ACCEPTED,
+      },
+    });
+
+    if (!ride) {
+      return res.status(400).json({ error: "Ride not found or not accepted by you." });
+    }
+
+    const updated = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.IN_PROGRESS, startedAt: new Date() },
+    });
+
+    return res.json({
+      status: "in_progress",
+      ride: updated,
+    });
+  } catch (error) {
+    console.error("Error starting ride:", error);
+    next(error);
+  }
+};
+
 // Get ride status for polling (UPDATED)
 export const getRideStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -202,6 +240,44 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
     return res.json({ status: statusForFrontend });
   } catch (error) {
     console.error("Error fetching ride status:", error);
+    next(error);
+  }
+};
+
+// --- NEW: Customer rates a ride ---
+export const rateRide = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rideId = Number(req.params.rideId);
+    const { rating, feedback } = req.body;
+
+    if (!rideId || !rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "Invalid rideId or rating (must be 1-5)" });
+    }
+
+    // Only allow rating a completed ride, and only if not rated yet
+    const ride = await prisma.ride.findUnique({
+      where: { id: rideId },
+      select: { status: true, rating: true }
+    });
+
+    if (!ride) {
+      return res.status(404).json({ error: "Ride not found" });
+    }
+    if (ride.status !== RideStatus.COMPLETED) {
+      return res.status(400).json({ error: "Can only rate completed rides" });
+    }
+    if (ride.rating !== null && ride.rating !== undefined) {
+      return res.status(400).json({ error: "Ride already rated" });
+    }
+
+    const updated = await prisma.ride.update({
+      where: { id: rideId },
+      data: { rating, feedback }
+    });
+
+    res.json({ message: "Thank you for rating your driver!", ride: updated });
+  } catch (error) {
+    console.error("Error rating ride:", error);
     next(error);
   }
 };

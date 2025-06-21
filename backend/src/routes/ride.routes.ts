@@ -4,6 +4,8 @@ import {
   acceptRide,
   requestRide,
   getRideStatus,
+  startRide,
+  rateRide, // <-- Import the new controller!
 } from "../controllers/ride.controller";
 import { prisma } from "../utils/prisma";
 import { RideStatus } from "@prisma/client";
@@ -31,6 +33,9 @@ router.post("/request", (req, res, next) => {
 
 // PUT /api/rides/:rideId/accept
 router.put("/:rideId/accept", acceptRide);
+
+// PUT /api/rides/:rideId/start (NEW: Driver starts the ride)
+router.put("/:rideId/start", startRide);
 
 // GET /api/rides/:rideId/status
 router.get("/:rideId/status", getRideStatus);
@@ -64,5 +69,8 @@ router.put("/:rideId/done", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Could not mark ride as done" });
   }
 });
+
+// --- POST /api/rides/:rideId/rate (Customer rates driver) ---
+router.post("/:rideId/rate", rateRide);
 
 export default router;

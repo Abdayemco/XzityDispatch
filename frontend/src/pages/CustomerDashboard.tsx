@@ -47,7 +47,60 @@ function getCustomerIdFromStorage(): number | null {
   return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
 }
 
-type RideStatus = "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "DONE" | "CANCELLED" | null;
+// Accept lowercase and mapped ride status from backend
+type RideStatus = "pending" | "accepted" | "in_progress" | "done" | "cancelled" | null;
+
+// --- New: simple rating component ---
+function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
+  const [rating, setRating] = useState(5);
+  const [feedback, setFeedback] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    await fetch(`/api/rides/${rideId}/rate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, feedback }),
+    });
+    setSubmitting(false);
+    onRated(); // Immediately reset the dashboard after rating
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ textAlign: "center", marginTop: 30 }}>
+      <h3>Rate your driver</h3>
+      <div style={{ marginBottom: 10 }}>
+        {[1,2,3,4,5].map(star => (
+          <button
+            type="button"
+            key={star}
+            onClick={() => setRating(star)}
+            style={{
+              color: rating >= star ? "#FFD700" : "#CCC",
+              fontSize: 28,
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            }}
+            aria-label={`${star} star`}
+          >★</button>
+        ))}
+      </div>
+      <textarea
+        value={feedback}
+        onChange={e => setFeedback(e.target.value)}
+        placeholder="Optional feedback"
+        rows={3}
+        style={{ display: "block", margin: "12px auto", width: "70%" }}
+      />
+      <button type="submit" disabled={submitting} style={{ padding: "0.5em 2em", marginTop: 8 }}>
+        {submitting ? "Submitting..." : "Submit & Request New Ride"}
+      </button>
+    </form>
+  );
+}
 
 export default function CustomerDashboard() {
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
@@ -59,6 +112,7 @@ export default function CustomerDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
   const [driverInfo, setDriverInfo] = useState<{ name?: string; vehicleType?: string } | null>(null);
+  const [showDoneActions, setShowDoneActions] = useState(false);
 
   // Get user's current location and set as pickup location by default
   useEffect(() => {
@@ -80,15 +134,15 @@ export default function CustomerDashboard() {
   // Poll backend to check ride status and driver assignment
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (pickupSet && rideId && rideStatus !== "DONE" && rideStatus !== "CANCELLED") {
+    if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
       interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/rides/${rideId}/status`);
           const data = await res.json();
           if (data.status) setRideStatus(data.status);
 
-          // Optionally, fetch driver info if accepted
-          if ((data.status === "ACCEPTED" || data.status === "IN_PROGRESS") && data.driver) {
+          // Optionally, fetch driver info if accepted or in progress
+          if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
             setDriverInfo({
               name: data.driver.name || "",
               vehicleType: data.driver.vehicleType || ""
@@ -142,7 +196,7 @@ export default function CustomerDashboard() {
       }
       setPickupSet(true);
       setRideId(data.rideId || data.id); // Store the ride ID for polling (either rideId or id)
-      setRideStatus("PENDING");
+      setRideStatus("pending");
       setWaiting(false);
     } catch (err: any) {
       setError("Network or server error.");
@@ -169,7 +223,7 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      setRideStatus("CANCELLED");
+      setRideStatus("cancelled");
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
@@ -196,7 +250,8 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      setRideStatus("DONE");
+      setRideStatus("done");
+      setShowDoneActions(true);
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
@@ -212,16 +267,29 @@ export default function CustomerDashboard() {
     setVehicleType("");
     setRideId(null);
     setDriverInfo(null);
+    setShowDoneActions(false);
   }
 
   // UI for various ride states
-  if (rideStatus === "ACCEPTED" || rideStatus === "IN_PROGRESS") {
+  if (
+    (rideStatus === "pending" && pickupSet && rideId) ||
+    (rideStatus === "accepted" || rideStatus === "in_progress")
+  ) {
+    // Show both buttons on "Waiting for a driver to accept your ride..." and during ride
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div>
-          <span style={{ fontWeight: "bold", fontSize: 22 }}>Driver is on the way!</span>
+          {rideStatus === "pending" && (
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>Waiting for a driver to accept your ride...</span>
+          )}
+          {rideStatus === "accepted" && (
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>Driver is on the way!</span>
+          )}
+          {rideStatus === "in_progress" && (
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>Enjoy your ride!</span>
+          )}
         </div>
-        {driverInfo && (
+        {driverInfo && (rideStatus === "accepted" || rideStatus === "in_progress") && (
           <div style={{ margin: "12px 0" }}>
             <span>
               <b>Driver:</b> {driverInfo.name || "Assigned"}
@@ -240,51 +308,61 @@ export default function CustomerDashboard() {
               padding: "0.7em 1.4em",
               borderRadius: 6,
               fontSize: 16,
-              margin: "0 10px"
+              margin: "0 10px",
+              opacity: waiting ? 0.5 : 1
             }}
             onClick={handleCancelRide}
           >
             Cancel Ride
           </button>
-          <button
-            disabled={waiting || rideStatus === "IN_PROGRESS"}
-            style={{
-              background: "#388e3c",
-              color: "#fff",
-              border: "none",
-              padding: "0.7em 1.4em",
-              borderRadius: 6,
-              fontSize: 16,
-              margin: "0 10px",
-              opacity: rideStatus === "IN_PROGRESS" ? 1 : 0.8
-            }}
-            onClick={handleMarkAsDone}
-          >
-            Mark as Done
-          </button>
+          {(rideStatus === "accepted" || rideStatus === "in_progress") && (
+            <button
+              disabled={waiting}
+              style={{
+                background: "#388e3c",
+                color: "#fff",
+                border: "none",
+                padding: "0.7em 1.4em",
+                borderRadius: 6,
+                fontSize: 16,
+                margin: "0 10px",
+                opacity: waiting ? 0.7 : 1
+              }}
+              onClick={handleMarkAsDone}
+            >
+              Mark as Done
+            </button>
+          )}
         </div>
         {error && <div style={{ color: "red", marginTop: 10 }}>{error}</div>}
       </div>
     );
   }
 
-  if (rideStatus === "DONE") {
+  if (rideStatus === "done" && showDoneActions && rideId) {
+    // After mark as done: show both RateDriver and Request Another Ride
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
           Ride is complete. Thank you!
         </div>
-        <button
-          style={{ marginTop: 24, background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
-          onClick={handleReset}
-        >
-          Request Another Ride
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginTop: 18 }}>
+          <RateDriver
+            rideId={rideId}
+            onRated={handleReset}
+          />
+          <button
+            style={{ background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
+            onClick={handleReset}
+          >
+            Request Another Ride
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (rideStatus === "CANCELLED") {
+  if (rideStatus === "cancelled") {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ fontWeight: "bold", fontSize: 20, color: "#f44336" }}>
@@ -363,9 +441,6 @@ export default function CustomerDashboard() {
           >
             {waiting ? "Requesting..." : "Confirm Pickup Location"}
           </button>
-        )}
-        {pickupSet && (!rideStatus || rideStatus === "PENDING") && (
-          <div style={{ marginTop: 8, color: "#333" }}>Waiting for a driver to accept your ride...</div>
         )}
       </div>
       <div style={{ background: "#e0e0e0", borderRadius: 8, width: "90%", maxWidth: 700, margin: "0 auto", marginTop: 4, height: "48vh" }}>

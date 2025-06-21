@@ -9,9 +9,12 @@ type Job = {
   pickupLng: number;
   customerName: string;
   vehicleType: "car" | "bike" | "toktok" | "tuktuk" | "truck";
-  status?: "pending" | "accepted" | "cancelled" | "done" | "arrived";
+  status?: "pending" | "accepted" | "cancelled" | "done" | "arrived" | "in_progress";
   assignedDriverId?: string | number;
 };
+
+const IN_PROGRESS_TIMEOUT_MINUTES = 15;
+const ACCEPTED_TIMEOUT_MINUTES = 15;
 
 export default function DriverDashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -28,6 +31,22 @@ export default function DriverDashboard() {
   const [countdown, setCountdown] = useState(0);
   const beepRef = useRef<HTMLAudioElement | null>(null);
   const navigate = useNavigate();
+
+  // Track when driver starts the ride (for auto-release after 15min if customer forgets)
+  const [rideStartedAt, setRideStartedAt] = useState<number | null>(
+    () => {
+      const saved = localStorage.getItem("rideStartedAt");
+      return saved ? Number(saved) : null;
+    }
+  );
+
+  // Track when driver accepts the ride (for auto-release after 15min if driver doesn't start)
+  const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(
+    () => {
+      const saved = localStorage.getItem("rideAcceptedAt");
+      return saved ? Number(saved) : null;
+    }
+  );
 
   // Get driver info from localStorage
   const driverId = localStorage.getItem("driverId") || "";
@@ -84,6 +103,7 @@ export default function DriverDashboard() {
     setStatusMsg(null);
     setErrorMsg(null);
     try {
+      const now = Date.now();
       const res = await fetch(`/api/rides/${jobId}/accept?driverId=${driverId}`, {
         method: "PUT",
         headers: {
@@ -98,9 +118,41 @@ export default function DriverDashboard() {
         setStatusMsg(`You have accepted job ${jobId}`);
         setCancelled(false);
         setCompleted(false);
+        setRideAcceptedAt(now);
+        localStorage.setItem("rideAcceptedAt", String(now));
       } else setErrorMsg(data?.error || "Failed to accept job");
     } catch {
       setErrorMsg("Failed to accept job");
+    }
+  }
+
+  // Start Ride handler, records "rideStartedAt" and clears "rideAcceptedAt"
+  async function handleStartRide() {
+    if (!driverJobId) return;
+    setStatusMsg(null);
+    setErrorMsg(null);
+    try {
+      const now = Date.now();
+      const res = await fetch(`/api/rides/${driverJobId}/start?driverId=${driverId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data?.error || "Failed to start ride");
+      } else {
+        setStatusMsg("Ride started! Take your customer to their destination.");
+        setJobStatus("in_progress"); // Optional, will be corrected by polling soon
+        setRideStartedAt(now);
+        localStorage.setItem("rideStartedAt", String(now));
+        setRideAcceptedAt(null);
+        localStorage.removeItem("rideAcceptedAt");
+      }
+    } catch {
+      setErrorMsg("Failed to start ride");
     }
   }
 
@@ -118,51 +170,32 @@ export default function DriverDashboard() {
         const status = (data.status || "").toLowerCase();
         setJobStatus(status);
 
+        // If customer cancels
         if (status === "cancelled" && isMounted) {
           setCancelled(true);
           setStatusMsg(null);
           setAcceptedJob(null);
           setDriverJobId(null);
+          setRideStartedAt(null);
+          setRideAcceptedAt(null);
+          localStorage.removeItem("rideStartedAt");
+          localStorage.removeItem("rideAcceptedAt");
           if (beepRef.current) {
             beepRef.current.currentTime = 0;
             beepRef.current.play();
           }
         }
 
+        // If ride is done
         if ((status === "done" || status === "arrived") && isMounted) {
           setCompleted(true);
           setAcceptedJob(null);
           setDriverJobId(null);
           setStatusMsg(null);
-          if (autoReleaseTimer) {
-            clearInterval(autoReleaseTimer);
-            setAutoReleaseTimer(null);
-            setCountdown(0);
-          }
-        }
-
-        if (status === "accepted" && isMounted) {
-          if (!autoReleaseTimer) {
-            let seconds = 15 * 60;
-            setCountdown(seconds);
-            localTimer = setInterval(() => {
-              seconds -= 1;
-              setCountdown(s => s - 1);
-              if (seconds <= 0) {
-                setAcceptedJob(null);
-                setDriverJobId(null);
-                setJobStatus(null);
-                setStatusMsg(null);
-                setCompleted(false);
-                setCancelled(false);
-                setCountdown(0);
-                clearInterval(localTimer!);
-                setAutoReleaseTimer(null);
-              }
-            }, 1000);
-            setAutoReleaseTimer(localTimer);
-          }
-        } else {
+          setRideStartedAt(null);
+          setRideAcceptedAt(null);
+          localStorage.removeItem("rideStartedAt");
+          localStorage.removeItem("rideAcceptedAt");
           if (autoReleaseTimer) {
             clearInterval(autoReleaseTimer);
             setAutoReleaseTimer(null);
@@ -180,6 +213,68 @@ export default function DriverDashboard() {
     };
   }, [driverJobId, token, cancelled, completed, autoReleaseTimer]);
 
+  // Timer logic for accepted rides (auto-release after 15min if driver doesn't start)
+  useEffect(() => {
+    if (jobStatus !== "accepted" || !rideAcceptedAt || cancelled || completed) return;
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - rideAcceptedAt) / 1000);
+      const remaining = ACCEPTED_TIMEOUT_MINUTES * 60 - elapsed;
+      setCountdown(remaining > 0 ? remaining : 0);
+
+      if (remaining <= 0) {
+        // Auto-release: allow driver to accept new jobs
+        setAcceptedJob(null);
+        setDriverJobId(null);
+        setJobStatus(null);
+        setStatusMsg(
+          "You can now accept new jobs! (You didn't start the ride in time)"
+        );
+        setCompleted(false);
+        setCancelled(false);
+        setCountdown(0);
+        setRideStartedAt(null);
+        setRideAcceptedAt(null);
+        localStorage.removeItem("rideStartedAt");
+        localStorage.removeItem("rideAcceptedAt");
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line
+  }, [jobStatus, rideAcceptedAt, cancelled, completed]);
+
+  // Timer logic for in_progress rides (driver auto-release after 15min)
+  useEffect(() => {
+    if (jobStatus !== "in_progress" || !rideStartedAt || cancelled || completed) return;
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - rideStartedAt) / 1000);
+      const remaining = IN_PROGRESS_TIMEOUT_MINUTES * 60 - elapsed;
+      setCountdown(remaining > 0 ? remaining : 0);
+
+      if (remaining <= 0) {
+        // Auto-release: allow driver to accept new jobs
+        setAcceptedJob(null);
+        setDriverJobId(null);
+        setJobStatus(null);
+        setStatusMsg(
+          "You can now accept new jobs! (Customer did not mark as done in time)"
+        );
+        setCompleted(false);
+        setCancelled(false);
+        setCountdown(0);
+        setRideStartedAt(null);
+        setRideAcceptedAt(null);
+        localStorage.removeItem("rideStartedAt");
+        localStorage.removeItem("rideAcceptedAt");
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line
+  }, [jobStatus, rideStartedAt, cancelled, completed]);
+
   async function handleFindAnother() {
     setDriverJobId(null);
     setJobStatus(null);
@@ -188,6 +283,10 @@ export default function DriverDashboard() {
     setStatusMsg(null);
     setAcceptedJob(null);
     setCountdown(0);
+    setRideStartedAt(null);
+    setRideAcceptedAt(null);
+    localStorage.removeItem("rideStartedAt");
+    localStorage.removeItem("rideAcceptedAt");
     if (autoReleaseTimer) {
       clearInterval(autoReleaseTimer);
       setAutoReleaseTimer(null);
@@ -273,9 +372,12 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {driverJobId && jobStatus === "accepted" && countdown > 0 && !completed && !cancelled && (
+      {/* Show countdown for both accepted and in_progress jobs */}
+      {driverJobId &&
+        ((jobStatus === "accepted" && countdown > 0) || (jobStatus === "in_progress" && countdown > 0)) &&
+        !completed && !cancelled && (
         <div style={{
-          color: "#ff9800",
+          color: jobStatus === "accepted" ? "#ff9800" : "#1976D2",
           textAlign: "center",
           fontWeight: "bold",
           marginTop: 24,
@@ -285,9 +387,34 @@ export default function DriverDashboard() {
           border: "1px solid #ffe0b2"
         }}>
           <div>
-            Waiting for customer to complete the ride...
-            <br />
-            If not completed in <span style={{ color: "#d32f2f" }}>{formatCountdown(countdown)}</span>, you'll be able to accept new rides automatically.
+            {jobStatus === "accepted"
+              ? <>You must start the ride within <span style={{ color: "#d32f2f" }}>{formatCountdown(countdown)}</span> or you'll be able to accept new jobs automatically.</>
+              : <>Waiting for customer to mark the ride as done...<br />If not completed in <span style={{ color: "#d32f2f" }}>{formatCountdown(countdown)}</span>, you'll be able to accept new rides automatically.</>
+            }
+          </div>
+        </div>
+      )}
+
+      {/* Start Ride Button for Driver */}
+      {driverJobId && jobStatus === "accepted" && !cancelled && !completed && (
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <button
+            onClick={handleStartRide}
+            style={{
+              padding: "0.7em 1.4em",
+              borderRadius: 6,
+              background: "#388e3c",
+              color: "#fff",
+              border: "none",
+              fontSize: 18,
+              fontWeight: "bold",
+              margin: "0 12px"
+            }}
+          >
+            Start Ride
+          </button>
+          <div style={{ marginTop: 8, color: "#888" }}>
+            Press "Start Ride" when you pick up the customer.
           </div>
         </div>
       )}
@@ -339,7 +466,7 @@ export default function DriverDashboard() {
               ))}
             </div>
           )}
-          {driverJobId && !cancelled && !completed && (
+          {driverJobId && !cancelled && !completed && jobStatus !== "accepted" && jobStatus !== "in_progress" && (
             <div style={{ marginTop: 16, textAlign: "center" }}>
               <span style={{ color: "#388e3c", fontWeight: "bold" }}>
                 Go to your customer and pick them up. You can't accept another job until this one is completed or cancelled.

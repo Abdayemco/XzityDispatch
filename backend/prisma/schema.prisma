@@ -43,7 +43,7 @@ model User {
   ridesAsCustomer  Ride[]          @relation("CustomerRides")
   verificationCode String?
   status           String          @default("PENDING")
-  trustedDevices   TrustedDevice[] // <--- new relation
+  trustedDevices   TrustedDevice[]
 }
 
 model Ride {
@@ -58,11 +58,14 @@ model Ride {
   destLng     Float
   requestedAt DateTime    @default(now())
   acceptedAt  DateTime?
+  startedAt   DateTime?   // <--- Track when ride goes IN_PROGRESS
+  completedAt DateTime?   // <--- Track when ride is COMPLETED (optional, but recommended)
+  cancelledAt DateTime?   // <--- Track when ride is CANCELLED (optional)
   status      RideStatus  @default(PENDING)
   vehicleType VehicleType
+  rating      Int?        // Customer's rating for the driver (1-5)
+  feedback    String?     // Optional feedback from customer
 }
-
-// --- NEW MODEL FOR DEVICE TRUSTING ---
 
 model TrustedDevice {
   id        Int      @id @default(autoincrement())
