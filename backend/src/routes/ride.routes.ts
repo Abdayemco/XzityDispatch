@@ -3,7 +3,10 @@ import {
   getAvailableRides,
   acceptRide,
   requestRide,
+  getRideStatus,
 } from "../controllers/ride.controller";
+import { prisma } from "../utils/prisma";
+import { RideStatus } from "@prisma/client";
 
 const router = Router();
 
@@ -28,5 +31,38 @@ router.post("/request", (req, res, next) => {
 
 // PUT /api/rides/:rideId/accept
 router.put("/:rideId/accept", acceptRide);
+
+// GET /api/rides/:rideId/status
+router.get("/:rideId/status", getRideStatus);
+
+// PUT /api/rides/:rideId/cancel
+router.put("/:rideId/cancel", async (req: Request, res: Response) => {
+  const rideId = Number(req.params.rideId);
+  if (isNaN(rideId)) return res.status(400).json({ error: "Invalid rideId" });
+  try {
+    const ride = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: { set: RideStatus.CANCELLED } },
+    });
+    res.json({ status: "CANCELLED", ride });
+  } catch (error) {
+    res.status(400).json({ error: "Could not cancel ride" });
+  }
+});
+
+// PUT /api/rides/:rideId/done
+router.put("/:rideId/done", async (req: Request, res: Response) => {
+  const rideId = Number(req.params.rideId);
+  if (isNaN(rideId)) return res.status(400).json({ error: "Invalid rideId" });
+  try {
+    const ride = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: { set: RideStatus.COMPLETED } },
+    });
+    res.json({ status: "DONE", ride }); // You can keep "DONE" for the frontend, but DB uses COMPLETED
+  } catch (error) {
+    res.status(400).json({ error: "Could not mark ride as done" });
+  }
+});
 
 export default router;

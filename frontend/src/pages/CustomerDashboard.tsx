@@ -47,14 +47,18 @@ function getCustomerIdFromStorage(): number | null {
   return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
 }
 
+type RideStatus = "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "DONE" | "CANCELLED" | null;
+
 export default function CustomerDashboard() {
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupSet, setPickupSet] = useState(false);
-  const [jobAccepted, setJobAccepted] = useState(false);
+  const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rideStatus, setRideStatus] = useState<RideStatus>(null);
+  const [driverInfo, setDriverInfo] = useState<{ name?: string; vehicleType?: string } | null>(null);
 
   // Get user's current location and set as pickup location by default
   useEffect(() => {
@@ -73,15 +77,30 @@ export default function CustomerDashboard() {
     );
   }, []);
 
-  // Simulate driver accepting after ride creation (for demo)
+  // Poll backend to check ride status and driver assignment
   useEffect(() => {
-    if (pickupSet && !jobAccepted) {
-      const timeout = setTimeout(() => {
-        setJobAccepted(true);
+    let interval: NodeJS.Timeout;
+    if (pickupSet && rideId && rideStatus !== "DONE" && rideStatus !== "CANCELLED") {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/rides/${rideId}/status`);
+          const data = await res.json();
+          if (data.status) setRideStatus(data.status);
+
+          // Optionally, fetch driver info if accepted
+          if ((data.status === "ACCEPTED" || data.status === "IN_PROGRESS") && data.driver) {
+            setDriverInfo({
+              name: data.driver.name || "",
+              vehicleType: data.driver.vehicleType || ""
+            });
+          }
+        } catch (err) {
+          // Optionally handle polling error
+        }
       }, 3000);
-      return () => clearTimeout(timeout);
     }
-  }, [pickupSet, jobAccepted]);
+    return () => clearInterval(interval);
+  }, [pickupSet, rideId, rideStatus]);
 
   async function handleConfirmPickup() {
     setWaiting(true);
@@ -122,6 +141,8 @@ export default function CustomerDashboard() {
         return;
       }
       setPickupSet(true);
+      setRideId(data.rideId || data.id); // Store the ride ID for polling (either rideId or id)
+      setRideStatus("PENDING");
       setWaiting(false);
     } catch (err: any) {
       setError("Network or server error.");
@@ -129,21 +150,151 @@ export default function CustomerDashboard() {
     }
   }
 
-  if (jobAccepted) {
+  async function handleCancelRide() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/rides/${rideId}/cancel`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to cancel ride.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("CANCELLED");
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
+  async function handleMarkAsDone() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/rides/${rideId}/done`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to mark ride as done.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("DONE");
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
+  // Reset all relevant state for new ride
+  function handleReset() {
+    setRideStatus(null);
+    setPickupSet(false);
+    setPickupLocation(userLocation);
+    setVehicleType("");
+    setRideId(null);
+    setDriverInfo(null);
+  }
+
+  // UI for various ride states
+  if (rideStatus === "ACCEPTED" || rideStatus === "IN_PROGRESS") {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
-        Ride in progress...
-        <br />
+        <div>
+          <span style={{ fontWeight: "bold", fontSize: 22 }}>Driver is on the way!</span>
+        </div>
+        {driverInfo && (
+          <div style={{ margin: "12px 0" }}>
+            <span>
+              <b>Driver:</b> {driverInfo.name || "Assigned"}
+              <br />
+              <b>Vehicle:</b> {driverInfo.vehicleType || "Unknown"}
+            </span>
+          </div>
+        )}
+        <div style={{ marginTop: 18 }}>
+          <button
+            disabled={waiting}
+            style={{
+              background: "#f44336",
+              color: "#fff",
+              border: "none",
+              padding: "0.7em 1.4em",
+              borderRadius: 6,
+              fontSize: 16,
+              margin: "0 10px"
+            }}
+            onClick={handleCancelRide}
+          >
+            Cancel Ride
+          </button>
+          <button
+            disabled={waiting || rideStatus === "IN_PROGRESS"}
+            style={{
+              background: "#388e3c",
+              color: "#fff",
+              border: "none",
+              padding: "0.7em 1.4em",
+              borderRadius: 6,
+              fontSize: 16,
+              margin: "0 10px",
+              opacity: rideStatus === "IN_PROGRESS" ? 1 : 0.8
+            }}
+            onClick={handleMarkAsDone}
+          >
+            Mark as Done
+          </button>
+        </div>
+        {error && <div style={{ color: "red", marginTop: 10 }}>{error}</div>}
+      </div>
+    );
+  }
+
+  if (rideStatus === "DONE") {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
+          Ride is complete. Thank you!
+        </div>
         <button
-          style={{ marginTop: 16 }}
-          onClick={() => {
-            setJobAccepted(false);
-            setPickupSet(false);
-            setPickupLocation(userLocation);
-            setVehicleType("");
-          }}
+          style={{ marginTop: 24, background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
+          onClick={handleReset}
         >
-          Mark as Done (Reset)
+          Request Another Ride
+        </button>
+      </div>
+    );
+  }
+
+  if (rideStatus === "CANCELLED") {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <div style={{ fontWeight: "bold", fontSize: 20, color: "#f44336" }}>
+          Ride was cancelled.
+        </div>
+        <button
+          style={{ marginTop: 24, background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
+          onClick={handleReset}
+        >
+          Request New Ride
         </button>
       </div>
     );
@@ -213,7 +364,7 @@ export default function CustomerDashboard() {
             {waiting ? "Requesting..." : "Confirm Pickup Location"}
           </button>
         )}
-        {pickupSet && !jobAccepted && (
+        {pickupSet && (!rideStatus || rideStatus === "PENDING") && (
           <div style={{ marginTop: 8, color: "#333" }}>Waiting for a driver to accept your ride...</div>
         )}
       </div>

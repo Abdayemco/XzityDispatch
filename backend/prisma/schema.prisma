@@ -25,6 +25,7 @@ enum VehicleType {
 enum RideStatus {
   PENDING
   ACCEPTED
+  IN_PROGRESS
   COMPLETED
   CANCELLED
 }

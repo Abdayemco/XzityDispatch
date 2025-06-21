@@ -66,10 +66,12 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
 // Get available rides for drivers (pending status, for their vehicle type)
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const driverId = req.user?.id;
+    // Accept driverId as a query param for development
+    const driverId = Number(req.query.driverId);
     if (!driverId) {
       return res.status(401).json({ error: "Unauthorized: Missing driver id" });
     }
+
     // Find driver's vehicle type
     const driver = await prisma.user.findUnique({
       where: { id: driverId },
@@ -94,13 +96,24 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         id: true,
         originLat: true,
         originLng: true,
-        destLat: true,
-        destLng: true,
-        requestedAt: true,
-        customer: { select: { name: true, phone: true } },
+        vehicleType: true,
+        customer: { select: { name: true } },
       },
     });
-    res.json(rides);
+
+    // Map fields for frontend compatibility
+    const mappedRides = rides.map(ride => ({
+      id: ride.id,
+      pickupLat: ride.originLat,
+      pickupLng: ride.originLng,
+      customerName: ride.customer?.name || "",
+      vehicleType: ride.vehicleType,
+    }));
+
+    // Debug log to see what rides are being returned
+    console.log("Available rides found:", mappedRides);
+
+    res.json(mappedRides);
   } catch (error) {
     console.error("Error fetching available rides:", error);
     next(error);
@@ -110,13 +123,14 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
 // Driver accepts a ride
 export const acceptRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Make sure to convert rideId to a number!
-    const rideId = Number(req.params.rideId);
-    const driverId = req.user?.id; // Should be set by auth middleware
-
+    // Accept driverId as a query param for development
+    const driverId = Number(req.query.driverId);
     if (!driverId) {
       return res.status(401).json({ error: "Unauthorized: Missing driver id" });
     }
+
+    // Make sure to convert rideId to a number!
+    const rideId = Number(req.params.rideId);
 
     // Only allow accepting if ride is still pending and unassigned
     const ride = await prisma.ride.updateMany({
@@ -142,6 +156,52 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
     res.json(updatedRide);
   } catch (error) {
     console.error("Error accepting ride:", error);
+    next(error);
+  }
+};
+
+// Get ride status for polling (UPDATED)
+export const getRideStatus = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rideId = Number(req.params.rideId);
+    if (!rideId) {
+      return res.status(400).json({ error: "Invalid rideId" });
+    }
+
+    const ride = await prisma.ride.findUnique({
+      where: { id: rideId },
+      select: { status: true }
+    });
+
+    if (!ride) {
+      return res.status(404).json({ error: "Ride not found" });
+    }
+
+    // Map DB enum to user-friendly lowercase status for frontend
+    let statusForFrontend: string;
+    switch (ride.status) {
+      case RideStatus.PENDING:
+        statusForFrontend = "pending";
+        break;
+      case RideStatus.ACCEPTED:
+        statusForFrontend = "accepted";
+        break;
+      case RideStatus.IN_PROGRESS:
+        statusForFrontend = "in_progress";
+        break;
+      case RideStatus.CANCELLED:
+        statusForFrontend = "cancelled";
+        break;
+      case RideStatus.COMPLETED:
+        statusForFrontend = "done";
+        break;
+      default:
+        statusForFrontend = String(ride.status || "unknown").toLowerCase();
+    }
+
+    return res.json({ status: statusForFrontend });
+  } catch (error) {
+    console.error("Error fetching ride status:", error);
     next(error);
   }
 };
