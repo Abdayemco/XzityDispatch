@@ -4,17 +4,20 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerCustomer from "../assets/marker-customer.png";
 import carIcon from "../assets/marker-car.png";
-import bikeIcon from "../assets/marker-bike.png";
+import deliveryIcon from "../assets/marker-delivery.png"; // <-- Add this if you have a delivery icon
+import waterTruckIcon from "../assets/marker-water-truck.png"; // <-- Add this if you have a water truck icon
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 
+// Update getVehicleIcon to support DELIVERY and WATER_TRUCK, and remove BIKE
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType.toUpperCase()) {
     case "CAR": return carIcon;
-    case "BIKE": return bikeIcon;
+    case "DELIVERY": return deliveryIcon;
     case "TUKTUK":
     case "TOKTOK": return tuktukIcon;
     case "TRUCK": return truckIcon;
+    case "WATER_TRUCK": return waterTruckIcon;
     default: return carIcon;
   }
 }

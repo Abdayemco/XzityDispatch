@@ -4,11 +4,11 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerCustomer from "../assets/marker-customer.png";
 import carIcon from "../assets/marker-car.png";
-import bikeIcon from "../assets/marker-bike.png";
+import deliveryIcon from "../assets/marker-delivery.png"; // Use delivery icon for DELIVERY
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
-import waterTruckIcon from "../assets/marker-watertruck.png"; // <-- Add your water truck icon PNG
-// Emergency icons (add PNGs to assets or use emoji as fallback for demo)
+import waterTruckIcon from "../assets/marker-watertruck.png";
+// Emergency icons
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
@@ -17,7 +17,7 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType) {
     case "CAR": return carIcon;
-    case "DELIVERY": return bikeIcon; // Use bikeIcon for delivery or replace with a delivery icon
+    case "DELIVERY": return deliveryIcon;
     case "TUKTUK": return tuktukIcon;
     case "TRUCK": return truckIcon;
     case "WATER_TRUCK": return waterTruckIcon;
@@ -47,17 +47,16 @@ function createEmergencyIcon(url: string) {
   });
 }
 
-// Updated dropdown options: add Water Truck and change Bike to Delivery
+// Updated dropdown options: DELIVERY uses deliveryIcon
 const vehicleOptions = [
   { value: "", label: "Select type", icon: "" },
   { value: "CAR", label: "Car", icon: carIcon },
-  { value: "DELIVERY", label: "Delivery", icon: bikeIcon },
+  { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
   { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
   { value: "TRUCK", label: "Truck", icon: truckIcon },
   { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon }
 ];
 
-// This function now parses userId as integer, or returns null if invalid
 function getCustomerIdFromStorage(): number | null {
   const raw = localStorage.getItem("userId");
   if (!raw) return null;

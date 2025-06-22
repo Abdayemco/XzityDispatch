@@ -3,7 +3,6 @@ import { prisma } from "../utils/prisma";
 import { VehicleType, RideStatus } from "@prisma/client";
 
 // Helper to normalize and validate vehicleType input (case-insensitive)
-// ---- UPDATED: Accept DELIVERY and WATER_TRUCK, and reflect enum change ----
 function normalizeVehicleType(input: any): VehicleType | undefined {
   if (!input || typeof input !== "string") return undefined;
   const upper = input.trim().toUpperCase();
@@ -93,7 +92,7 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-// Get available rides for drivers (pending status, for their vehicle type)
+// Get available rides for drivers (pending status, for their vehicle type or delivery)
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Accept driverId as a query param for development
@@ -111,13 +110,20 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    // Only show rides for this vehicle type and not yet assigned to any driver
+    // Logic: Car and Tuktuk drivers also see DELIVERY rides
+    let rideTypes: VehicleType[] = [];
+    if (driver.vehicleType === "CAR" || driver.vehicleType === "TUKTUK") {
+      rideTypes = [driver.vehicleType, "DELIVERY"];
+    } else if (driver.vehicleType) {
+      rideTypes = [driver.vehicleType];
+    }
+
     const where: any = {
       status: RideStatus.PENDING,
-      driverId: null
+      driverId: null,
     };
-    if (driver.vehicleType) {
-      where.vehicleType = driver.vehicleType;
+    if (rideTypes.length > 0) {
+      where.vehicleType = { in: rideTypes };
     }
 
     const rides = await prisma.ride.findMany({
