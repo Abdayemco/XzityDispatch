@@ -3,6 +3,7 @@ import { prisma } from "../utils/prisma";
 import { VehicleType, RideStatus } from "@prisma/client";
 
 // Helper to normalize and validate vehicleType input (case-insensitive)
+// ---- UPDATED: Accept DELIVERY and WATER_TRUCK, and reflect enum change ----
 function normalizeVehicleType(input: any): VehicleType | undefined {
   if (!input || typeof input !== "string") return undefined;
   const upper = input.trim().toUpperCase();
@@ -10,6 +11,35 @@ function normalizeVehicleType(input: any): VehicleType | undefined {
     return upper as VehicleType;
   }
   return undefined;
+}
+
+// Helper to check if a driver is busy with a ride (ACCEPTED/IN_PROGRESS) that started less than 15 min ago
+async function isDriverBusy(driverId: number) {
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+  const busyRide = await prisma.ride.findFirst({
+    where: {
+      driverId,
+      OR: [
+        {
+          status: RideStatus.ACCEPTED,
+          acceptedAt: {
+            gte: fifteenMinutesAgo,
+          },
+        },
+        {
+          status: RideStatus.IN_PROGRESS,
+          startedAt: {
+            gte: fifteenMinutesAgo,
+          },
+        },
+      ],
+      NOT: [
+        { status: RideStatus.COMPLETED },
+        { status: RideStatus.CANCELLED },
+      ],
+    },
+  });
+  return !!busyRide;
 }
 
 // Customer requests a ride with vehicle type and location
@@ -127,6 +157,12 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
     const driverId = Number(req.query.driverId);
     if (!driverId) {
       return res.status(401).json({ error: "Unauthorized: Missing driver id" });
+    }
+
+    // Check if driver is already busy (accepted/in_progress) in the last 15 minutes
+    const busy = await isDriverBusy(driverId);
+    if (busy) {
+      return res.status(400).json({ error: "You already have an active or recent job. Finish it or wait 15 minutes before accepting a new one." });
     }
 
     // Make sure to convert rideId to a number!

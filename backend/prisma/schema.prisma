@@ -15,11 +15,13 @@ enum Role {
   CUSTOMER
 }
 
+// UPDATED VehicleType ENUM: BIKE -> DELIVERY, added WATER_TRUCK
 enum VehicleType {
   CAR
-  BIKE
+  DELIVERY
   TUKTUK
   TRUCK
+  WATER_TRUCK
 }
 
 enum RideStatus {

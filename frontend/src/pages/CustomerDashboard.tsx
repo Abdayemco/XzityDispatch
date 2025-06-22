@@ -7,14 +7,20 @@ import carIcon from "../assets/marker-car.png";
 import bikeIcon from "../assets/marker-bike.png";
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
+import waterTruckIcon from "../assets/marker-watertruck.png"; // <-- Add your water truck icon PNG
+// Emergency icons (add PNGs to assets or use emoji as fallback for demo)
+import fireIcon from "../assets/emergency-fire.png";
+import policeIcon from "../assets/emergency-police.png";
+import hospitalIcon from "../assets/emergency-hospital.png";
 
 // Utility: Get icon URL for a given vehicleType (enum values)
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType) {
     case "CAR": return carIcon;
-    case "BIKE": return bikeIcon;
+    case "DELIVERY": return bikeIcon; // Use bikeIcon for delivery or replace with a delivery icon
     case "TUKTUK": return tuktukIcon;
     case "TRUCK": return truckIcon;
+    case "WATER_TRUCK": return waterTruckIcon;
     default: return carIcon;
   }
 }
@@ -30,13 +36,25 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
   });
 }
 
-// Dropdown options now match Prisma enum exactly
+// Create a Leaflet emergency icon
+function createEmergencyIcon(url: string) {
+  return L.icon({
+    iconUrl: url,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32],
+    shadowUrl: undefined,
+  });
+}
+
+// Updated dropdown options: add Water Truck and change Bike to Delivery
 const vehicleOptions = [
   { value: "", label: "Select type", icon: "" },
   { value: "CAR", label: "Car", icon: carIcon },
-  { value: "BIKE", label: "Bike", icon: bikeIcon },
+  { value: "DELIVERY", label: "Delivery", icon: bikeIcon },
   { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
-  { value: "TRUCK", label: "Truck", icon: truckIcon }
+  { value: "TRUCK", label: "Truck", icon: truckIcon },
+  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon }
 ];
 
 // This function now parses userId as integer, or returns null if invalid
@@ -47,10 +65,27 @@ function getCustomerIdFromStorage(): number | null {
   return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
 }
 
-// Accept lowercase and mapped ride status from backend
 type RideStatus = "pending" | "accepted" | "in_progress" | "done" | "cancelled" | null;
+type EmergencyLocation = {
+  type: "fire" | "police" | "hospital";
+  name: string;
+  lat: number;
+  lng: number;
+  phone?: string;
+  icon: string;
+};
+type OverpassElement = {
+  id: number;
+  lat: number;
+  lon: number;
+  tags: {
+    name?: string;
+    phone?: string;
+    amenity?: string;
+    emergency?: string;
+  };
+};
 
-// --- New: simple rating component ---
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
@@ -65,7 +100,7 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
       body: JSON.stringify({ rating, feedback }),
     });
     setSubmitting(false);
-    onRated(); // Immediately reset the dashboard after rating
+    onRated();
   }
 
   return (
@@ -113,8 +148,8 @@ export default function CustomerDashboard() {
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
   const [driverInfo, setDriverInfo] = useState<{ name?: string; vehicleType?: string } | null>(null);
   const [showDoneActions, setShowDoneActions] = useState(false);
+  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
 
-  // Get user's current location and set as pickup location by default
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -123,7 +158,6 @@ export default function CustomerDashboard() {
         setPickupLocation(loc);
       },
       () => {
-        // fallback (Nairobi)
         const loc = { lng: 36.8219, lat: -1.2921 };
         setUserLocation(loc);
         setPickupLocation(loc);
@@ -131,7 +165,58 @@ export default function CustomerDashboard() {
     );
   }, []);
 
-  // Poll backend to check ride status and driver assignment
+  useEffect(() => {
+    if (!userLocation) return;
+    const lat = userLocation.lat;
+    const lng = userLocation.lng;
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"](around:5000,${lat},${lng});
+        node["amenity"="police"](around:5000,${lat},${lng});
+        node["emergency"="fire_station"](around:5000,${lat},${lng});
+      );
+      out body;
+    `;
+    const url = "https://overpass-api.de/api/interpreter";
+    fetch(url, {
+      method: "POST",
+      body: query,
+      headers: { "Content-Type": "text/plain" }
+    })
+      .then(res => res.json())
+      .then((data: { elements: OverpassElement[] }) => {
+        const locations: EmergencyLocation[] = [];
+        for (const el of data.elements) {
+          if (!el.lat || !el.lon) continue;
+          let type: EmergencyLocation["type"] | undefined;
+          let icon: string | undefined;
+          if (el.tags.amenity === "hospital") {
+            type = "hospital";
+            icon = hospitalIcon;
+          } else if (el.tags.amenity === "police") {
+            type = "police";
+            icon = policeIcon;
+          } else if (el.tags.emergency === "fire_station") {
+            type = "fire";
+            icon = fireIcon;
+          }
+          if (type && icon) {
+            locations.push({
+              type,
+              name: el.tags.name || (type.charAt(0).toUpperCase() + type.slice(1)),
+              lat: el.lat,
+              lng: el.lon,
+              phone: el.tags.phone,
+              icon
+            });
+          }
+        }
+        setEmergencyLocations(locations);
+      })
+      .catch(() => {});
+  }, [userLocation]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
@@ -140,17 +225,13 @@ export default function CustomerDashboard() {
           const res = await fetch(`/api/rides/${rideId}/status`);
           const data = await res.json();
           if (data.status) setRideStatus(data.status);
-
-          // Optionally, fetch driver info if accepted or in progress
           if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
             setDriverInfo({
               name: data.driver.name || "",
               vehicleType: data.driver.vehicleType || ""
             });
           }
-        } catch (err) {
-          // Optionally handle polling error
-        }
+        } catch (err) {}
       }, 3000);
     }
     return () => clearInterval(interval);
@@ -171,7 +252,6 @@ export default function CustomerDashboard() {
       setWaiting(false);
       return;
     }
-
     try {
       const res = await fetch("/api/rides/request", {
         method: "POST",
@@ -180,10 +260,10 @@ export default function CustomerDashboard() {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          customerId, // This is now always a number
+          customerId,
           originLat: pickupLocation.lat,
           originLng: pickupLocation.lng,
-          destLat: pickupLocation.lat, // For demo, use pickup as dest; update for real dest!
+          destLat: pickupLocation.lat,
           destLng: pickupLocation.lng,
           vehicleType,
         }),
@@ -195,7 +275,7 @@ export default function CustomerDashboard() {
         return;
       }
       setPickupSet(true);
-      setRideId(data.rideId || data.id); // Store the ride ID for polling (either rideId or id)
+      setRideId(data.rideId || data.id);
       setRideStatus("pending");
       setWaiting(false);
     } catch (err: any) {
@@ -259,7 +339,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // Reset all relevant state for new ride
   function handleReset() {
     setRideStatus(null);
     setPickupSet(false);
@@ -270,12 +349,10 @@ export default function CustomerDashboard() {
     setShowDoneActions(false);
   }
 
-  // UI for various ride states
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress")
   ) {
-    // Show both buttons on "Waiting for a driver to accept your ride..." and during ride
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div>
@@ -340,7 +417,6 @@ export default function CustomerDashboard() {
   }
 
   if (rideStatus === "done" && showDoneActions && rideId) {
-    // After mark as done: show both RateDriver and Request Another Ride
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
@@ -369,7 +445,15 @@ export default function CustomerDashboard() {
           Ride was cancelled.
         </div>
         <button
-          style={{ marginTop: 24, background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
+          style={{
+            marginTop: 24,
+            background: "#1976D2",
+            color: "#fff",
+            border: "none",
+            padding: "0.7em 1.4em",
+            borderRadius: 6,
+            fontSize: 16
+          }}
           onClick={handleReset}
         >
           Request New Ride
@@ -462,6 +546,29 @@ export default function CustomerDashboard() {
             >
               <Popup>Your pickup location</Popup>
             </Marker>
+            {/* Emergency locations */}
+            {emergencyLocations.map((em, idx) => (
+              <Marker
+                key={idx}
+                position={[em.lat, em.lng]}
+                icon={createEmergencyIcon(em.icon)}
+              >
+                <Popup>
+                  <div>
+                    <strong>{em.name}</strong> <br />
+                    <span style={{ textTransform: "capitalize" }}>{em.type}</span>
+                    {em.phone && (
+                      <>
+                        <br />
+                        <a href={`tel:${em.phone}`} style={{ color: "#1976D2", textDecoration: "none" }}>
+                          📞 Call: {em.phone}
+                        </a>
+                      </>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
           </MapContainer>
         )}
       </div>

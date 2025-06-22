@@ -14,11 +14,11 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
@@ -36,21 +36,15 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        // Store phone and role for verification step
         localStorage.setItem("pendingPhone", form.phone);
         localStorage.setItem("pendingRole", form.role);
-
-        // Store user ID as stringified integer for ALL users if backend returns it
         if (data?.user && typeof data.user.id === "number") {
           localStorage.setItem("userId", String(data.user.id));
         }
-
-        // If registering as a driver, also store driverId and vehicleType
         if (form.role === "DRIVER" && data?.user) {
           localStorage.setItem("driverId", String(data.user.id));
           localStorage.setItem("vehicleType", form.vehicleType.toLowerCase());
         }
-
         setMessage("Registration successful! Redirecting to verification...");
         setTimeout(() => {
           navigate("/verify", { state: { phone: form.phone, role: form.role } });
@@ -122,9 +116,10 @@ export default function RegisterPage() {
                 Select vehicle type
               </option>
               <option value="car">Car</option>
-              <option value="bike">Bike</option>
-              <option value="tuktuk">Three-wheel Bike (Tuktuk)</option>
+              <option value="delivery">Delivery</option>
+              <option value="tuktuk">(Tuktuk) Three-wheel Bike</option>
               <option value="truck">Truck</option>
+              <option value="water_truck">Water Truck</option>
             </select>
           </div>
         )}
