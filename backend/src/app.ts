@@ -4,6 +4,7 @@ import { errorHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/auth.routes";
 import rideRoutes from "./routes/ride.routes";
 import testRoutes from "./routes/test.routes";
+import adminRoutes from "./routes/admin"; // <-- Import admin routes
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
+app.use("/api/admin", adminRoutes); // <-- Register admin routes
 app.use("/test", testRoutes);
 
 // 404 handler for undefined routes

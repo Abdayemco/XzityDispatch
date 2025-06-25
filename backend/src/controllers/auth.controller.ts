@@ -21,6 +21,15 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     const existing = await prisma.user.findUnique({ where: { phone } });
     if (existing) {
+      if (!existing.phoneVerified) {
+        // User exists but not verified: prompt for verification, do not create duplicate
+        return res.status(202).json({
+          action: "verification_required",
+          message: "You are already registered. Please verify your phone.",
+          phone: existing.phone,
+        });
+      }
+      // User already exists AND is verified
       return res.status(409).json({ error: "User already exists with this phone" });
     }
 
@@ -37,7 +46,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         role: role.trim().toUpperCase(),
         vehicleType: role.trim().toUpperCase() === "DRIVER" ? vehicleType?.toUpperCase() : null,
         verificationCode,
-        status: "PENDING",
+        phoneVerified: false,
+        disabled: false,
       },
     });
 
@@ -81,12 +91,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "Invalid phone." });
     }
 
-    const trustedDevice = await prisma.trustedDevice.findFirst({
-      where: { userId: user.id, deviceId }
-    });
+    // Check if user is disabled
+    if (user.disabled) {
+      return res.status(403).json({ error: "Account disabled by admin." });
+    }
 
-    // If user is not active, always require verification
-    if (user.status !== "ACTIVE") {
+    // Require phone verification
+    if (!user.phoneVerified) {
       const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
       await prisma.user.update({
         where: { id: user.id },
@@ -111,11 +122,15 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(202).json({
         action: "verification_required",
         role: user.role ? user.role.toUpperCase() : null,
-        message: "Account not active. Verification code sent."
+        message: "Phone not verified. Verification code sent."
       });
     }
 
-    // If device is trusted and user is active, allow login
+    // Check trusted device
+    const trustedDevice = await prisma.trustedDevice.findFirst({
+      where: { userId: user.id, deviceId }
+    });
+
     if (trustedDevice) {
       const token = jwt.sign(
         { id: user.id, phone: user.phone, role: user.role },
@@ -136,7 +151,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    // If device is not trusted (but user is active), require verification
+    // If device is not trusted, require verification
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     await prisma.user.update({
       where: { id: user.id },
@@ -183,51 +198,43 @@ export const verifyCode = async (req: Request, res: Response, next: NextFunction
       return res.status(400).json({ error: "Invalid verification code." });
     }
 
-    // Activate account if pending
-    let updatedUser = user;
-    if (user.status !== "ACTIVE") {
-      updatedUser = await prisma.user.update({
-        where: { phone },
-        data: { status: "ACTIVE", verificationCode: null }
-      });
-    } else {
-      await prisma.user.update({
-        where: { phone },
-        data: { verificationCode: null }
-      });
-    }
+    // Mark phone as verified and clear the code
+    await prisma.user.update({
+      where: { phone },
+      data: { phoneVerified: true, verificationCode: null }
+    });
 
     // Add device as trusted
     await prisma.trustedDevice.upsert({
       where: {
         userId_deviceId: {
-          userId: updatedUser.id,
+          userId: user.id,
           deviceId
         }
       },
       update: {},
       create: {
-        userId: updatedUser.id,
+        userId: user.id,
         deviceId
       }
     });
 
     // Generate JWT
     const token = jwt.sign(
-      { id: updatedUser.id, phone: updatedUser.phone, role: updatedUser.role },
+      { id: user.id, phone: user.phone, role: user.role },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     return res.json({
       token,
-      role: updatedUser.role ? updatedUser.role.toUpperCase() : null,
+      role: user.role ? user.role.toUpperCase() : null,
       user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        phone: updatedUser.phone,
-        email: updatedUser.email,
-        vehicleType: updatedUser.vehicleType || undefined
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        vehicleType: user.vehicleType || undefined
       }
     });
   } catch (error) {

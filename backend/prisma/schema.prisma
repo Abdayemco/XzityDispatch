@@ -44,7 +44,8 @@ model User {
   ridesAsDriver    Ride[]          @relation("DriverRides")
   ridesAsCustomer  Ride[]          @relation("CustomerRides")
   verificationCode String?
-  status           String          @default("PENDING")
+  phoneVerified    Boolean         @default(false)  // <-- Added
+  disabled         Boolean         @default(false)  // <-- Added
   trustedDevices   TrustedDevice[]
 }
 

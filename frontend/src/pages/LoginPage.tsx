@@ -36,20 +36,13 @@ export default function LoginPage() {
       const data = await res.json();
       console.log("[LOGIN RESPONSE]", data);
 
-      if (res.ok) {
-        if (data.token) {
-          localStorage.setItem("token", data.token);
-        } else {
-          setMessage("Login failed: No token received from server.");
-          setLoading(false);
-          return;
-        }
+      // If login is successful and a token is received
+      if (res.ok && data.token) {
+        localStorage.setItem("token", data.token);
         localStorage.setItem("role", (data.role || "").toLowerCase());
-        // Always store userId as a stringified integer if backend provides it
         if (data.user && typeof data.user.id === "number") {
           localStorage.setItem("userId", String(data.user.id));
         }
-        // If driver, also store driverId and vehicleType for future use
         if (data.role && data.role.toLowerCase() === "driver" && data.user) {
           localStorage.setItem("driverId", String(data.user.id));
           if (data.user.vehicleType) {
@@ -69,17 +62,32 @@ export default function LoginPage() {
           }
         }, 600);
         return;
-      } else if (data.action === "verification_required" || data.error === "Verification code required") {
+      }
+
+      // If verification is required (untrusted device or unverified phone)
+      if (
+        data.action === "verification_required" ||
+        data.error === "Verification code required" ||
+        (res.status === 202 && data.action === "verification_required")
+      ) {
         // Save info for verification page
         localStorage.setItem("pendingPhone", phone);
         setMessage("Verification required. Redirecting...");
         setTimeout(() => {
-          navigate("/verify", { state: { phone } });
+          navigate("/verify", {
+            state: {
+              phone,
+              deviceId,
+              role: data.role,
+              message: data.message,
+            }
+          });
         }, 600);
         return;
-      } else {
-        setMessage(data.error || "Login failed.");
       }
+
+      // Any other error
+      setMessage(data.error || "Login failed.");
     } catch (err) {
       setMessage("Could not connect to server.");
     }
