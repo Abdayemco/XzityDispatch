@@ -75,7 +75,30 @@ router.get("/pending-drivers", isAdmin, async (req, res) => {
   }
 });
 
-// Enable a user (set disabled: false)
+// PATCH block/unblock user (used by frontend)
+router.patch("/users/:userId/block", isAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const { disabled } = req.body;
+
+    // Prevent self-blocking
+    if (req.user?.id === userId) {
+      return res.status(400).json({ error: "You cannot block/unblock yourself." });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { disabled: !!disabled },
+    });
+
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error("Error blocking/unblocking user:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+// (Optional) Old POST enable/disable user routes
 router.post("/user/:id/enable", isAdmin, async (req, res) => {
   const userId = Number(req.params.id);
   try {
@@ -89,7 +112,6 @@ router.post("/user/:id/enable", isAdmin, async (req, res) => {
   }
 });
 
-// Disable a user (set disabled: true)
 router.post("/user/:id/disable", isAdmin, async (req, res) => {
   const userId = Number(req.params.id);
   try {

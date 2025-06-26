@@ -2,6 +2,14 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "../utils/prisma";
 
+/**
+ * isAdmin middleware:
+ * - Authenticates the JWT token
+ * - Checks user is admin (role = "admin")
+ * - Checks user is not disabled
+ * - If any check fails, responds with appropriate error
+ * - Otherwise, attaches user payload to req.user and calls next()
+ */
 export const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Get token from Authorization header
@@ -19,11 +27,22 @@ export const isAdmin = async (req: Request, res: Response, next: NextFunction) =
     }
 
     // Accept both "ADMIN" and "admin" for robustness
-    if (!payload || (payload.role && payload.role.toLowerCase() !== "admin")) {
+    if (!payload || !payload.role || payload.role.toLowerCase() !== "admin") {
       return res.status(403).json({ error: "Admin access required" });
     }
 
-    // Optionally: Attach user info to req for downstream handlers
+    // Ensure the user still exists and is not disabled
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+    if (user.disabled) {
+      return res.status(403).json({
+        error: "Your account is currently on hold. Kindly call the administrator to reinstate your account."
+      });
+    }
+
+    // Attach user info to req for downstream handlers
     req.user = payload;
 
     next();

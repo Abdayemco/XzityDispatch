@@ -7,6 +7,7 @@ import PendingDriversList from "../components/PendingDriversList"; // Make sure 
  * AdminDashboard
  * - Shows tabbed views for: All Users, All Rides, Approvals
  * - Fetches data for each tab when selected
+ * - Allows blocking/unblocking users from the users tab
  */
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -71,6 +72,36 @@ export default function AdminDashboard() {
     // No need to fetch pending drivers here anymore!
   }, [activeTab, token]);
 
+  // Block/Unblock user
+  async function handleBlockToggle(userId, isBlocked) {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch(`/api/admin/users/${userId}/block`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ disabled: !isBlocked }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update user status");
+      }
+      // Update users state to reflect changed status
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, disabled: !isBlocked } : u
+        )
+      );
+    } catch (e) {
+      setError(e.message || "Failed to update user status.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // Section renderers
   function renderUsers() {
     return (
@@ -89,6 +120,7 @@ export default function AdminDashboard() {
                 <th style={thStyle}>Vehicle</th>
                 <th style={thStyle}>Busy</th>
                 <th style={thStyle}>Status</th>
+                <th style={thStyle}>Block/Unblock</th>
               </tr>
             </thead>
             <tbody>
@@ -100,7 +132,26 @@ export default function AdminDashboard() {
                   <td style={tdStyle}>{u.role}</td>
                   <td style={tdStyle}>{u.vehicleType || "-"}</td>
                   <td style={tdStyle}>{u.isBusy ? "Yes" : "No"}</td>
-                  <td style={tdStyle}>{u.status}</td>
+                  <td style={tdStyle}>{u.disabled ? "Blocked" : "Active"}</td>
+                  <td style={tdStyle}>
+                    <button
+                      style={{
+                        padding: "6px 16px",
+                        background: u.disabled ? "#388e3c" : "#d32f2f",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                        fontSize: 14,
+                        transition: "background 0.2s",
+                      }}
+                      disabled={loading}
+                      onClick={() => handleBlockToggle(u.id, u.disabled)}
+                    >
+                      {u.disabled ? "Unblock" : "Block"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
