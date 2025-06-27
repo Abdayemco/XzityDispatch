@@ -6,7 +6,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyCodePage from "./pages/VerifyCodePage";
-import Logo from "./components/Logo";
+import ContactAdminButton from "./components/ContactAdminButton";
 
 // Protect a route, redirect to login if no token
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -28,43 +28,47 @@ function DashboardRedirect() {
 
 export default function App() {
   return (
-    <Routes>
-      {/* Login page is now also the root page */}
-      <Route path="/" element={<LoginPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/verify" element={<VerifyCodePage />} />
+    <>
+      <Routes>
+        {/* Login page is now also the root page */}
+        <Route path="/" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify" element={<VerifyCodePage />} />
 
-      <Route
-        path="/driver"
-        element={
-          <ProtectedRoute>
-            <DriverDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/customer"
-        element={
-          <ProtectedRoute>
-            <CustomerDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute>
-            <AdminDashboard />
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/driver"
+          element={
+            <ProtectedRoute>
+              <DriverDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer"
+          element={
+            <ProtectedRoute>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-      {/* Helper route to go to dashboard based on role */}
-      <Route path="/dashboard" element={<DashboardRedirect />} />
+        {/* Helper route to go to dashboard based on role */}
+        <Route path="/dashboard" element={<DashboardRedirect />} />
 
-      {/* Catch-all route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Catch-all route */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      {/* Contact button always at the bottom right */}
+      <ContactAdminButton />
+    </>
   );
 }

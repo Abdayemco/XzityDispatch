@@ -4,9 +4,13 @@ import { errorHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/auth.routes";
 import rideRoutes from "./routes/ride.routes";
 import testRoutes from "./routes/test.routes";
-import adminRoutes from "./routes/admin"; // <-- Import admin routes
+import adminRoutes from "./routes/admin";
+import contactRouter from "./routes/contact";
 
 const app = express();
+
+// Parse JSON bodies BEFORE any route handlers
+app.use(express.json());
 
 // Allow CORS from Vite dev server and optional .env CLIENT_URL
 const allowedOrigins = [
@@ -28,11 +32,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
-
+// Register routes
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
-app.use("/api/admin", adminRoutes); // <-- Register admin routes
+app.use("/api/admin", adminRoutes);
+app.use("/api", contactRouter); // Contact router under /api ([POST] /api/contact-admin)
 app.use("/test", testRoutes);
 
 // 404 handler for undefined routes
