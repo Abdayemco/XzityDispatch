@@ -44,9 +44,14 @@ model User {
   ridesAsDriver    Ride[]          @relation("DriverRides")
   ridesAsCustomer  Ride[]          @relation("CustomerRides")
   verificationCode String?
-  phoneVerified    Boolean         @default(false)  // <-- Added
-  disabled         Boolean         @default(false)  // <-- Added
+  phoneVerified    Boolean         @default(false)
+  disabled         Boolean         @default(false)
   trustedDevices   TrustedDevice[]
+
+  // Chat relations
+  chatsAsCustomer  Chat[]          @relation("ChatCustomer")
+  chatsAsDriver    Chat[]          @relation("ChatDriver")
+  messages         Message[]
 }
 
 model Ride {
@@ -61,13 +66,16 @@ model Ride {
   destLng     Float
   requestedAt DateTime    @default(now())
   acceptedAt  DateTime?
-  startedAt   DateTime?   // <--- Track when ride goes IN_PROGRESS
-  completedAt DateTime?   // <--- Track when ride is COMPLETED (optional, but recommended)
-  cancelledAt DateTime?   // <--- Track when ride is CANCELLED (optional)
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
   status      RideStatus  @default(PENDING)
   vehicleType VehicleType
-  rating      Int?        // Customer's rating for the driver (1-5)
-  feedback    String?     // Optional feedback from customer
+  rating      Int?
+  feedback    String?
+
+  // Chat relation
+  chat        Chat?
 }
 
 model TrustedDevice {
@@ -78,4 +86,29 @@ model TrustedDevice {
   addedAt   DateTime @default(now())
 
   @@unique([userId, deviceId])
+}
+
+// --- NEW MODELS FOR CHAT ---
+
+model Chat {
+  id          Int       @id @default(autoincrement())
+  ride        Ride      @relation(fields: [rideId], references: [id])
+  rideId      Int       @unique
+  customer    User      @relation("ChatCustomer", fields: [customerId], references: [id])
+  customerId  Int
+  driver      User      @relation("ChatDriver", fields: [driverId], references: [id])
+  driverId    Int
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  chatId    Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  Int
+  content   String
+  sentAt    DateTime @default(now())
 }

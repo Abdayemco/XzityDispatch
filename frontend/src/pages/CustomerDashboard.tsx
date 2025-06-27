@@ -12,6 +12,7 @@ import waterTruckIcon from "../assets/marker-watertruck.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
+import ChatWindow from "../components/ChatWindow"; // <-- Import the chat component
 
 // Utility: Get icon URL for a given vehicleType (enum values)
 function getVehicleIcon(vehicleType: string) {
@@ -410,6 +411,15 @@ export default function CustomerDashboard() {
             </button>
           )}
         </div>
+        {/* Show chat only for accepted or in_progress rides */}
+        {(rideStatus === "accepted" || rideStatus === "in_progress") && rideId && (
+          <div style={{ margin: "32px auto", display: "flex", justifyContent: "center" }}>
+            <ChatWindow
+              rideId={rideId}
+              senderId={getCustomerIdFromStorage()!}
+            />
+          </div>
+        )}
         {error && <div style={{ color: "red", marginTop: 10 }}>{error}</div>}
       </div>
     );

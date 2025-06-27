@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaHistory, FaDollarSign, FaUser } from "react-icons/fa";
 import AppMap from "../components/AppMap";
+import ChatWindow from "../components/ChatWindow"; // <-- Import ChatWindow
 
 type Job = {
   id: string | number;
@@ -304,6 +305,20 @@ export default function DriverDashboard() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  // Helper: get numeric driverId (for ChatWindow senderId)
+  function getNumericDriverId() {
+    if (!driverId) return null;
+    const idNum = Number(driverId);
+    return Number.isInteger(idNum) ? idNum : driverId;
+  }
+
+  // Helper: get rideId for chat (from acceptedJob or driverJobId)
+  function getRideId() {
+    if (acceptedJob && acceptedJob.id) return acceptedJob.id;
+    if (driverJobId) return driverJobId;
+    return null;
+  }
+
   return (
     <div>
       <audio
@@ -416,6 +431,19 @@ export default function DriverDashboard() {
           <div style={{ marginTop: 8, color: "#888" }}>
             Press "Start Ride" when you pick up the customer.
           </div>
+        </div>
+      )}
+
+      {/* Show ChatWindow only for driver's active accepted/in_progress ride */}
+      {driverJobId &&
+        (jobStatus === "accepted" || jobStatus === "in_progress") &&
+        !completed && !cancelled &&
+        getRideId() && (
+        <div style={{ margin: "32px auto 0 auto", display: "flex", justifyContent: "center" }}>
+          <ChatWindow
+            rideId={getRideId() as number}
+            senderId={getNumericDriverId()!}
+          />
         </div>
       )}
 

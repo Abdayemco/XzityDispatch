@@ -6,6 +6,7 @@ import rideRoutes from "./routes/ride.routes";
 import testRoutes from "./routes/test.routes";
 import adminRoutes from "./routes/admin";
 import contactRouter from "./routes/contact";
+import chatRoutes from "./routes/chat"; // <-- Add this line
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api", contactRouter); // Contact router under /api ([POST] /api/contact-admin)
+app.use("/api", chatRoutes); // <-- Add this line
 app.use("/test", testRoutes);
 
 // 404 handler for undefined routes
