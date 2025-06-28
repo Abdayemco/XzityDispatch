@@ -8,7 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
 // --- REGISTER CONTROLLER ---
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, phone, email, password, role, vehicleType } = req.body;
+    const { name, phone, email, password, role, vehicleType, avatar } = req.body;
 
     if (
       !name?.trim() ||
@@ -22,20 +22,18 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const existing = await prisma.user.findUnique({ where: { phone } });
     if (existing) {
       if (!existing.phoneVerified) {
-        // User exists but not verified: prompt for verification, do not create duplicate
         return res.status(202).json({
           action: "verification_required",
           message: "You are already registered. Please verify your phone.",
           phone: existing.phone,
         });
       }
-      // User already exists AND is verified
       return res.status(409).json({ error: "User already exists with this phone" });
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const hashedPassword = password; // If you don't want passwords, you can skip hashing and ignore this field
+    const hashedPassword = password; // You should hash passwords in production!
 
     const user = await prisma.user.create({
       data: {
@@ -48,6 +46,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         verificationCode,
         phoneVerified: false,
         disabled: false,
+        avatar: avatar?.trim() || null,
       },
     });
 
@@ -68,7 +67,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
 
     return res.status(201).json({
-      user: { id: user.id, phone: user.phone, email: user.email },
+      user: { id: user.id, phone: user.phone, email: user.email, avatar: user.avatar },
       message: "User registered. The admin has received the verification code and will contact you soon.",
     });
   } catch (error) {
@@ -146,7 +145,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           name: user.name,
           phone: user.phone,
           email: user.email,
-          vehicleType: user.vehicleType || undefined
+          vehicleType: user.vehicleType || undefined,
+          avatar: user.avatar || null,
         }
       });
     }
@@ -234,7 +234,8 @@ export const verifyCode = async (req: Request, res: Response, next: NextFunction
         name: user.name,
         phone: user.phone,
         email: user.email,
-        vehicleType: user.vehicleType || undefined
+        vehicleType: user.vehicleType || undefined,
+        avatar: user.avatar || null,
       }
     });
   } catch (error) {

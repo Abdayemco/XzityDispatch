@@ -4,15 +4,15 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerCustomer from "../assets/marker-customer.png";
 import carIcon from "../assets/marker-car.png";
-import deliveryIcon from "../assets/marker-delivery.png"; // Use delivery icon for DELIVERY
+import deliveryIcon from "../assets/marker-delivery.png";
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 import waterTruckIcon from "../assets/marker-watertruck.png";
-// Emergency icons
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
-import ChatWindow from "../components/ChatWindow"; // <-- Import the chat component
+import ChatWindow from "../components/ChatWindow";
+import { io } from "socket.io-client";
 
 // Utility: Get icon URL for a given vehicleType (enum values)
 function getVehicleIcon(vehicleType: string) {
@@ -86,6 +86,8 @@ type OverpassElement = {
   };
 };
 
+type DriverInfo = { name?: string; vehicleType?: string; };
+
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
@@ -137,7 +139,11 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   );
 }
 
+// VITE COMPATIBLE SOCKET URL (no process.env!)
+const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
+
 export default function CustomerDashboard() {
+  // ------------------- STATE -------------------
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupSet, setPickupSet] = useState(false);
@@ -146,10 +152,12 @@ export default function CustomerDashboard() {
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
-  const [driverInfo, setDriverInfo] = useState<{ name?: string; vehicleType?: string } | null>(null);
+  const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
   const [showDoneActions, setShowDoneActions] = useState(false);
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
 
+  // ------------------- GEOLOCATION -------------------
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -158,13 +166,14 @@ export default function CustomerDashboard() {
         setPickupLocation(loc);
       },
       () => {
-        const loc = { lng: 36.8219, lat: -1.2921 };
+        const loc = { lng: 31.2357, lat: 30.0444 };
         setUserLocation(loc);
         setPickupLocation(loc);
       }
     );
   }, []);
 
+  // ------------------- EMERGENCY LOCATIONS -------------------
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -217,6 +226,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
+  // ------------------- POLLING RIDE STATUS -------------------
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
@@ -237,9 +247,8 @@ export default function CustomerDashboard() {
     return () => clearInterval(interval);
   }, [pickupSet, rideId, rideStatus]);
 
-  async function handleConfirmPickup() {
-    setWaiting(true);
-    setError(null);
+  // ------------------- REQUEST RIDE -------------------
+  async function handleRequestRide() {
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
       setWaiting(false);
@@ -252,6 +261,8 @@ export default function CustomerDashboard() {
       setWaiting(false);
       return;
     }
+    setWaiting(true);
+    setError(null);
     try {
       const res = await fetch("/api/rides/request", {
         method: "POST",
@@ -280,21 +291,22 @@ export default function CustomerDashboard() {
       setWaiting(false);
     } catch (err: any) {
       setError("Network or server error.");
+    } finally {
       setWaiting(false);
     }
   }
 
+  // ------------------- CANCEL RIDE -------------------
   async function handleCancelRide() {
     if (!rideId) return;
     setWaiting(true);
-    setError(null);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/rides/${rideId}/cancel`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          "Authorization": `Bearer ${token}`
         }
       });
       if (!res.ok) {
@@ -307,21 +319,22 @@ export default function CustomerDashboard() {
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
+    } finally {
       setWaiting(false);
     }
   }
 
+  // ------------------- MARK AS DONE -------------------
   async function handleMarkAsDone() {
     if (!rideId) return;
     setWaiting(true);
-    setError(null);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/rides/${rideId}/done`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          "Authorization": `Bearer ${token}`
         }
       });
       if (!res.ok) {
@@ -335,6 +348,7 @@ export default function CustomerDashboard() {
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
+    } finally {
       setWaiting(false);
     }
   }
@@ -347,8 +361,66 @@ export default function CustomerDashboard() {
     setRideId(null);
     setDriverInfo(null);
     setShowDoneActions(false);
+    setChatMessages([]);
   }
 
+  // ------------------- CHAT LOGIC -------------------
+  useEffect(() => {
+    if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
+    // Fetch chat messages on ride accepted/in_progress
+    const fetchMessages = async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/chats/${rideId}/messages`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        // Defensive: Filter out null/undefined and ensure each message has an id
+        setChatMessages(
+          Array.isArray(msgs)
+            ? msgs.filter(Boolean).map((m, idx) => ({
+                ...m,
+                id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+              }))
+            : []
+        );
+      } else {
+        setChatMessages([]);
+      }
+    };
+    fetchMessages();
+    return () => setChatMessages([]);
+  }, [rideId, rideStatus]);
+
+  useEffect(() => {
+    if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
+    socket.emit("join_chat", { chatId: rideId });
+    const handleIncoming = (msg: any) => {
+      // Deduplicate: Only add if not already present by id
+      setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+    };
+    socket.on("chat_message", handleIncoming);
+    return () => {
+      socket.off("chat_message", handleIncoming);
+      socket.emit("leave_chat", { chatId: rideId });
+    };
+  }, [rideId, rideStatus]);
+
+  // --- Send message handler (optimistic update) ---
+  const handleSendMessage = (text: string) => {
+    const customerId = getCustomerIdFromStorage();
+    if (!rideId || !customerId) return;
+    const msg = {
+      id: Date.now() + Math.random(), // ensure unique id for React key
+      chatId: rideId,
+      senderId: customerId,
+      content: text,
+    };
+    setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]); // Optimistic add (deduped)
+    socket.emit("chat_message", msg);
+  };
+
+  // ------------------- UI RENDERING -------------------
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress")
@@ -411,12 +483,26 @@ export default function CustomerDashboard() {
             </button>
           )}
         </div>
-        {/* Show chat only for accepted or in_progress rides */}
         {(rideStatus === "accepted" || rideStatus === "in_progress") && rideId && (
-          <div style={{ margin: "32px auto", display: "flex", justifyContent: "center" }}>
+          <div style={{
+            margin: "32px auto",
+            display: "flex",
+            justifyContent: "center",
+            height: "250px",
+            maxHeight: "250px",
+            minHeight: "120px",
+            width: "100%",
+            maxWidth: "500px",
+            background: "#fff",
+            boxShadow: "0 0 6px #ddd"
+          }}>
             <ChatWindow
               rideId={rideId}
               senderId={getCustomerIdFromStorage()!}
+              messages={chatMessages.filter(Boolean)}
+              currentUserId={getCustomerIdFromStorage()!}
+              onSend={handleSendMessage}
+              style={{ height: "100%" }}
             />
           </div>
         )}
@@ -436,12 +522,6 @@ export default function CustomerDashboard() {
             rideId={rideId}
             onRated={handleReset}
           />
-          <button
-            style={{ background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
-            onClick={handleReset}
-          >
-            Request Another Ride
-          </button>
         </div>
       </div>
     );
@@ -454,15 +534,7 @@ export default function CustomerDashboard() {
           Ride was cancelled.
         </div>
         <button
-          style={{
-            marginTop: 24,
-            background: "#1976D2",
-            color: "#fff",
-            border: "none",
-            padding: "0.7em 1.4em",
-            borderRadius: 6,
-            fontSize: 16
-          }}
+          style={{ background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
           onClick={handleReset}
         >
           Request New Ride
@@ -472,115 +544,103 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        minHeight: "100vh",
-        background: "#f8f9fa",
-      }}
-    >
-      <h2 style={{ textAlign: "center", margin: "0 0 14px 0" }}>Request a Ride</h2>
-      <div style={{ width: "100%", maxWidth: 420, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        {error && (
-          <div style={{ color: "red", marginBottom: 8 }}>{error}</div>
-        )}
-        {!pickupSet && (
-          <div style={{ marginBottom: 2 }}>
-            <label htmlFor="vehicleType" style={{ fontWeight: "bold", marginRight: 8 }}>
-              Choose your transportation type:
-            </label>
-            <select
-              id="vehicleType"
-              value={vehicleType}
-              onChange={e => setVehicleType(e.target.value)}
-              style={{ fontSize: 16, padding: "0.3em 1em", borderRadius: 6, marginRight: 8 }}
-              required
-            >
-              {vehicleOptions.map(opt => (
-                <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {vehicleOptions.map(opt =>
-              opt.value === vehicleType && opt.value !== "" ? (
-                <img
-                  key={opt.value}
-                  src={opt.icon}
-                  alt={opt.label}
-                  style={{ width: 32, height: 32, verticalAlign: "middle" }}
-                />
-              ) : null
-            )}
-          </div>
-        )}
-        {!pickupSet && (
-          <button
-            onClick={handleConfirmPickup}
-            disabled={!pickupLocation || !vehicleType || waiting}
-            style={{
-              background: "#1976D2",
-              color: "#fff",
-              border: "none",
-              padding: "0.7em 1.4em",
-              borderRadius: 6,
-              fontSize: 16,
-              width: "100%",
-              marginBottom: 0,
-              opacity: !pickupLocation || !vehicleType || waiting ? 0.7 : 1
-            }}
-          >
-            {waiting ? "Requesting..." : "Confirm Pickup Location"}
-          </button>
-        )}
-      </div>
-      <div style={{ background: "#e0e0e0", borderRadius: 8, width: "90%", maxWidth: 700, margin: "0 auto", marginTop: 4, height: "48vh" }}>
-        {userLocation && pickupLocation && (
-          <MapContainer
-            center={[userLocation.lat, userLocation.lng]}
-            zoom={13}
-            style={{ width: "100%", height: "100%", borderRadius: 10 }}
-            scrollWheelZoom={true}
-          >
-            <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {/* User's current & pickup location marker */}
+    <div style={{ padding: 24 }}>
+      <h2 style={{ textAlign: "center" }}>Request a Ride</h2>
+      {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
+      {userLocation && (
+        <MapContainer
+          center={[userLocation.lat, userLocation.lng]}
+          zoom={13}
+          style={{ height: 320, borderRadius: 8, margin: "0 auto", width: "100%", maxWidth: 640 }}
+          whenCreated={map => {
+            map.on("click", (e: any) => {
+              setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+              setPickupSet(true);
+            });
+          }}
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {pickupLocation && (
             <Marker
               position={[pickupLocation.lat, pickupLocation.lng]}
               icon={createLeafletIcon(markerCustomer, 32, 41)}
             >
-              <Popup>Your pickup location</Popup>
+              <Popup>Pickup Here</Popup>
             </Marker>
-            {/* Emergency locations */}
-            {emergencyLocations.map((em, idx) => (
-              <Marker
-                key={idx}
-                position={[em.lat, em.lng]}
-                icon={createEmergencyIcon(em.icon)}
-              >
-                <Popup>
-                  <div>
-                    <strong>{em.name}</strong> <br />
-                    <span style={{ textTransform: "capitalize" }}>{em.type}</span>
-                    {em.phone && (
-                      <>
-                        <br />
-                        <a href={`tel:${em.phone}`} style={{ color: "#1976D2", textDecoration: "none" }}>
-                          📞 Call: {em.phone}
-                        </a>
-                      </>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
+          )}
+          {emergencyLocations.map((em, idx) => (
+            <Marker
+              key={idx}
+              position={[em.lat, em.lng]}
+              icon={createEmergencyIcon(em.icon)}
+            >
+              <Popup>
+                <div>
+                  <strong>{em.name}</strong> <br />
+                  <span style={{ textTransform: "capitalize" }}>{em.type}</span>
+                  {em.phone && (
+                    <>
+                      <br />
+                      <a href={`tel:${em.phone}`} style={{ color: "#1976D2", textDecoration: "none" }}>
+                        📞 Call: {em.phone}
+                      </a>
+                    </>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      )}
+      <div style={{ margin: "24px 0", textAlign: "center" }}>
+        <label>
+          <b>Vehicle Type:</b>
+          <select
+            value={vehicleType}
+            onChange={e => setVehicleType(e.target.value)}
+            style={{ marginLeft: 12, fontSize: 16 }}
+          >
+            {vehicleOptions.map(opt => (
+              <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
+                {opt.label}
+              </option>
             ))}
-          </MapContainer>
-        )}
+          </select>
+          {vehicleOptions.map(opt =>
+            opt.value === vehicleType && opt.value !== "" ? (
+              <img
+                key={opt.value}
+                src={opt.icon}
+                alt={opt.label}
+                style={{ width: 32, height: 32, verticalAlign: "middle" }}
+              />
+            ) : null
+          )}
+        </label>
       </div>
+      <div style={{ margin: "24px 0", textAlign: "center" }}>
+        <button
+          disabled={waiting || !pickupLocation || !vehicleType}
+          onClick={handleRequestRide}
+          style={{
+            background: "#388e3c",
+            color: "#fff",
+            border: "none",
+            padding: "0.9em 2em",
+            borderRadius: 6,
+            fontSize: 18,
+            fontWeight: "bold",
+            opacity: waiting ? 0.7 : 1
+          }}
+        >
+          Request Ride
+        </button>
+      </div>
+      {pickupLocation && (
+        <div style={{ textAlign: "center", color: "#888" }}>
+          Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
+        </div>
+      )}
     </div>
   );
 }

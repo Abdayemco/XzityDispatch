@@ -9,6 +9,7 @@ export default function RegisterPage() {
     password: "",
     role: "CUSTOMER",
     vehicleType: "",
+    avatar: "", // <-- New field for avatar URL
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -28,6 +29,9 @@ export default function RegisterPage() {
         delete submitData.vehicleType;
       } else {
         submitData.vehicleType = form.vehicleType.toUpperCase();
+      }
+      if (!form.avatar?.trim()) {
+        delete submitData.avatar;
       }
       const res = await fetch("http://localhost:5000/api/auth/register", {
         method: "POST",
@@ -123,6 +127,20 @@ export default function RegisterPage() {
             </select>
           </div>
         )}
+        <div>
+          <label>
+            Avatar URL <span style={{ color: "#888", fontWeight: 400 }}>(optional)</span>
+          </label>
+          <input
+            name="avatar"
+            type="url"
+            className="form-control"
+            style={{ width: "100%", marginBottom: 12 }}
+            value={form.avatar}
+            onChange={handleChange}
+            placeholder="https://example.com/avatar.jpg"
+          />
+        </div>
         <button type="submit" disabled={registerDisabled} style={{ width: "100%", background: "#1976D2", color: "#fff", border: "none", padding: "0.8em", borderRadius: 6 }}>
           {loading ? "Registering..." : "Register"}
         </button>

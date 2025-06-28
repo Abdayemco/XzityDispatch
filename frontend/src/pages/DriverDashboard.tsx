@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaHistory, FaDollarSign, FaUser } from "react-icons/fa";
 import AppMap from "../components/AppMap";
-import ChatWindow from "../components/ChatWindow"; // <-- Import ChatWindow
+import ChatWindow from "../components/ChatWindow";
+import { io } from "socket.io-client";
 
 type Job = {
   id: string | number;
@@ -17,7 +18,11 @@ type Job = {
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
 const ACCEPTED_TIMEOUT_MINUTES = 15;
 
+// USE VITE ENV VAR FOR SOCKET URL!
+const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
+
 export default function DriverDashboard() {
+  // ------------------- STATE HOOKS --------------------
   const [jobs, setJobs] = useState<Job[]>([]);
   const [driverJobId, setDriverJobId] = useState<string | null>(null);
   const [acceptedJob, setAcceptedJob] = useState<Job | null>(null);
@@ -40,7 +45,6 @@ export default function DriverDashboard() {
       return saved ? Number(saved) : null;
     }
   );
-
   // Track when driver accepts the ride (for auto-release after 15min if driver doesn't start)
   const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(
     () => {
@@ -305,6 +309,10 @@ export default function DriverDashboard() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  // ------------------- CHAT STATE ---------------------
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatId, setChatId] = useState<number | null>(null);
+
   // Helper: get numeric driverId (for ChatWindow senderId)
   function getNumericDriverId() {
     if (!driverId) return null;
@@ -318,6 +326,67 @@ export default function DriverDashboard() {
     if (driverJobId) return driverJobId;
     return null;
   }
+
+  // ------------------- CHAT LOGIC --------------------
+  // Fetch chat history when ride is accepted
+  useEffect(() => {
+    const rideId = getRideId();
+    if (!rideId) return;
+    setChatId(Number(rideId)); // assuming 1-1 chat per ride
+
+    // Fetch messages for this chat
+    const fetchMessages = async () => {
+      const res = await fetch(`/api/chats/${rideId}/messages`, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        // Defensive: Filter out null/undefined and ensure each message has an id
+        setChatMessages(
+          Array.isArray(msgs)
+            ? msgs.filter(Boolean).map((m, idx) => ({
+                ...m,
+                id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+              }))
+            : []
+        );
+      } else {
+        setChatMessages([]);
+      }
+    };
+    fetchMessages();
+    return () => setChatMessages([]);
+    // eslint-disable-next-line
+  }, [driverJobId, acceptedJob]);
+
+  // Socket.IO: Join chat room and receive live messages (with deduplication)
+  useEffect(() => {
+    if (!chatId) return;
+    socket.emit("join_chat", { chatId });
+
+    const handleIncoming = (msg: any) => {
+      setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+    };
+    socket.on("chat_message", handleIncoming);
+
+    return () => {
+      socket.off("chat_message", handleIncoming);
+      socket.emit("leave_chat", { chatId });
+    };
+  }, [chatId]);
+
+  // --- Send message handler (optimistic update, deduped) ---
+  const handleSendMessage = (text: string) => {
+    if (!chatId || !getNumericDriverId()) return;
+    const msg = {
+      id: Date.now() + Math.random(),
+      chatId,
+      senderId: getNumericDriverId(),
+      content: text,
+    };
+    setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+    socket.emit("chat_message", msg);
+  };
 
   return (
     <div>
@@ -439,10 +508,23 @@ export default function DriverDashboard() {
         (jobStatus === "accepted" || jobStatus === "in_progress") &&
         !completed && !cancelled &&
         getRideId() && (
-        <div style={{ margin: "32px auto 0 auto", display: "flex", justifyContent: "center" }}>
+        <div style={{
+          margin: "32px auto 0 auto",
+          display: "flex",
+          justifyContent: "center",
+          height: "250px",
+          maxHeight: "250px",
+          minHeight: "120px",
+          width: "100%",
+          maxWidth: "500px"
+        }}>
           <ChatWindow
             rideId={getRideId() as number}
             senderId={getNumericDriverId()!}
+            messages={chatMessages.filter(Boolean)}
+            currentUserId={getNumericDriverId()!}
+            onSend={handleSendMessage}
+            style={{ height: "100%" }}
           />
         </div>
       )}
