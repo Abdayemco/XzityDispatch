@@ -375,12 +375,17 @@ export default function CustomerDashboard() {
       });
       if (res.ok) {
         const msgs = await res.json();
-        // Defensive: Filter out null/undefined and ensure each message has an id
         setChatMessages(
           Array.isArray(msgs)
             ? msgs.filter(Boolean).map((m, idx) => ({
                 ...m,
                 id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                sender: m?.sender ?? {
+                  id: m?.senderId ?? "unknown",
+                  name: m?.senderName ?? "",
+                  role: m?.senderRole ?? "",
+                  avatar: m?.senderAvatar ?? "",
+                },
               }))
             : []
         );
@@ -396,8 +401,17 @@ export default function CustomerDashboard() {
     if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
     socket.emit("join_chat", { chatId: rideId });
     const handleIncoming = (msg: any) => {
-      // Deduplicate: Only add if not already present by id
-      setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+      // Defensive: Normalize sender field for incoming socket messages
+      let normalizedMsg = {
+        ...msg,
+        sender: msg.sender ?? {
+          id: msg.senderId ?? "unknown",
+          name: msg.senderName ?? "",
+          role: msg.senderRole ?? "",
+          avatar: msg.senderAvatar ?? "",
+        },
+      };
+      setChatMessages(prev => prev.some(m => m.id === normalizedMsg.id) ? prev : [...prev, normalizedMsg]);
     };
     socket.on("chat_message", handleIncoming);
     return () => {
@@ -411,12 +425,23 @@ export default function CustomerDashboard() {
     const customerId = getCustomerIdFromStorage();
     if (!rideId || !customerId) return;
     const msg = {
-      id: Date.now() + Math.random(), // ensure unique id for React key
+      id: Date.now() + Math.random(),
       chatId: rideId,
       senderId: customerId,
+      senderRole: "customer",
+      senderName: "Customer",
       content: text,
+      sentAt: new Date().toISOString(),
     };
-    setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]); // Optimistic add (deduped)
+    setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, {
+      ...msg,
+      sender: {
+        id: msg.senderId,
+        name: msg.senderName,
+        role: msg.senderRole,
+        avatar: "",
+      },
+    }]);
     socket.emit("chat_message", msg);
   };
 
@@ -499,8 +524,9 @@ export default function CustomerDashboard() {
             <ChatWindow
               rideId={rideId}
               senderId={getCustomerIdFromStorage()!}
-              messages={chatMessages.filter(Boolean)}
+              messages={chatMessages}
               currentUserId={getCustomerIdFromStorage()!}
+              currentUserRole="customer"
               onSend={handleSendMessage}
               style={{ height: "100%" }}
             />

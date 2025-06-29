@@ -18,7 +18,6 @@ type Job = {
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
 const ACCEPTED_TIMEOUT_MINUTES = 15;
 
-// USE VITE ENV VAR FOR SOCKET URL!
 const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
 
 export default function DriverDashboard() {
@@ -38,14 +37,12 @@ export default function DriverDashboard() {
   const beepRef = useRef<HTMLAudioElement | null>(null);
   const navigate = useNavigate();
 
-  // Track when driver starts the ride (for auto-release after 15min if customer forgets)
   const [rideStartedAt, setRideStartedAt] = useState<number | null>(
     () => {
       const saved = localStorage.getItem("rideStartedAt");
       return saved ? Number(saved) : null;
     }
   );
-  // Track when driver accepts the ride (for auto-release after 15min if driver doesn't start)
   const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(
     () => {
       const saved = localStorage.getItem("rideAcceptedAt");
@@ -53,7 +50,6 @@ export default function DriverDashboard() {
     }
   );
 
-  // Get driver info from localStorage
   const driverId = localStorage.getItem("driverId") || "";
   let driverVehicleType = (localStorage.getItem("vehicleType") || "car").toLowerCase();
   if (driverVehicleType === "toktok") driverVehicleType = "tuktuk";
@@ -95,7 +91,6 @@ export default function DriverDashboard() {
     }
   }, [driverVehicleType, token, driverId]);
 
-  // Poll for jobs if not on completed/cancelled screen or on a job
   useEffect(() => {
     if (!locationLoaded || driverJobId || cancelled || completed) return;
     fetchJobs();
@@ -131,7 +126,6 @@ export default function DriverDashboard() {
     }
   }
 
-  // Start Ride handler, records "rideStartedAt" and clears "rideAcceptedAt"
   async function handleStartRide() {
     if (!driverJobId) return;
     setStatusMsg(null);
@@ -150,7 +144,7 @@ export default function DriverDashboard() {
         setErrorMsg(data?.error || "Failed to start ride");
       } else {
         setStatusMsg("Ride started! Take your customer to their destination.");
-        setJobStatus("in_progress"); // Optional, will be corrected by polling soon
+        setJobStatus("in_progress");
         setRideStartedAt(now);
         localStorage.setItem("rideStartedAt", String(now));
         setRideAcceptedAt(null);
@@ -161,7 +155,6 @@ export default function DriverDashboard() {
     }
   }
 
-  // Poll accepted job status -- handles done, arrived, cancelled, and 15min timeout
   useEffect(() => {
     if (!driverJobId || cancelled || completed) return;
     let isMounted = true;
@@ -175,7 +168,6 @@ export default function DriverDashboard() {
         const status = (data.status || "").toLowerCase();
         setJobStatus(status);
 
-        // If customer cancels
         if (status === "cancelled" && isMounted) {
           setCancelled(true);
           setStatusMsg(null);
@@ -191,7 +183,6 @@ export default function DriverDashboard() {
           }
         }
 
-        // If ride is done
         if ((status === "done" || status === "arrived") && isMounted) {
           setCompleted(true);
           setAcceptedJob(null);
@@ -218,7 +209,6 @@ export default function DriverDashboard() {
     };
   }, [driverJobId, token, cancelled, completed, autoReleaseTimer]);
 
-  // Timer logic for accepted rides (auto-release after 15min if driver doesn't start)
   useEffect(() => {
     if (jobStatus !== "accepted" || !rideAcceptedAt || cancelled || completed) return;
 
@@ -228,7 +218,6 @@ export default function DriverDashboard() {
       setCountdown(remaining > 0 ? remaining : 0);
 
       if (remaining <= 0) {
-        // Auto-release: allow driver to accept new jobs
         setAcceptedJob(null);
         setDriverJobId(null);
         setJobStatus(null);
@@ -246,10 +235,8 @@ export default function DriverDashboard() {
     }, 1000);
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line
   }, [jobStatus, rideAcceptedAt, cancelled, completed]);
 
-  // Timer logic for in_progress rides (driver auto-release after 15min)
   useEffect(() => {
     if (jobStatus !== "in_progress" || !rideStartedAt || cancelled || completed) return;
 
@@ -259,7 +246,6 @@ export default function DriverDashboard() {
       setCountdown(remaining > 0 ? remaining : 0);
 
       if (remaining <= 0) {
-        // Auto-release: allow driver to accept new jobs
         setAcceptedJob(null);
         setDriverJobId(null);
         setJobStatus(null);
@@ -277,7 +263,6 @@ export default function DriverDashboard() {
     }, 1000);
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line
   }, [jobStatus, rideStartedAt, cancelled, completed]);
 
   async function handleFindAnother() {
@@ -313,14 +298,12 @@ export default function DriverDashboard() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatId, setChatId] = useState<number | null>(null);
 
-  // Helper: get numeric driverId (for ChatWindow senderId)
   function getNumericDriverId() {
     if (!driverId) return null;
     const idNum = Number(driverId);
     return Number.isInteger(idNum) ? idNum : driverId;
   }
 
-  // Helper: get rideId for chat (from acceptedJob or driverJobId)
   function getRideId() {
     if (acceptedJob && acceptedJob.id) return acceptedJob.id;
     if (driverJobId) return driverJobId;
@@ -328,25 +311,28 @@ export default function DriverDashboard() {
   }
 
   // ------------------- CHAT LOGIC --------------------
-  // Fetch chat history when ride is accepted
   useEffect(() => {
     const rideId = getRideId();
     if (!rideId) return;
-    setChatId(Number(rideId)); // assuming 1-1 chat per ride
+    setChatId(Number(rideId));
 
-    // Fetch messages for this chat
     const fetchMessages = async () => {
       const res = await fetch(`/api/chats/${rideId}/messages`, {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const msgs = await res.json();
-        // Defensive: Filter out null/undefined and ensure each message has an id
         setChatMessages(
           Array.isArray(msgs)
             ? msgs.filter(Boolean).map((m, idx) => ({
                 ...m,
                 id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                sender: m?.sender ?? {
+                  id: m?.senderId ?? "unknown",
+                  name: m?.senderName ?? "",
+                  role: m?.senderRole ?? "",
+                  avatar: m?.senderAvatar ?? "",
+                },
               }))
             : []
         );
@@ -356,16 +342,23 @@ export default function DriverDashboard() {
     };
     fetchMessages();
     return () => setChatMessages([]);
-    // eslint-disable-next-line
   }, [driverJobId, acceptedJob]);
 
-  // Socket.IO: Join chat room and receive live messages (with deduplication)
   useEffect(() => {
     if (!chatId) return;
     socket.emit("join_chat", { chatId });
 
     const handleIncoming = (msg: any) => {
-      setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+      let normalizedMsg = {
+        ...msg,
+        sender: msg.sender ?? {
+          id: msg.senderId ?? "unknown",
+          name: msg.senderName ?? "",
+          role: msg.senderRole ?? "",
+          avatar: msg.senderAvatar ?? "",
+        },
+      };
+      setChatMessages((prev) => prev.some(m => m.id === normalizedMsg.id) ? prev : [...prev, normalizedMsg]);
     };
     socket.on("chat_message", handleIncoming);
 
@@ -375,16 +368,26 @@ export default function DriverDashboard() {
     };
   }, [chatId]);
 
-  // --- Send message handler (optimistic update, deduped) ---
   const handleSendMessage = (text: string) => {
     if (!chatId || !getNumericDriverId()) return;
     const msg = {
       id: Date.now() + Math.random(),
       chatId,
       senderId: getNumericDriverId(),
+      senderRole: "driver",
+      senderName: "Driver",
       content: text,
+      sentAt: new Date().toISOString(),
     };
-    setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+    setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, {
+      ...msg,
+      sender: {
+        id: msg.senderId,
+        name: msg.senderName,
+        role: msg.senderRole,
+        avatar: "",
+      },
+    }]);
     socket.emit("chat_message", msg);
   };
 
@@ -456,7 +459,6 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {/* Show countdown for both accepted and in_progress jobs */}
       {driverJobId &&
         ((jobStatus === "accepted" && countdown > 0) || (jobStatus === "in_progress" && countdown > 0)) &&
         !completed && !cancelled && (
@@ -479,7 +481,6 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {/* Start Ride Button for Driver */}
       {driverJobId && jobStatus === "accepted" && !cancelled && !completed && (
         <div style={{ textAlign: "center", marginTop: 24 }}>
           <button
@@ -503,7 +504,6 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {/* Show ChatWindow only for driver's active accepted/in_progress ride */}
       {driverJobId &&
         (jobStatus === "accepted" || jobStatus === "in_progress") &&
         !completed && !cancelled &&
@@ -521,8 +521,9 @@ export default function DriverDashboard() {
           <ChatWindow
             rideId={getRideId() as number}
             senderId={getNumericDriverId()!}
-            messages={chatMessages.filter(Boolean)}
+            messages={chatMessages}
             currentUserId={getNumericDriverId()!}
+            currentUserRole="driver"
             onSend={handleSendMessage}
             style={{ height: "100%" }}
           />

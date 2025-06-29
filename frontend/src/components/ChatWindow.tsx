@@ -23,15 +23,18 @@ function formatTimestamp(iso: string | Date) {
  *   {
  *     id, content, sentAt,
  *     sender: { id, name, avatar, role }
+ *     // or: senderId
  *   }
  * ]
- * currentUserId: number
+ * currentUserId: number | string
+ * currentUserRole: "customer" | "driver"
  * onSend: function (optional): called with (text) when user submits message
  * style: (optional) object, can set height/width.
  */
 export default function ChatWindow({
   messages = [],
   currentUserId,
+  currentUserRole = "user",
   onSend, // function (optional)
   style = {}
 }) {
@@ -69,6 +72,25 @@ export default function ChatWindow({
     setMessageText("");
   };
 
+  // Robust getRoleLabel: always show the true sender's role
+  function getRoleLabel(msg: any) {
+    // 1. Prefer explicit role field if present
+    if (msg.sender?.role) {
+      const role = msg.sender.role.toLowerCase();
+      if (role === "driver" || role === "customer") {
+        return role.charAt(0).toUpperCase() + role.slice(1);
+      }
+    }
+    // 2. Compare senderId to known ids from storage
+    const msgSenderId = msg.sender?.id ?? msg.senderId ?? msg?.sender_id ?? "unknown";
+    const driverId = localStorage.getItem("driverId");
+    const customerId = localStorage.getItem("userId");
+    if (msgSenderId && driverId && String(msgSenderId) === String(driverId)) return "Driver";
+    if (msgSenderId && customerId && String(msgSenderId) === String(customerId)) return "Customer";
+    // 3. Fallback: use name/initials or "User"
+    return msg.sender?.name || "User";
+  }
+
   return (
     <div
       style={{
@@ -91,8 +113,10 @@ export default function ChatWindow({
           </div>
         )}
         {safeMessages.map((msg, idx) => {
-          // Defensive: fallback for sender.id and msg.id
-          const mine = msg.sender?.id === currentUserId;
+          // Robustly determine if this message is mine
+          const mine =
+            String(msg.sender?.id ?? msg.senderId ?? msg?.sender_id ?? "unknown") ===
+            String(currentUserId);
           return (
             <div
               key={msg.id || idx}
@@ -129,16 +153,13 @@ export default function ChatWindow({
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 ) : (
-                  <span>{getInitials(msg.sender?.name || "")}</span>
+                  <span>{getInitials(msg.sender?.name || getRoleLabel(msg))}</span>
                 )}
               </div>
               {/* Message bubble and sender info */}
               <div style={{ maxWidth: "80%", textAlign: mine ? "right" : "left" }}>
                 <div style={{ fontSize: 13, color: "#555", fontWeight: 500, marginBottom: 1 }}>
-                  {msg.sender?.name ?? "User"}{" "}
-                  <span style={{ color: "#999", fontSize: "11px", fontWeight: 400 }}>
-                    ({msg.sender?.role?.toLowerCase() || "user"})
-                  </span>
+                  {getRoleLabel(msg)}
                 </div>
                 <div
                   style={{
