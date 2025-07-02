@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
+import { FaUsers, FaCar, FaUserShield } from "react-icons/fa";
 import PendingDriversList from "../components/PendingDriversList"; // Make sure the path is correct
 
 /**
  * AdminDashboard
- * - Shows tabbed views for: All Drivers, All Customers, All Rides, Approvals
+ * - Shows tabbed views for: All Users, All Rides, Approvals
  * - Fetches data for each tab when selected
  * - Allows blocking/unblocking users from the users tab
  */
@@ -19,7 +19,6 @@ export default function AdminDashboard() {
 
   // Data state
   const [users, setUsers] = useState([]);
-  const [customers, setCustomers] = useState([]);
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -38,8 +37,7 @@ export default function AdminDashboard() {
 
     const fetchUsers = async () => {
       try {
-        // Fetch drivers from the backend
-        const res = await fetch("/api/admin/drivers", {
+        const res = await fetch("/api/admin/users", {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
@@ -48,22 +46,6 @@ export default function AdminDashboard() {
         setUsers(data);
       } catch (e) {
         setError("Failed to load users.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchCustomers = async () => {
-      try {
-        const res = await fetch("/api/admin/customers", {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to fetch customers");
-        const data = await res.json();
-        setCustomers(data);
-      } catch (e) {
-        setError("Failed to load customers.");
       } finally {
         setLoading(false);
       }
@@ -86,24 +68,22 @@ export default function AdminDashboard() {
     };
 
     if (activeTab === "users") fetchUsers();
-    if (activeTab === "customers") fetchCustomers();
     if (activeTab === "rides") fetchRides();
     // No need to fetch pending drivers here anymore!
   }, [activeTab, token]);
 
-  // Block/Unblock user (drivers)
+  // Block/Unblock user
   async function handleBlockToggle(userId, isBlocked) {
     try {
       setLoading(true);
       setError("");
-      // Patch to /api/admin/drivers/:id/subscription to update 'disabled' status
-      const res = await fetch(`/api/admin/drivers/${userId}/subscription`, {
+      const res = await fetch(`/api/admin/users/${userId}/block`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ isSubscriptionDisabled: !isBlocked, disabled: !isBlocked }),
+        body: JSON.stringify({ disabled: !isBlocked }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -122,43 +102,12 @@ export default function AdminDashboard() {
     }
   }
 
-  // Block/Unblock customer (optional, similar logic, update endpoint if needed)
-  async function handleBlockToggleCustomer(customerId, isBlocked) {
-    try {
-      setLoading(true);
-      setError("");
-      // Patch to /api/admin/customers/:id/block (implement backend if needed)
-      const res = await fetch(`/api/admin/customers/${customerId}/block`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ disabled: !isBlocked }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to update customer status");
-      }
-      // Update customers state to reflect changed status
-      setCustomers((prev) =>
-        prev.map((u) =>
-          u.id === customerId ? { ...u, disabled: !isBlocked } : u
-        )
-      );
-    } catch (e) {
-      setError(e.message || "Failed to update customer status.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   // Section renderers
   function renderUsers() {
     return (
       <div style={{ margin: "30px auto", maxWidth: 900 }}>
-        <h3>All Drivers</h3>
-        {loading && <p>Loading drivers...</p>}
+        <h3>All Users</h3>
+        {loading && <p>Loading users...</p>}
         {error && <p style={{ color: "red" }}>{error}</p>}
         {!loading && !error && (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -167,9 +116,9 @@ export default function AdminDashboard() {
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Phone</th>
                 <th style={thStyle}>Email</th>
-                <th style={thStyle}>Trial Start</th>
-                <th style={thStyle}>Trial End</th>
-                <th style={thStyle}>Subscription Status</th>
+                <th style={thStyle}>Role</th>
+                <th style={thStyle}>Vehicle</th>
+                <th style={thStyle}>Busy</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Block/Unblock</th>
               </tr>
@@ -180,9 +129,9 @@ export default function AdminDashboard() {
                   <td style={tdStyle}>{u.name}</td>
                   <td style={tdStyle}>{u.phone}</td>
                   <td style={tdStyle}>{u.email}</td>
-                  <td style={tdStyle}>{u.trialStart ? new Date(u.trialStart).toLocaleDateString() : "-"}</td>
-                  <td style={tdStyle}>{u.trialEnd ? new Date(u.trialEnd).toLocaleDateString() : "-"}</td>
-                  <td style={tdStyle}>{u.subscriptionStatus || "-"}</td>
+                  <td style={tdStyle}>{u.role}</td>
+                  <td style={tdStyle}>{u.vehicleType || "-"}</td>
+                  <td style={tdStyle}>{u.isBusy ? "Yes" : "No"}</td>
                   <td style={tdStyle}>{u.disabled ? "Blocked" : "Active"}</td>
                   <td style={tdStyle}>
                     <button
@@ -199,58 +148,6 @@ export default function AdminDashboard() {
                       }}
                       disabled={loading}
                       onClick={() => handleBlockToggle(u.id, u.disabled)}
-                    >
-                      {u.disabled ? "Unblock" : "Block"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  }
-
-  function renderCustomers() {
-    return (
-      <div style={{ margin: "30px auto", maxWidth: 900 }}>
-        <h3>All Customers</h3>
-        {loading && <p>Loading customers...</p>}
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {!loading && !error && (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Phone</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Block/Unblock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((u) => (
-                <tr key={u.id}>
-                  <td style={tdStyle}>{u.name}</td>
-                  <td style={tdStyle}>{u.phone}</td>
-                  <td style={tdStyle}>{u.email}</td>
-                  <td style={tdStyle}>{u.disabled ? "Blocked" : "Active"}</td>
-                  <td style={tdStyle}>
-                    <button
-                      style={{
-                        padding: "6px 16px",
-                        background: u.disabled ? "#388e3c" : "#d32f2f",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: loading ? "not-allowed" : "pointer",
-                        fontWeight: 600,
-                        fontSize: 14,
-                        transition: "background 0.2s",
-                      }}
-                      disabled={loading}
-                      onClick={() => handleBlockToggleCustomer(u.id, u.disabled)}
                     >
                       {u.disabled ? "Unblock" : "Block"}
                     </button>
@@ -312,15 +209,9 @@ export default function AdminDashboard() {
       <div style={tabBarStyle}>
         <TabIcon
           icon={<FaUsers size={28} />}
-          label="All Drivers"
+          label="All Users"
           active={activeTab === "users"}
           onClick={() => setActiveTab("users")}
-        />
-        <TabIcon
-          icon={<FaUser size={28} />}
-          label="All Customers"
-          active={activeTab === "customers"}
-          onClick={() => setActiveTab("customers")}
         />
         <TabIcon
           icon={<FaCar size={28} />}
@@ -336,7 +227,6 @@ export default function AdminDashboard() {
         />
       </div>
       {activeTab === "users" && renderUsers()}
-      {activeTab === "customers" && renderCustomers()}
       {activeTab === "rides" && renderRides()}
       {activeTab === "approvals" && (
         <div style={{ margin: "30px auto", maxWidth: 900 }}>

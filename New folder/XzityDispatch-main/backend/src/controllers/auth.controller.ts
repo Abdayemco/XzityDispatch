@@ -35,17 +35,6 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     const hashedPassword = password; // You should hash passwords in production!
 
-    // --- Free Trial Logic for Drivers ---
-    let trialStart: Date | null = null;
-    let trialEnd: Date | null = null;
-    let subscriptionStatus: string | null = null;
-    if (role.trim().toUpperCase() === "DRIVER") {
-      trialStart = new Date();
-      trialEnd = new Date();
-      trialEnd.setMonth(trialEnd.getMonth() + 1);
-      subscriptionStatus = "trial";
-    }
-
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
@@ -58,10 +47,6 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         phoneVerified: false,
         disabled: false,
         avatar: avatar?.trim() || null,
-        // Add the new fields below
-        trialStart,
-        trialEnd,
-        subscriptionStatus,
       },
     });
 

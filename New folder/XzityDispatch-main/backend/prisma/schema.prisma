@@ -52,12 +52,12 @@ model User {
   messages         Message[]
 
   // --- Subscription & Free Trial Fields for DRIVERS only ---
-  trialStart             DateTime?      @map("trial_start")
-  trialEnd               DateTime?      @map("trial_end")
-  subscriptionStatus     String?        @default("trial") // e.g. "trial", "active", "expired", "disabled"
-  subscriptionFee        Float?         @default(0)
-  paymentMethod          String?        // e.g. "credit_card", "wish", "omt", etc.
-  isSubscriptionDisabled Boolean?       @default(false)
+  trialStart           DateTime?      @map("trial_start")
+  trialEnd             DateTime?      @map("trial_end")
+  subscriptionStatus   String?        @default("trial") // trial, active, expired, disabled
+  subscriptionFee      Float?         @default(0)
+  paymentMethod        String?        // "credit_card", "wish", "omt", etc.
+  isSubscriptionDisabled Boolean?     @default(false)
 }
 
 model Ride {
