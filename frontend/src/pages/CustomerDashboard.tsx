@@ -11,10 +11,8 @@ import waterTruckIcon from "../assets/marker-watertruck.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
-import ChatWindow from "../components/ChatWindow";
-import { io } from "socket.io-client";
+import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
 
-// Utility: Get icon URL for a given vehicleType (enum values)
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType) {
     case "CAR": return carIcon;
@@ -26,7 +24,6 @@ function getVehicleIcon(vehicleType: string) {
   }
 }
 
-// Create a Leaflet icon
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -37,7 +34,6 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
   });
 }
 
-// Create a Leaflet emergency icon
 function createEmergencyIcon(url: string) {
   return L.icon({
     iconUrl: url,
@@ -48,7 +44,6 @@ function createEmergencyIcon(url: string) {
   });
 }
 
-// Updated dropdown options: DELIVERY uses deliveryIcon
 const vehicleOptions = [
   { value: "", label: "Select type", icon: "" },
   { value: "CAR", label: "Car", icon: carIcon },
@@ -85,7 +80,6 @@ type OverpassElement = {
     emergency?: string;
   };
 };
-
 type DriverInfo = { name?: string; vehicleType?: string; };
 
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
@@ -139,11 +133,20 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   );
 }
 
-// VITE COMPATIBLE SOCKET URL (no process.env!)
-const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
+// --- Chat session persistence for reconnects ---
+function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
+  localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
+  localStorage.setItem("currentRideStatus", rideStatus || "");
+}
+function getSavedChatSession() {
+  const rideId = Number(localStorage.getItem("currentRideId"));
+  const rideStatus = localStorage.getItem("currentRideStatus");
+  return { rideId: rideId || null, rideStatus: rideStatus || null };
+}
 
 export default function CustomerDashboard() {
   // ------------------- STATE -------------------
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupSet, setPickupSet] = useState(false);
@@ -156,6 +159,35 @@ export default function CustomerDashboard() {
   const [showDoneActions, setShowDoneActions] = useState(false);
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+
+  // Listen for login/logout and update token in all tabs
+  useEffect(() => {
+    const onStorage = () => setToken(localStorage.getItem("token"));
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // --- Restore ride/chat session from localStorage on mount ---
+  useEffect(() => {
+    if (!rideId && !pickupSet) {
+      const { rideId: storedId, rideStatus: storedStatus } = getSavedChatSession();
+      if (
+        storedId &&
+        (storedStatus === "accepted" ||
+          storedStatus === "in_progress" ||
+          storedStatus === "pending")
+      ) {
+        setRideId(storedId);
+        setRideStatus(storedStatus as RideStatus);
+        setPickupSet(true);
+      }
+    }
+  }, []);
+
+  // --- Persist ride/chat session to localStorage ---
+  useEffect(() => {
+    if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
+  }, [rideId, rideStatus]);
 
   // ------------------- GEOLOCATION -------------------
   useEffect(() => {
@@ -353,6 +385,7 @@ export default function CustomerDashboard() {
     }
   }
 
+  // --- Clean up everything (also called after logout) ---
   function handleReset() {
     setRideStatus(null);
     setPickupSet(false);
@@ -362,90 +395,66 @@ export default function CustomerDashboard() {
     setDriverInfo(null);
     setShowDoneActions(false);
     setChatMessages([]);
+    saveChatSession(null, null);
   }
 
-  // ------------------- CHAT LOGIC -------------------
+  // ------------------- CHAT LOGIC: Polling REST -------------------
   useEffect(() => {
     if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
-    // Fetch chat messages on ride accepted/in_progress
-    const fetchMessages = async () => {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/chats/${rideId}/messages`, {
-        headers: token ? { "Authorization": `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        const msgs = await res.json();
-        setChatMessages(
-          Array.isArray(msgs)
-            ? msgs.filter(Boolean).map((m, idx) => ({
-                ...m,
-                id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
-                sender: m?.sender ?? {
-                  id: m?.senderId ?? "unknown",
-                  name: m?.senderName ?? "",
-                  role: m?.senderRole ?? "",
-                  avatar: m?.senderAvatar ?? "",
-                },
-              }))
-            : []
-        );
-      } else {
+    let polling = true;
+    async function fetchMessages() {
+      if (!polling) return;
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/rides/${rideId}/chat/messages`, {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const msgs = await res.json();
+          setChatMessages(
+            Array.isArray(msgs)
+              ? msgs.filter(Boolean).map((m, idx) => ({
+                  ...m,
+                  id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                  sender: m?.sender ?? {
+                    id: m?.senderId ?? "unknown",
+                    name: m?.senderName ?? "",
+                    role: m?.senderRole ?? "",
+                    avatar: m?.senderAvatar ?? "",
+                  },
+                }))
+              : []
+          );
+        } else {
+          setChatMessages([]);
+        }
+      } catch {
         setChatMessages([]);
       }
-    };
+    }
     fetchMessages();
-    return () => setChatMessages([]);
-  }, [rideId, rideStatus]);
-
-  useEffect(() => {
-    if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
-    socket.emit("join_chat", { chatId: rideId });
-    const handleIncoming = (msg: any) => {
-      // Defensive: Normalize sender field for incoming socket messages
-      let normalizedMsg = {
-        ...msg,
-        sender: msg.sender ?? {
-          id: msg.senderId ?? "unknown",
-          name: msg.senderName ?? "",
-          role: msg.senderRole ?? "",
-          avatar: msg.senderAvatar ?? "",
-        },
-      };
-      setChatMessages(prev => prev.some(m => m.id === normalizedMsg.id) ? prev : [...prev, normalizedMsg]);
-    };
-    socket.on("chat_message", handleIncoming);
+    const interval = setInterval(fetchMessages, 3000);
     return () => {
-      socket.off("chat_message", handleIncoming);
-      socket.emit("leave_chat", { chatId: rideId });
+      polling = false;
+      clearInterval(interval);
     };
   }, [rideId, rideStatus]);
 
-  // --- Send message handler (optimistic update) ---
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     const customerId = getCustomerIdFromStorage();
     if (!rideId || !customerId) return;
-    const msg = {
-      id: Date.now() + Math.random(),
-      chatId: rideId,
-      senderId: customerId,
-      senderRole: "customer",
-      senderName: "Customer",
-      content: text,
-      sentAt: new Date().toISOString(),
-    };
-    setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, {
-      ...msg,
-      sender: {
-        id: msg.senderId,
-        name: msg.senderName,
-        role: msg.senderRole,
-        avatar: "",
-      },
-    }]);
-    socket.emit("chat_message", msg);
+    await fetch(`/api/rides/${rideId}/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        senderId: customerId,
+        content: text,
+      }),
+    });
+    // message will appear on next poll
   };
 
-  // ------------------- UI RENDERING -------------------
+  // ------------------- UI RENDERING (unchanged below) -------------------
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress")
@@ -521,12 +530,10 @@ export default function CustomerDashboard() {
             background: "#fff",
             boxShadow: "0 0 6px #ddd"
           }}>
-            <ChatWindow
-              rideId={rideId}
-              senderId={getCustomerIdFromStorage()!}
+            <RestChatWindow
+              rideId={String(rideId)}
+              sender={{ id: getCustomerIdFromStorage(), name: "Customer", role: "customer", avatar: "" }}
               messages={chatMessages}
-              currentUserId={getCustomerIdFromStorage()!}
-              currentUserRole="customer"
               onSend={handleSendMessage}
               style={{ height: "100%" }}
             />

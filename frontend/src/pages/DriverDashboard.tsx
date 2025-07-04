@@ -2,8 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaHistory, FaDollarSign, FaUser } from "react-icons/fa";
 import AppMap from "../components/AppMap";
-import ChatWindow from "../components/ChatWindow";
-import { io } from "socket.io-client";
+import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
 
 type Job = {
   id: string | number;
@@ -18,10 +17,19 @@ type Job = {
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
 const ACCEPTED_TIMEOUT_MINUTES = 15;
 
-const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
+function saveChatSession(rideId: number | null, jobStatus: string | null) {
+  localStorage.setItem("currentDriverRideId", rideId ? String(rideId) : "");
+  localStorage.setItem("currentDriverJobStatus", jobStatus || "");
+}
+function getSavedChatSession() {
+  const rideId = Number(localStorage.getItem("currentDriverRideId"));
+  const jobStatus = localStorage.getItem("currentDriverJobStatus");
+  return { rideId: rideId || null, jobStatus: jobStatus || null };
+}
 
 export default function DriverDashboard() {
-  // ------------------- STATE HOOKS --------------------
+  // ---- ALL useState hooks FIRST ----
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [jobs, setJobs] = useState<Job[]>([]);
   const [driverJobId, setDriverJobId] = useState<string | null>(null);
   const [acceptedJob, setAcceptedJob] = useState<Job | null>(null);
@@ -37,23 +45,44 @@ export default function DriverDashboard() {
   const beepRef = useRef<HTMLAudioElement | null>(null);
   const navigate = useNavigate();
 
-  const [rideStartedAt, setRideStartedAt] = useState<number | null>(
-    () => {
-      const saved = localStorage.getItem("rideStartedAt");
-      return saved ? Number(saved) : null;
-    }
-  );
-  const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(
-    () => {
-      const saved = localStorage.getItem("rideAcceptedAt");
-      return saved ? Number(saved) : null;
-    }
-  );
+  const [rideStartedAt, setRideStartedAt] = useState<number | null>(() => {
+    const saved = localStorage.getItem("rideStartedAt");
+    return saved ? Number(saved) : null;
+  });
+  const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(() => {
+    const saved = localStorage.getItem("rideAcceptedAt");
+    return saved ? Number(saved) : null;
+  });
 
   const driverId = localStorage.getItem("driverId") || "";
   let driverVehicleType = (localStorage.getItem("vehicleType") || "car").toLowerCase();
   if (driverVehicleType === "toktok") driverVehicleType = "tuktuk";
-  const token = localStorage.getItem("token");
+
+  // --- Auth token for socket, reactive ---
+  useEffect(() => {
+    const onStorage = () => setToken(localStorage.getItem("token"));
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!driverJobId && !acceptedJob) {
+      const { rideId: storedId, jobStatus: storedStatus } = getSavedChatSession();
+      if (
+        storedId &&
+        (storedStatus === "accepted" ||
+          storedStatus === "in_progress" ||
+          storedStatus === "pending")
+      ) {
+        setDriverJobId(String(storedId));
+        setJobStatus(storedStatus);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (getRideId() && jobStatus) saveChatSession(Number(getRideId()), jobStatus);
+  }, [driverJobId, jobStatus, acceptedJob]);
 
   useEffect(() => {
     if (!token) navigate("/login", { replace: true });
@@ -177,6 +206,7 @@ export default function DriverDashboard() {
           setRideAcceptedAt(null);
           localStorage.removeItem("rideStartedAt");
           localStorage.removeItem("rideAcceptedAt");
+          saveChatSession(null, null);
           if (beepRef.current) {
             beepRef.current.currentTime = 0;
             beepRef.current.play();
@@ -192,6 +222,7 @@ export default function DriverDashboard() {
           setRideAcceptedAt(null);
           localStorage.removeItem("rideStartedAt");
           localStorage.removeItem("rideAcceptedAt");
+          saveChatSession(null, null);
           if (autoReleaseTimer) {
             clearInterval(autoReleaseTimer);
             setAutoReleaseTimer(null);
@@ -231,6 +262,7 @@ export default function DriverDashboard() {
         setRideAcceptedAt(null);
         localStorage.removeItem("rideStartedAt");
         localStorage.removeItem("rideAcceptedAt");
+        saveChatSession(null, null);
       }
     }, 1000);
 
@@ -259,6 +291,7 @@ export default function DriverDashboard() {
         setRideAcceptedAt(null);
         localStorage.removeItem("rideStartedAt");
         localStorage.removeItem("rideAcceptedAt");
+        saveChatSession(null, null);
       }
     }, 1000);
 
@@ -277,6 +310,7 @@ export default function DriverDashboard() {
     setRideAcceptedAt(null);
     localStorage.removeItem("rideStartedAt");
     localStorage.removeItem("rideAcceptedAt");
+    saveChatSession(null, null);
     if (autoReleaseTimer) {
       clearInterval(autoReleaseTimer);
       setAutoReleaseTimer(null);
@@ -296,7 +330,7 @@ export default function DriverDashboard() {
 
   // ------------------- CHAT STATE ---------------------
   const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatId, setChatId] = useState<number | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
 
   function getNumericDriverId() {
     if (!driverId) return null;
@@ -310,85 +344,62 @@ export default function DriverDashboard() {
     return null;
   }
 
-  // ------------------- CHAT LOGIC --------------------
+  // ------------------- POLLING CHAT LOGIC --------------------
   useEffect(() => {
     const rideId = getRideId();
     if (!rideId) return;
-    setChatId(Number(rideId));
+    setChatId(String(rideId));
 
-    const fetchMessages = async () => {
-      const res = await fetch(`/api/chats/${rideId}/messages`, {
-        headers: token ? { "Authorization": `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        const msgs = await res.json();
-        setChatMessages(
-          Array.isArray(msgs)
-            ? msgs.filter(Boolean).map((m, idx) => ({
-                ...m,
-                id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
-                sender: m?.sender ?? {
-                  id: m?.senderId ?? "unknown",
-                  name: m?.senderName ?? "",
-                  role: m?.senderRole ?? "",
-                  avatar: m?.senderAvatar ?? "",
-                },
-              }))
-            : []
-        );
-      } else {
+    let polling = true;
+    async function fetchMessages() {
+      if (!polling) return;
+      try {
+        const res = await fetch(`/api/rides/${rideId}/chat/messages`, {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const msgs = await res.json();
+          setChatMessages(
+            Array.isArray(msgs)
+              ? msgs.filter(Boolean).map((m, idx) => ({
+                  ...m,
+                  id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                  sender: m?.sender ?? {
+                    id: m?.senderId ?? "unknown",
+                    name: m?.senderName ?? "",
+                    role: m?.senderRole ?? "",
+                    avatar: m?.senderAvatar ?? "",
+                  },
+                }))
+              : []
+          );
+        } else {
+          setChatMessages([]);
+        }
+      } catch {
         setChatMessages([]);
       }
-    };
+    }
     fetchMessages();
-    return () => setChatMessages([]);
-  }, [driverJobId, acceptedJob]);
-
-  useEffect(() => {
-    if (!chatId) return;
-    socket.emit("join_chat", { chatId });
-
-    const handleIncoming = (msg: any) => {
-      let normalizedMsg = {
-        ...msg,
-        sender: msg.sender ?? {
-          id: msg.senderId ?? "unknown",
-          name: msg.senderName ?? "",
-          role: msg.senderRole ?? "",
-          avatar: msg.senderAvatar ?? "",
-        },
-      };
-      setChatMessages((prev) => prev.some(m => m.id === normalizedMsg.id) ? prev : [...prev, normalizedMsg]);
-    };
-    socket.on("chat_message", handleIncoming);
-
+    const interval = setInterval(fetchMessages, 3000);
     return () => {
-      socket.off("chat_message", handleIncoming);
-      socket.emit("leave_chat", { chatId });
+      polling = false;
+      clearInterval(interval);
+      setChatMessages([]);
     };
-  }, [chatId]);
+  }, [driverJobId, acceptedJob, token]);
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!chatId || !getNumericDriverId()) return;
-    const msg = {
-      id: Date.now() + Math.random(),
-      chatId,
-      senderId: getNumericDriverId(),
-      senderRole: "driver",
-      senderName: "Driver",
-      content: text,
-      sentAt: new Date().toISOString(),
-    };
-    setChatMessages((prev) => prev.some(m => m.id === msg.id) ? prev : [...prev, {
-      ...msg,
-      sender: {
-        id: msg.senderId,
-        name: msg.senderName,
-        role: msg.senderRole,
-        avatar: "",
-      },
-    }]);
-    socket.emit("chat_message", msg);
+    await fetch(`/api/rides/${chatId}/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        senderId: getNumericDriverId(),
+        content: text,
+      }),
+    });
+    // message will appear on next poll
   };
 
   return (
@@ -518,12 +529,10 @@ export default function DriverDashboard() {
           width: "100%",
           maxWidth: "500px"
         }}>
-          <ChatWindow
-            rideId={getRideId() as number}
-            senderId={getNumericDriverId()!}
+          <RestChatWindow
+            rideId={String(getRideId())}
+            sender={{ id: getNumericDriverId(), name: "Driver", role: "driver", avatar: "" }}
             messages={chatMessages}
-            currentUserId={getNumericDriverId()!}
-            currentUserRole="driver"
             onSend={handleSendMessage}
             style={{ height: "100%" }}
           />

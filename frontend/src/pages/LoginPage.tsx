@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png"; // <-- Update this path if needed
+import logo from "../assets/logo.png";
 
 function getDeviceId() {
   let id = localStorage.getItem("deviceId");
@@ -121,6 +121,24 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const phonePattern = /^\+?\d{10,15}$/;
 
+  // --- Helper: Fully clear all user/ride state from storage and memory ---
+  function clearSession() {
+    // Remove all session-related localStorage keys
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("driverId");
+    localStorage.removeItem("vehicleType");
+    localStorage.removeItem("rideStartedAt");
+    localStorage.removeItem("rideAcceptedAt");
+    localStorage.removeItem("currentDriverRideId");
+    localStorage.removeItem("currentDriverJobStatus");
+    localStorage.removeItem("currentRideId");
+    localStorage.removeItem("currentRideStatus");
+    localStorage.removeItem("pendingPhone");
+    // (You can add/remove more keys as needed for your app)
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!phonePattern.test(phone)) {
@@ -130,6 +148,10 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("");
     setBlocked(false);
+
+    // Always clear session before login to avoid cross-user issues
+    clearSession();
+
     try {
       const deviceId = getDeviceId();
       const res = await fetch("http://localhost:5000/api/auth/login", {

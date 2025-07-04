@@ -1,12 +1,25 @@
-import { Router } from "express";
-import * as chatController from "../controllers/chat.controller";
+import express from "express";
+const router = express.Router();
 
-const router = Router();
+const messages: Record<string, any[]> = {}; // in-memory, replace with DB in prod
 
-// Get all messages for a ride's chat
-router.get("/rides/:rideId/chat/messages", chatController.getMessages);
+router.get("/rides/:rideId/chat/messages", (req, res) => {
+  const rideId = req.params.rideId;
+  res.json(messages[rideId] || []);
+});
 
-// Send a new message in a ride's chat
-router.post("/rides/:rideId/chat/message", chatController.sendMessage);
+router.post("/rides/:rideId/chat/messages", (req, res) => {
+  const rideId = req.params.rideId;
+  const { sender, content } = req.body;
+  if (!messages[rideId]) messages[rideId] = [];
+  const msg = {
+    id: Date.now() + Math.random(),
+    sender,
+    content,
+    sentAt: new Date().toISOString(),
+  };
+  messages[rideId].push(msg);
+  res.status(201).json(msg);
+});
 
 export default router;

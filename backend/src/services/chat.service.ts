@@ -18,20 +18,40 @@ export const getOrCreateChatByRide = async (rideId: number) => {
 };
 
 export const getMessages = async (chatId: number) => {
+  // Always include sender info (id, name, role, avatar)
   return prisma.message.findMany({
     where: { chatId },
-    include: { sender: true },
+    include: {
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          avatar: true,
+        },
+      },
+    },
     orderBy: { sentAt: "asc" },
   });
 };
 
 export const createMessage = async (chatId: number, senderId: number, content: string) => {
+  // Always include sender info (id, name, role, avatar)
   return prisma.message.create({
     data: {
       chatId,
       senderId,
       content,
     },
-    include: { sender: true },
+    include: {
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          avatar: true,
+        },
+      },
+    },
   });
 };
