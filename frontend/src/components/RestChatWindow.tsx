@@ -54,6 +54,12 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
       try {
         await axios.post(`/api/rides/${rideId}/chat/messages`, {
           sender,
+          sender: {
+            id: sender.id,
+            name: sender.name,
+            role: sender.role,
+            avatar: sender.avatar || "",
+          },
           content: input,
         });
         sent = true;
@@ -62,15 +68,45 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
     if (sent) setInput("");
   };
 
+  // Helper to display "Driver", "Customer", or fallback name
+  function senderLabel(m) {
+    if (m?.sender?.role === "driver") return "Driver";
+    if (m?.sender?.role === "customer") return "Customer";
+    if (m?.sender?.name) return m.sender.name;
+    return "User";
+  }
+
+  // Helper for chat bubble style
+  function bubbleStyle(m) {
+    if (m?.sender?.role === "driver") return { background: "#e3f2fd", color: "#1976D2", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+    if (m?.sender?.role === "customer") return { background: "#e8f5e9", color: "#388e3c", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+    return { background: "#eee", color: "#444", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+  }
+
+  // Helper for alignment
+  function messageAlign(m) {
+    if (m?.sender?.role === "driver") return { justifyContent: "flex-end" };
+    if (m?.sender?.role === "customer") return { justifyContent: "flex-start" };
+    return { justifyContent: "flex-start" };
+  }
+
   return (
     <div style={{ ...style, display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, minHeight: 200, overflowY: "auto", border: "1px solid #ccc", padding: 8, background: "#fafbfc" }}>
-        {messages && messages.length > 0 ? messages.map((m) => (
-          <div key={m.id || `${m.senderId || ""}-${m.timestamp || ""}-${Math.random()}`}>
-            <b style={{ color: m.sender?.role === "driver" ? "#1976D2" : "#388e3c" }}>
-              {m.sender?.name || "User"}:
-            </b>{" "}
-            {m.content}
+        {messages && messages.length > 0 ? messages.map((m, idx) => (
+          <div
+            key={m.id || `${m.sender?.id || ""}-${m.sentAt || ""}-${idx}`}
+            style={{ display: "flex", ...messageAlign(m), marginBottom: 8 }}
+          >
+            <div style={bubbleStyle(m)}>
+              <span>
+                {senderLabel(m)}:
+              </span>{" "}
+              {m.content}
+              <span style={{ color: "#999", fontSize: "0.8em", marginLeft: 8 }}>
+                {m.sentAt ? new Date(m.sentAt).toLocaleTimeString() : ""}
+              </span>
+            </div>
           </div>
         )) : (
           <div style={{ color: "#aaa", textAlign: "center" }}>No messages yet.</div>

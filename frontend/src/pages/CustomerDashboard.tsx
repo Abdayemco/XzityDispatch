@@ -440,6 +440,7 @@ export default function CustomerDashboard() {
     };
   }, [rideId, rideStatus]);
 
+  // FIX: Always send sender as full object with role
   const handleSendMessage = async (text: string) => {
     const customerId = getCustomerIdFromStorage();
     if (!rideId || !customerId) return;
@@ -447,7 +448,12 @@ export default function CustomerDashboard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        senderId: customerId,
+        sender: {
+          id: customerId,
+          name: "Customer",
+          role: "customer",
+          avatar: "",
+        },
         content: text,
       }),
     });

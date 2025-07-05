@@ -389,13 +389,19 @@ export default function DriverDashboard() {
     };
   }, [driverJobId, acceptedJob, token]);
 
+  // The following sends the correct role and structure!
   const handleSendMessage = async (text: string) => {
     if (!chatId || !getNumericDriverId()) return;
     await fetch(`/api/rides/${chatId}/chat/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        senderId: getNumericDriverId(),
+        sender: {
+          id: getNumericDriverId(),
+          name: "Driver",
+          role: "driver",
+          avatar: "",
+        },
         content: text,
       }),
     });
