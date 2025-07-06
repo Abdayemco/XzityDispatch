@@ -459,3 +459,38 @@ export const cancelRide = async (req: Request, res: Response, next: NextFunction
     next(error);
   }
 };
+
+/**
+ * CLEANUP JOB: Cancels "stuck" rides that are still in ACCEPTED/IN_PROGRESS after 15 minutes.
+ * Should be imported and started in index.ts
+ */
+export async function cleanupStuckRides() {
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+  // Cancel rides stuck in ACCEPTED for >15 min
+  const result1 = await prisma.ride.updateMany({
+    where: {
+      status: RideStatus.ACCEPTED,
+      acceptedAt: { lt: fifteenMinutesAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: new Date(),
+    },
+  });
+  // Cancel rides stuck in IN_PROGRESS for >15 min
+  const result2 = await prisma.ride.updateMany({
+    where: {
+      status: RideStatus.IN_PROGRESS,
+      startedAt: { lt: fifteenMinutesAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: new Date(),
+    },
+  });
+  if (result1.count > 0 || result2.count > 0) {
+    console.log(
+      `[Cleanup] Cancelled ${result1.count} ACCEPTED and ${result2.count} IN_PROGRESS stuck rides.`
+    );
+  }
+}

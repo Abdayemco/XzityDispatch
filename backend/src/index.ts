@@ -3,7 +3,8 @@ import http from "http";
 import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { getRideById } from "./models/ride";
-import { saveMessage } from "./models/messageStore"; // <-- add this import
+import { saveMessage } from "./models/messageStore";
+import { cleanupStuckRides } from "./controllers/ride.controller"; // <-- Add this import
 
 const port = Number(process.env.PORT) || 5000;
 
@@ -94,7 +95,7 @@ io.on("connection", (socket: Socket) => {
         };
         msg.sentAt = new Date().toISOString();
         io.to(String(msg.chatId)).emit("chat_message", msg);
-        saveMessage(msg.chatId, msg); // <-- SAVE each message to in-memory history
+        saveMessage(msg.chatId, msg);
         console.log(`MESSAGE SENT & SAVED: from user=${user?.id} to chatId=${msg.chatId}`);
       } else {
         console.log(`MSG DENIED: user=${user?.id} not in ride ${msg.chatId}`);
@@ -111,6 +112,9 @@ io.on("connection", (socket: Socket) => {
 server.listen(port, () => {
   console.log(`🚀 Backend running at http://localhost:${port}`);
 });
+
+// --- Start the cleanup job for stuck rides ---
+setInterval(cleanupStuckRides, 5 * 60 * 1000); // runs every 5 minutes
 
 server.on("error", (err) => {
   console.error("❌ Failed to start server:", err);
