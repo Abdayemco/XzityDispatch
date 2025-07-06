@@ -1,15 +1,26 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaHistory, FaDollarSign, FaUser } from "react-icons/fa";
+import { FaHistory, FaDollarSign, FaUser, FaCar, FaMotorcycle, FaBox, FaTruck, FaTruckPickup, FaWheelchair } from "react-icons/fa";
 import AppMap from "../components/AppMap";
 import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
+
+// Extended vehicle types
+const VEHICLE_TYPE_LABELS = {
+  car: { label: "Car", icon: <FaCar /> },
+  tuktuk: { label: "Tuktuk", icon: <FaMotorcycle /> },
+  delivery: { label: "Delivery", icon: <FaBox /> },
+  truck: { label: "Truck", icon: <FaTruck /> },
+  water_truck: { label: "Water Truck", icon: <FaTruckPickup /> },
+  tow_truck: { label: "Tow Truck", icon: <FaTruckPickup /> },
+  wheelchair: { label: "Wheelchair", icon: <FaWheelchair /> },
+};
 
 type Job = {
   id: string | number;
   pickupLat: number;
   pickupLng: number;
   customerName: string;
-  vehicleType: "car" | "bike" | "toktok" | "tuktuk" | "truck";
+  vehicleType: keyof typeof VEHICLE_TYPE_LABELS;
   status?: "pending" | "accepted" | "cancelled" | "done" | "arrived" | "in_progress";
   assignedDriverId?: string | number;
 };
@@ -601,6 +612,7 @@ export default function DriverDashboard() {
               driverLocation={driverLocation || undefined}
               driverVehicleType={driverVehicleType}
               showDriverMarker={true}
+              vehicleTypeLabels={VEHICLE_TYPE_LABELS}
             />
           )}
           <div style={{ display: "flex", justifyContent: "space-around", marginTop: 20 }}>
@@ -617,11 +629,13 @@ export default function DriverDashboard() {
                   onClick={() => handleAccept(String(job.id))}
                   style={{
                     margin: "0 8px", padding: "0.5em 1em", background: "#1976D2", color: "#fff",
-                    border: "none", borderRadius: 4, cursor: "pointer", fontWeight: "bold"
+                    border: "none", borderRadius: 4, cursor: "pointer", fontWeight: "bold",
+                    display: "inline-flex", alignItems: "center", gap: 8
                   }}
                   disabled={!!driverJobId}
                 >
-                  Accept Ride ({job.customerName})
+                  {VEHICLE_TYPE_LABELS[job.vehicleType]?.icon}
+                  Accept Ride ({job.customerName}) {VEHICLE_TYPE_LABELS[job.vehicleType]?.label && <>- {VEHICLE_TYPE_LABELS[job.vehicleType].label}</>}
                 </button>
               ))}
             </div>

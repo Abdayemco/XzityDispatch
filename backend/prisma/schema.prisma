@@ -19,6 +19,8 @@ enum VehicleType {
   TUKTUK
   TRUCK
   WATER_TRUCK
+  TOW_TRUCK
+  WHEELCHAIR
 }
 
 enum RideStatus {

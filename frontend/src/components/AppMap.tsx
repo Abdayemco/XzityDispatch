@@ -4,23 +4,36 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerCustomer from "../assets/marker-customer.png";
 import carIcon from "../assets/marker-car.png";
-import deliveryIcon from "../assets/marker-delivery.png"; // <-- Add this if you have a delivery icon
-import waterTruckIcon from "../assets/marker-water-truck.png"; // <-- Add this if you have a water truck icon
+import deliveryIcon from "../assets/marker-delivery.png";
+import waterTruckIcon from "../assets/marker-water-truck.png";
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
+import towTruckIcon from "../assets/marker-towtruck.png";
+import wheelchairIcon from "../assets/marker-wheelchair.png";
 
-// Update getVehicleIcon to support DELIVERY and WATER_TRUCK, and remove BIKE
+// Updated getVehicleIcon to support TOW_TRUCK and WHEELCHAIR
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType.toUpperCase()) {
-    case "CAR": return carIcon;
-    case "DELIVERY": return deliveryIcon;
+    case "CAR":
+      return carIcon;
+    case "DELIVERY":
+      return deliveryIcon;
     case "TUKTUK":
-    case "TOKTOK": return tuktukIcon;
-    case "TRUCK": return truckIcon;
-    case "WATER_TRUCK": return waterTruckIcon;
-    default: return carIcon;
+    case "TOKTOK":
+      return tuktukIcon;
+    case "TRUCK":
+      return truckIcon;
+    case "WATER_TRUCK":
+      return waterTruckIcon;
+    case "TOW_TRUCK":
+      return towTruckIcon;
+    case "WHEELCHAIR":
+      return wheelchairIcon;
+    default:
+      return carIcon;
   }
 }
+
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -62,27 +75,16 @@ const AppMap: React.FC<AppMapProps> = ({
 }) => {
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
-  // Debugging: log props
-  console.log("AppMap props:", {
-    jobs,
-    pickupLocation,
-    userLocation,
-    driverLocation,
-    driverVehicleType,
-    showCustomerMarker,
-    showDriverMarker,
-  });
-
-  // Compute center
+  // Compute map center
   let center: [number, number] = DEFAULT_CENTER;
   if (pickupLocation) center = [pickupLocation.lat, pickupLocation.lng];
   else if (driverLocation) center = [driverLocation.lat, driverLocation.lng];
   else if (userLocation) center = [userLocation.lat, userLocation.lng];
 
-  // Handler for accepting a ride (for illustration)
+  // Handler for accepting a ride
   const handleAcceptRide = async (jobId: string) => {
     try {
-      const driverId = localStorage.getItem("driverId"); // or from props/context
+      const driverId = localStorage.getItem("driverId");
       const res = await fetch(`/api/rides/${jobId}/accept?driverId=${driverId}`, {
         method: "PUT",
       });
@@ -91,14 +93,12 @@ const AppMap: React.FC<AppMapProps> = ({
         setAcceptError(data.error || "Could not accept ride.");
         return;
       }
-      // Optionally refresh jobs or notify success
       alert("Ride accepted!");
     } catch (err) {
       setAcceptError("Network error accepting ride.");
     }
   };
 
-  // Popup for errors
   const ErrorPopup = () =>
     acceptError ? (
       <div
@@ -201,7 +201,6 @@ const AppMap: React.FC<AppMapProps> = ({
           </Marker>
         ))}
       </MapContainer>
-      {/* Error popup */}
       <ErrorPopup />
     </div>
   );

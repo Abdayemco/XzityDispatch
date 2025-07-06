@@ -1,6 +1,17 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+const vehicleOptions = [
+  { value: "", label: "Select vehicle type" },
+  { value: "car", label: "Car" },
+  { value: "delivery", label: "Delivery" },
+  { value: "tuktuk", label: "Tuktuk (Three-wheel Bike)" },
+  { value: "truck", label: "Truck" },
+  { value: "water_truck", label: "Water Truck" },
+  { value: "tow_truck", label: "Tow Truck" },
+  { value: "wheelchair", label: "Wheelchair / Special Needs" },
+];
+
 export default function RegisterPage() {
   const [form, setForm] = useState({
     name: "",
@@ -15,11 +26,11 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
 
-  function handleChange(e) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
@@ -116,14 +127,11 @@ export default function RegisterPage() {
               onChange={handleChange}
               required
             >
-              <option value="" disabled>
-                Select vehicle type
-              </option>
-              <option value="car">Car</option>
-              <option value="delivery">Delivery</option>
-              <option value="tuktuk">(Tuktuk) Three-wheel Bike</option>
-              <option value="truck">Truck</option>
-              <option value="water_truck">Water Truck</option>
+              {vehicleOptions.map(opt => (
+                <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
         )}

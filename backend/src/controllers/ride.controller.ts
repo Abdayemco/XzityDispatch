@@ -93,6 +93,7 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
 };
 
 // Get available rides for drivers (pending status, for their vehicle type or delivery)
+// UPDATED LOGIC for Tow Truck and Wheelchair drivers
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Accept driverId as a query param for development
@@ -110,9 +111,18 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       return res.status(404).json({ error: "Driver not found" });
     }
 
-    // Logic: Car and Tuktuk drivers also see DELIVERY rides
+    // --- NEW LOGIC ---
+    // - TOW_TRUCK: can accept TRUCK and TOW_TRUCK rides
+    // - WHEELCHAIR: can accept WHEELCHAIR, CAR, DELIVERY, TUKTUK rides
+    // - CAR and TUKTUK drivers can accept DELIVERY rides too
+    // - all others: only their own type
+
     let rideTypes: VehicleType[] = [];
-    if (driver.vehicleType === "CAR" || driver.vehicleType === "TUKTUK") {
+    if (driver.vehicleType === "TOW_TRUCK") {
+      rideTypes = ["TOW_TRUCK", "TRUCK"];
+    } else if (driver.vehicleType === "WHEELCHAIR") {
+      rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
+    } else if (driver.vehicleType === "CAR" || driver.vehicleType === "TUKTUK") {
       rideTypes = [driver.vehicleType, "DELIVERY"];
     } else if (driver.vehicleType) {
       rideTypes = [driver.vehicleType];

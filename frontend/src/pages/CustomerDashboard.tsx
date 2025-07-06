@@ -8,6 +8,8 @@ import deliveryIcon from "../assets/marker-delivery.png";
 import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 import waterTruckIcon from "../assets/marker-watertruck.png";
+import towTruckIcon from "../assets/marker-towtruck.png";
+import wheelchairIcon from "../assets/marker-wheelchair.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
@@ -33,13 +35,16 @@ function createEmergencyIcon(url: string) {
   });
 }
 
+// --- Updated vehicle types with new options and icons ---
 const vehicleOptions = [
   { value: "", label: "Select type", icon: "" },
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
   { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
   { value: "TRUCK", label: "Truck", icon: truckIcon },
-  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon }
+  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
+  { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon },
+  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
 ];
 
 function getCustomerIdFromStorage(): number | null {
@@ -585,6 +590,7 @@ export default function CustomerDashboard() {
     );
   }
 
+  // --- Icon selector for vehicle type ---
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>Request a Ride</h2>
@@ -637,28 +643,36 @@ export default function CustomerDashboard() {
       <div style={{ margin: "24px 0", textAlign: "center" }}>
         <label>
           <b>Vehicle Type:</b>
-          <select
-            value={vehicleType}
-            onChange={e => setVehicleType(e.target.value)}
-            style={{ marginLeft: 12, fontSize: 16 }}
-          >
-            {vehicleOptions.map(opt => (
-              <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          {vehicleOptions.map(opt =>
-            opt.value === vehicleType && opt.value !== "" ? (
-              <img
-                key={opt.value}
-                src={opt.icon}
-                alt={opt.label}
-                style={{ width: 32, height: 32, verticalAlign: "middle" }}
-              />
-            ) : null
-          )}
         </label>
+        <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 16, marginTop: 10 }}>
+          {vehicleOptions.filter(opt => opt.value !== "").map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setVehicleType(opt.value)}
+              type="button"
+              style={{
+                border: vehicleType === opt.value ? "2px solid #1976D2" : "2px solid #ccc",
+                background: vehicleType === opt.value ? "#e6f0ff" : "#fff",
+                borderRadius: 8,
+                padding: "14px 18px",
+                margin: 2,
+                minWidth: 90,
+                minHeight: 70,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                cursor: "pointer",
+                outline: "none",
+                boxShadow: vehicleType === opt.value ? "0 0 8px #1976D2" : "0 1px 3px #eee",
+                fontWeight: vehicleType === opt.value ? "bold" : "normal",
+                fontSize: "1.05em"
+              }}
+            >
+              <img src={opt.icon} alt={opt.label} style={{ width: 32, height: 32, marginBottom: 3 }} />
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div style={{ margin: "24px 0", textAlign: "center" }}>
         <button
