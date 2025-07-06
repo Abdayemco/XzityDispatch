@@ -172,7 +172,8 @@ export default function DriverDashboard() {
     return () => clearInterval(interval);
   }, [fetchJobs, locationLoaded, driverJobId, cancelled, completed]);
 
-  async function handleAccept(jobId: string) {
+  // ---- Ensure all accept logic (including from map marker) uses this handler ----
+  const handleAccept = useCallback(async (jobId: string) => {
     if (driverJobId) return;
     setStatusMsg(null);
     setErrorMsg(null);
@@ -198,7 +199,12 @@ export default function DriverDashboard() {
     } catch {
       setErrorMsg("Failed to accept job");
     }
-  }
+  // eslint-disable-next-line
+  }, [driverJobId, driverId, token, jobs]);
+
+  // --- Pass handleAccept to AppMap so accepting from map marker opens chat etc ---
+  // ^^^ This is the core fix for your issue
+  // Ensure AppMap calls handleAccept and not its own accept logic
 
   async function handleStartRide() {
     if (!driverJobId) return;
@@ -613,6 +619,7 @@ export default function DriverDashboard() {
               driverVehicleType={driverVehicleType}
               showDriverMarker={true}
               vehicleTypeLabels={VEHICLE_TYPE_LABELS}
+              onAcceptRide={handleAccept} // <-- This enables accepting from marker to open chat
             />
           )}
           <div style={{ display: "flex", justifyContent: "space-around", marginTop: 20 }}>

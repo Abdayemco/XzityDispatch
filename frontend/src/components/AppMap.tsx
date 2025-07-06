@@ -60,6 +60,7 @@ type AppMapProps = {
   driverVehicleType?: string;
   showCustomerMarker?: boolean;
   showDriverMarker?: boolean;
+  onAcceptRide?: (jobId: string) => void; // <-- NEW PROP: handler for accepting rides
 };
 
 const DEFAULT_CENTER: [number, number] = [51.505, -0.09];
@@ -72,6 +73,7 @@ const AppMap: React.FC<AppMapProps> = ({
   driverVehicleType = "car",
   showCustomerMarker = false,
   showDriverMarker = false,
+  onAcceptRide, // <-- receive the handler
 }) => {
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
@@ -83,6 +85,11 @@ const AppMap: React.FC<AppMapProps> = ({
 
   // Handler for accepting a ride
   const handleAcceptRide = async (jobId: string) => {
+    // If handler is provided from parent, use it (e.g. to open chat window), else fallback to legacy
+    if (onAcceptRide) {
+      onAcceptRide(jobId);
+      return;
+    }
     try {
       const driverId = localStorage.getItem("driverId");
       const res = await fetch(`/api/rides/${jobId}/accept?driverId=${driverId}`, {
