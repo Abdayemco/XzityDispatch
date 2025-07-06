@@ -1,5 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
+import TermsModal from "../components/TermsModal"; // adjust path as needed
 
 const vehicleOptions = [
   { value: "", label: "Select vehicle type" },
@@ -12,6 +15,20 @@ const vehicleOptions = [
   { value: "wheelchair", label: "Wheelchair / Special Needs" },
 ];
 
+// Utility: guess country from browser or IP
+async function getDefaultCountry() {
+  // Try IP-based detection for more accuracy
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    const data = await res.json();
+    // Country code is lower-case (e.g. "eg"), react-phone-input-2 expects lower-case
+    if (data && data.country_code) return data.country_code.toLowerCase();
+  } catch {}
+  // Fallback: use browser language
+  const lang = navigator.language || "";
+  return lang.slice(-2).toLowerCase();
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState({
     name: "",
@@ -20,11 +37,25 @@ export default function RegisterPage() {
     password: "",
     role: "CUSTOMER",
     vehicleType: "",
-    avatar: "", // <-- New field for avatar URL
+    avatar: "",
+    agreed: false,
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [showPolicy, setShowPolicy] = useState(false);
+  const [phoneValid, setPhoneValid] = useState(false);
+  const [rawPhone, setRawPhone] = useState("");
+  const [defaultCountry, setDefaultCountry] = useState<undefined | string>(undefined);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let mounted = true;
+    getDefaultCountry().then(code => {
+      if (mounted) setDefaultCountry(code || "us");
+    });
+    return () => { mounted = false; };
+  }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -44,6 +75,8 @@ export default function RegisterPage() {
       if (!form.avatar?.trim()) {
         delete submitData.avatar;
       }
+      submitData.phone = form.phone;
+      delete submitData.agreed;
       const res = await fetch("http://localhost:5000/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,6 +108,11 @@ export default function RegisterPage() {
 
   const registerDisabled =
     loading ||
+    !form.name ||
+    !form.password ||
+    !form.phone ||
+    !phoneValid ||
+    !form.agreed ||
     (form.role === "DRIVER" && !form.vehicleType);
 
   return (
@@ -87,7 +125,28 @@ export default function RegisterPage() {
         </div>
         <div>
           <label>Phone</label>
-          <input name="phone" type="tel" className="form-control" style={{ width: "100%", marginBottom: 12 }} value={form.phone} onChange={handleChange} required />
+          <PhoneInput
+            country={defaultCountry}
+            value={rawPhone}
+            onChange={(value, data, event, formattedValue) => {
+              setRawPhone(value);
+              setForm(f => ({ ...f, phone: "+" + value }));
+              setPhoneValid(value.length > 6 && value.length < 20 && !!data?.countryCode);
+            }}
+            enableSearch={true}
+            enableAreaCodes={true}
+            inputProps={{
+              name: "phone",
+              required: true,
+              className: "form-control",
+              style: { width: "100%", marginBottom: 12 },
+            }}
+          />
+          {!phoneValid && !!rawPhone && (
+            <div style={{ color: "#d32f2f", fontSize: 13, marginTop: -8, marginBottom: 8 }}>
+              Please enter a valid phone number for your country.
+            </div>
+          )}
         </div>
         <div>
           <label>
@@ -149,6 +208,23 @@ export default function RegisterPage() {
             placeholder="https://example.com/avatar.jpg"
           />
         </div>
+        <div style={{ margin: "10px 0 14px 0", display: "flex", alignItems: "center" }}>
+          <input
+            type="checkbox"
+            id="agreement"
+            name="agreed"
+            checked={form.agreed}
+            onChange={e => setForm(f => ({ ...f, agreed: e.target.checked }))}
+            required
+            style={{ marginRight: 8 }}
+          />
+          <label htmlFor="agreement" style={{ fontSize: 14 }}>
+            I agree to the{" "}
+            <button type="button" style={{ background: "none", border: "none", color: "#1976D2", textDecoration: "underline", cursor: "pointer", padding: 0 }} onClick={() => setShowPolicy(true)}>
+              terms and privacy policy
+            </button>
+          </label>
+        </div>
         <button type="submit" disabled={registerDisabled} style={{ width: "100%", background: "#1976D2", color: "#fff", border: "none", padding: "0.8em", borderRadius: 6 }}>
           {loading ? "Registering..." : "Register"}
         </button>
@@ -159,6 +235,8 @@ export default function RegisterPage() {
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <Link to="/login">Already have an account? Login</Link>
       </div>
+      {/* Modal for terms and privacy policy */}
+      {showPolicy && <TermsModal onClose={() => setShowPolicy(false)} />}
     </div>
   );
 }
