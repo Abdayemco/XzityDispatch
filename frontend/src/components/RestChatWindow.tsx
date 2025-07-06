@@ -43,6 +43,11 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
     }
   }, [messages]);
 
+  // Optional: clear input when rideId changes (for reconnection/user switch)
+  useEffect(() => {
+    setInput("");
+  }, [rideId]);
+
   const send = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -53,7 +58,6 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
     } else {
       try {
         await axios.post(`/api/rides/${rideId}/chat/messages`, {
-          sender,
           sender: {
             id: sender.id,
             name: sender.name,
@@ -78,8 +82,10 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
 
   // Helper for chat bubble style
   function bubbleStyle(m) {
-    if (m?.sender?.role === "driver") return { background: "#e3f2fd", color: "#1976D2", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
-    if (m?.sender?.role === "customer") return { background: "#e8f5e9", color: "#388e3c", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+    if (m?.sender?.role === "driver")
+      return { background: "#e3f2fd", color: "#1976D2", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+    if (m?.sender?.role === "customer")
+      return { background: "#e8f5e9", color: "#388e3c", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
     return { background: "#eee", color: "#444", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
   }
 
@@ -119,6 +125,7 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
           onChange={e => setInput(e.target.value)}
           style={{ flex: 1, marginRight: 8, padding: "0.5em" }}
           placeholder="Type a message..."
+          autoComplete="off"
         />
         <button type="submit" style={{ padding: "0.5em 1.4em" }}>Send</button>
       </form>

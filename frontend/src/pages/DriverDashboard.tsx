@@ -65,6 +65,40 @@ export default function DriverDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // --- Restore job/chat session from backend on mount ---
+  useEffect(() => {
+    async function restoreCurrentJobFromBackend() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      try {
+        const res = await fetch("/api/rides/current", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.rideId && ["accepted", "in_progress", "pending"].includes(data.rideStatus)) {
+            setDriverJobId(String(data.rideId));
+            setJobStatus(data.rideStatus);
+            setAcceptedJob({
+              id: data.rideId,
+              pickupLat: data.originLat,
+              pickupLng: data.originLng,
+              customerName: data.customer?.name || "",
+              vehicleType: (data.vehicleType || "").toLowerCase(),
+              status: data.rideStatus
+            });
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (!driverJobId && !acceptedJob) {
+      restoreCurrentJobFromBackend();
+    }
+  }, [driverJobId, acceptedJob]);
+
+  // --- Also restore from localStorage for backwards compatibility (optional) ---
   useEffect(() => {
     if (!driverJobId && !acceptedJob) {
       const { rideId: storedId, jobStatus: storedStatus } = getSavedChatSession();
@@ -78,7 +112,7 @@ export default function DriverDashboard() {
         setJobStatus(storedStatus);
       }
     }
-  }, []);
+  }, [driverJobId, acceptedJob]);
 
   useEffect(() => {
     if (getRideId() && jobStatus) saveChatSession(Number(getRideId()), jobStatus);

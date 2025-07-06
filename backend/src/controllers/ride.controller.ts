@@ -323,3 +323,139 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
     next(error);
   }
 };
+
+// --- GET CURRENT RIDE FOR CUSTOMER/DRIVER (FIXED ROLE CHECK) ---
+export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Assumes authentication middleware sets req.user and req.user.role
+    // Accepts both customer and driver
+    const user = req.user as { id: number; role: string };
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    // Accept "customer", "CUSTOMER", "driver", "DRIVER" etc.
+    const role = user.role?.toLowerCase();
+    let where: any = {};
+    if (role === "customer") {
+      where = {
+        customerId: user.id,
+        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS] },
+      };
+    } else if (role === "driver") {
+      where = {
+        driverId: user.id,
+        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS] },
+      };
+    } else {
+      return res.status(400).json({ error: "Invalid user role" });
+    }
+
+    // Always include both customer and driver for correct TypeScript inference
+    const ride = await prisma.ride.findFirst({
+      where,
+      include: {
+        driver: true,
+        customer: true,
+      }
+    });
+
+    if (!ride) return res.status(404).json({ error: "No active ride" });
+
+    // Normalize vehicleType and user names for frontend
+    res.json({
+      rideId: ride.id,
+      rideStatus:
+        ride.status === RideStatus.PENDING
+          ? "pending"
+          : ride.status === RideStatus.ACCEPTED
+          ? "accepted"
+          : ride.status === RideStatus.IN_PROGRESS
+          ? "in_progress"
+          : ride.status === RideStatus.CANCELLED
+          ? "cancelled"
+          : ride.status === RideStatus.COMPLETED
+          ? "done"
+          : String(ride.status).toLowerCase(),
+      originLat: ride.originLat,
+      originLng: ride.originLng,
+      vehicleType: (ride.vehicleType || "").toLowerCase(),
+      driver: ride.driver
+        ? {
+            id: ride.driver.id,
+            name: ride.driver.name,
+            vehicleType: (ride.driver.vehicleType || "").toLowerCase(),
+          }
+        : undefined,
+      customer: ride.customer
+        ? {
+            id: ride.customer.id,
+            name: ride.customer.name,
+          }
+        : undefined,
+    });
+  } catch (error) {
+    console.error("Error fetching current ride:", error);
+    next(error);
+  }
+};
+
+// --- Mark ride as done (completed) ---
+export const markRideAsDone = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rideId = Number(req.params.rideId);
+    if (!rideId) {
+      return res.status(400).json({ error: "Invalid rideId" });
+    }
+
+    const ride = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.COMPLETED, completedAt: new Date() },
+      include: {
+        customer: true,
+        driver: true,
+      },
+    });
+
+    res.json({
+      message: "Ride marked as completed",
+      rideId: ride.id,
+      status: ride.status,
+      completedAt: ride.completedAt,
+      customer: ride.customer ? { id: ride.customer.id, name: ride.customer.name } : undefined,
+      driver: ride.driver ? { id: ride.driver.id, name: ride.driver.name } : undefined,
+    });
+  } catch (error) {
+    console.error("Error marking ride as done:", error);
+    next(error);
+  }
+};
+
+// --- Cancel a ride ---
+export const cancelRide = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rideId = Number(req.params.rideId);
+    if (!rideId) {
+      return res.status(400).json({ error: "Invalid rideId" });
+    }
+
+    const ride = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.CANCELLED, cancelledAt: new Date() },
+      include: {
+        customer: true,
+        driver: true,
+      },
+    });
+
+    res.json({
+      message: "Ride cancelled",
+      rideId: ride.id,
+      status: ride.status,
+      cancelledAt: ride.cancelledAt,
+      customer: ride.customer ? { id: ride.customer.id, name: ride.customer.name } : undefined,
+      driver: ride.driver ? { id: ride.driver.id, name: ride.driver.name } : undefined,
+    });
+  } catch (error) {
+    console.error("Error cancelling ride:", error);
+    next(error);
+  }
+};

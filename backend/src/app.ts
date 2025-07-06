@@ -33,6 +33,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- JWT AUTH HEADER PARSER (GLOBAL) ---
+// This middleware will decode the JWT from the Authorization header and add req.user for downstream handlers
+import jwt from "jsonwebtoken";
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!);
+      // Attach user info to req.user for downstream
+      req.user = decoded;
+    } catch (err) {
+      // Invalid token: do not set req.user, let protected routes handle 401
+      req.user = undefined;
+    }
+  }
+  next();
+});
+
 // Register routes
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);

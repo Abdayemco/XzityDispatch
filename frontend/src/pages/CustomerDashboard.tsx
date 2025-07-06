@@ -13,17 +13,6 @@ import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
 
-function getVehicleIcon(vehicleType: string) {
-  switch (vehicleType) {
-    case "CAR": return carIcon;
-    case "DELIVERY": return deliveryIcon;
-    case "TUKTUK": return tuktukIcon;
-    case "TRUCK": return truckIcon;
-    case "WATER_TRUCK": return waterTruckIcon;
-    default: return carIcon;
-  }
-}
-
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -167,22 +156,36 @@ export default function CustomerDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // --- Restore ride/chat session from localStorage on mount ---
+  // --- Restore ride/chat session from backend on mount or after login ---
   useEffect(() => {
-    if (!rideId && !pickupSet) {
-      const { rideId: storedId, rideStatus: storedStatus } = getSavedChatSession();
-      if (
-        storedId &&
-        (storedStatus === "accepted" ||
-          storedStatus === "in_progress" ||
-          storedStatus === "pending")
-      ) {
-        setRideId(storedId);
-        setRideStatus(storedStatus as RideStatus);
-        setPickupSet(true);
+    async function restoreCurrentRideFromBackend() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      try {
+        const res = await fetch("/api/rides/current", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.rideId && ["accepted", "in_progress", "pending"].includes(data.rideStatus)) {
+            setRideId(data.rideId);
+            setRideStatus(data.rideStatus);
+            setPickupSet(true);
+            if (data.driver) setDriverInfo(data.driver);
+            if (data.originLat && data.originLng) {
+              setPickupLocation({ lat: data.originLat, lng: data.originLng });
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
       }
     }
-  }, []);
+    // Always try to restore from backend after login or page mount
+    if (!rideId && !pickupSet) {
+      restoreCurrentRideFromBackend();
+    }
+  }, [rideId, pickupSet]);
 
   // --- Persist ride/chat session to localStorage ---
   useEffect(() => {
