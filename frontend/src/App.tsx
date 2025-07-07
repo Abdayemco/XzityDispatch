@@ -7,6 +7,8 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyCodePage from "./pages/VerifyCodePage";
 import ContactAdminButton from "./components/ContactAdminButton";
+import ShareButton from "./components/ShareButton";
+import logo from "./assets/logo.png"; // <-- import your logo
 
 // Protect a route, redirect to login if no token
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -29,6 +31,20 @@ function DashboardRedirect() {
 export default function App() {
   return (
     <>
+      {/* Logo at top-left */}
+      <img
+        src={logo}
+        alt="Site Logo"
+        style={{
+          position: "absolute",
+          top: 18,
+          left: 18,
+          height: 45,
+          zIndex: 101,
+          objectFit: "contain"
+        }}
+      />
+      <ShareButton /> {/* Top-right floating share button */}
       <Routes>
         {/* Login page is now also the root page */}
         <Route path="/" element={<LoginPage />} />

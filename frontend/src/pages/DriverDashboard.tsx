@@ -461,6 +461,10 @@ export default function DriverDashboard() {
 
   return (
     <div>
+      <h2 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 8 }}>
+        Available Rides By Xzity
+        {/* Logo removed - now only in App.tsx */}
+      </h2>
       <audio
         ref={beepRef}
         src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YYwAAAABAAgAZGF0YYwAAAAA"
@@ -598,9 +602,10 @@ export default function DriverDashboard() {
 
       {!cancelled && !completed && (
         <>
-          <h2 style={{ textAlign: "center" }}>
-            {driverJobId ? "Your Ride" : "Available Rides"}
-          </h2>
+          {/* Only show this heading if not already shown above */}
+          {driverJobId ? (
+            <h2 style={{ textAlign: "center" }}>Your Ride</h2>
+          ) : null}
           {errorMsg && <div style={{ color: "#d32f2f", textAlign: "center" }}>{errorMsg}</div>}
           {statusMsg && <div style={{ color: "#388e3c", textAlign: "center" }}>{statusMsg}</div>}
           {!locationLoaded ? (

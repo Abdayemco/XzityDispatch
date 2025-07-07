@@ -105,6 +105,16 @@ export default function VerifyCodePage() {
       maxWidth: 340, margin: "40px auto", padding: "2em",
       borderRadius: 8, background: "#fff", boxShadow: "0 2px 16px #0001"
     }}>
+      <img
+        src="/logo.png"
+        alt="Xzity Logo"
+        style={{
+          display: "block",
+          margin: "0 auto 32px auto",
+          height: 112, // 2x the original registration logo
+          objectFit: "contain",
+        }}
+      />
       <h2>Enter Verification Code</h2>
       <form onSubmit={handleSubmit}>
         <input

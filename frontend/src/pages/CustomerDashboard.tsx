@@ -593,7 +593,10 @@ export default function CustomerDashboard() {
   // --- Icon selector for vehicle type ---
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ textAlign: "center" }}>Request a Ride</h2>
+      <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        Xzity Ride Request
+        {/* Logo removed - now only in App.tsx */}
+      </h2>
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
       {userLocation && (
         <MapContainer
