@@ -117,6 +117,16 @@ export default function RegisterPage() {
 
   return (
     <div style={{ maxWidth: 340, margin: "60px auto", background: "#fff", padding: 24, borderRadius: 8, boxShadow: "0 2px 8px #0001" }}>
+      <img
+        src="/logo.png"
+        alt="Xzity Logo"
+        style={{
+          display: "block",
+          margin: "0 auto 27px auto", // 1.5x previous bottom margin
+          height: 84, // 1.5x previous height (was 56)
+          objectFit: "contain",
+        }}
+      />
       <h2 style={{ textAlign: "center" }}>Register</h2>
       <form onSubmit={handleSubmit}>
         <div>
