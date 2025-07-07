@@ -31,15 +31,15 @@ function DashboardRedirect() {
 export default function App() {
   return (
     <>
-      {/* Logo at top-left */}
+      {/* Logo at top-left floating */}
       <img
         src={logo}
         alt="Site Logo"
         style={{
           position: "absolute",
-          top: 18,
+          top: 3,
           left: 18,
-          height: 45,
+          height: 67,
           zIndex: 101,
           objectFit: "contain"
         }}

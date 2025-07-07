@@ -23,7 +23,7 @@ export default function ShareButton() {
       zIndex: 100,
       display: "flex",
       gap: 10,
-      background: "#fff",
+      background: "transparent",  // transparent background
       borderRadius: 30,
       boxShadow: "0 2px 8px #0001",
       padding: "6px 12px"
