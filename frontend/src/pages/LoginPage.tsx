@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
+// Helper to get/set device ID
 function getDeviceId() {
   let id = localStorage.getItem("deviceId");
   if (!id) {
@@ -17,15 +18,16 @@ function BlockedAccount() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     try {
-      const res = await fetch("/api/contact-admin", {
+      const API_URL = import.meta.env.VITE_API_URL;
+      const res = await fetch(`${API_URL}/api/contact-admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form)
@@ -123,7 +125,6 @@ export default function LoginPage() {
 
   // --- Helper: Fully clear all user/ride state from storage and memory ---
   function clearSession() {
-    // Remove all session-related localStorage keys
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("userId");
@@ -136,10 +137,9 @@ export default function LoginPage() {
     localStorage.removeItem("currentRideId");
     localStorage.removeItem("currentRideStatus");
     localStorage.removeItem("pendingPhone");
-    // (You can add/remove more keys as needed for your app)
   }
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e) {
     e.preventDefault();
     if (!phonePattern.test(phone)) {
       setMessage("Please enter a valid phone number, with or without '+'.");
@@ -149,12 +149,12 @@ export default function LoginPage() {
     setMessage("");
     setBlocked(false);
 
-    // Always clear session before login to avoid cross-user issues
     clearSession();
 
     try {
       const deviceId = getDeviceId();
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const API_URL = import.meta.env.VITE_API_URL;
+      const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, deviceId }),
@@ -162,7 +162,6 @@ export default function LoginPage() {
       const data = await res.json();
       console.log("[LOGIN RESPONSE]", data);
 
-      // If login is successful and a token is received
       if (res.ok && data.token) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", (data.role || "").toLowerCase());
@@ -191,13 +190,11 @@ export default function LoginPage() {
         return;
       }
 
-      // If verification is required (untrusted device or unverified phone)
       if (
         data.action === "verification_required" ||
         data.error === "Verification code required" ||
         (res.status === 202 && data.action === "verification_required")
       ) {
-        // Save info for verification page
         localStorage.setItem("pendingPhone", phone);
         setMessage("Verification required. Redirecting...");
         setTimeout(() => {
@@ -214,18 +211,16 @@ export default function LoginPage() {
         return;
       }
 
-      // Check for blocked status by admin
       if (
         data.error &&
         data.error.toLowerCase().includes("account disabled, kindly contact admin")
       ) {
         setBlocked(true);
-        setMessage(""); // Hide normal error
+        setMessage("");
         setLoading(false);
         return;
       }
 
-      // Any other error
       setMessage(data.error || "Login failed.");
     } catch (err) {
       setMessage("Could not connect to server.");

@@ -21,10 +21,8 @@ async function getDefaultCountry() {
   try {
     const res = await fetch("https://ipapi.co/json/");
     const data = await res.json();
-    // Country code is lower-case (e.g. "eg"), react-phone-input-2 expects lower-case
     if (data && data.country_code) return data.country_code.toLowerCase();
   } catch {}
-  // Fallback: use browser language
   const lang = navigator.language || "";
   return lang.slice(-2).toLowerCase();
 }
@@ -45,7 +43,7 @@ export default function RegisterPage() {
   const [showPolicy, setShowPolicy] = useState(false);
   const [phoneValid, setPhoneValid] = useState(false);
   const [rawPhone, setRawPhone] = useState("");
-  const [defaultCountry, setDefaultCountry] = useState<undefined | string>(undefined);
+  const [defaultCountry, setDefaultCountry] = useState(undefined);
 
   const navigate = useNavigate();
 
@@ -57,11 +55,11 @@ export default function RegisterPage() {
     return () => { mounted = false; };
   }, []);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
@@ -77,7 +75,10 @@ export default function RegisterPage() {
       }
       submitData.phone = form.phone;
       delete submitData.agreed;
-      const res = await fetch("http://localhost:5000/api/auth/register", {
+
+      // Use environment variable for API URL
+      const API_URL = import.meta.env.VITE_API_URL;
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitData),
@@ -122,8 +123,8 @@ export default function RegisterPage() {
         alt="Xzity Logo"
         style={{
           display: "block",
-          margin: "0 auto 27px auto", // 1.5x previous bottom margin
-          height: 84, // 1.5x previous height (was 56)
+          margin: "0 auto 27px auto",
+          height: 84,
           objectFit: "contain",
         }}
       />
@@ -245,7 +246,6 @@ export default function RegisterPage() {
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <Link to="/login">Already have an account? Login</Link>
       </div>
-      {/* Modal for terms and privacy policy */}
       {showPolicy && <TermsModal onClose={() => setShowPolicy(false)} />}
     </div>
   );
