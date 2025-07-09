@@ -39,6 +39,13 @@ const rideIcon = new L.Icon({
   popupAnchor: [0, -41],
 });
 
+const adminIcon = new L.Icon({
+  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
@@ -48,20 +55,36 @@ export default function AdminLiveMap() {
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // Admin location state
   const [mapCenter, setMapCenter] = useState<LatLngExpression | null>(null);
+  const [adminLocation, setAdminLocation] = useState<LatLngExpression | null>(null);
   const mapZoom = 12;
   const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!token) {
+      navigate("/login", { replace: true });
+    }
+    // eslint-disable-next-line
+  }, [token, navigate]);
 
   // Get admin's current location on mount
   useEffect(() => {
     let didCancel = false;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        if (!didCancel) setMapCenter([pos.coords.latitude, pos.coords.longitude]);
+        if (!didCancel) {
+          const loc: LatLngExpression = [pos.coords.latitude, pos.coords.longitude];
+          setMapCenter(loc);
+          setAdminLocation(loc);
+        }
       },
       () => {
-        if (!didCancel) setMapCenter([30.0444, 31.2357]); // Cairo fallback
+        if (!didCancel) {
+          setMapCenter([30.0444, 31.2357]); // Cairo fallback
+          setAdminLocation(null);
+        }
       }
     );
     // Fallback if geolocation is very slow
@@ -77,9 +100,13 @@ export default function AdminLiveMap() {
     setError("");
     setLoading(true);
     try {
+      const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      };
       const [driversRes, ridesRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/drivers?online=true`, { credentials: "include" }),
-        fetch(`${API_URL}/api/admin/rides?status=active`, { credentials: "include" }),
+        fetch(`${API_URL}/api/admin/drivers?online=true`, { headers, credentials: "include" }),
+        fetch(`${API_URL}/api/admin/rides?status=active`, { headers, credentials: "include" }),
       ]);
       if (!driversRes.ok || !ridesRes.ok) {
         // Show backend error messages if available
@@ -90,7 +117,7 @@ export default function AdminLiveMap() {
         if (!ridesRes.ok) {
           try { const data = await ridesRes.json(); msg = data.error || msg; } catch {}
         }
-        throw new Error(msg);
+        throw new Error(msg + ` (${driversRes.status}/${ridesRes.status})`);
       }
       const driversData = await driversRes.json();
       const ridesData = await ridesRes.json();
@@ -104,11 +131,12 @@ export default function AdminLiveMap() {
   }
 
   useEffect(() => {
+    if (!token) return;
     fetchData();
     const interval = setInterval(fetchData, 10000); // Auto-refresh every 10s
     return () => clearInterval(interval);
     // eslint-disable-next-line
-  }, []);
+  }, [token]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -144,6 +172,14 @@ export default function AdminLiveMap() {
           style={{ height: 520, width: "100%", borderRadius: 10, boxShadow: "0 2px 10px #0001", margin: "0 auto", maxWidth: 900 }}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {/* Admin marker */}
+          {adminLocation && (
+            <Marker position={adminLocation} icon={adminIcon}>
+              <Popup>
+                <b>You (Admin)</b>
+              </Popup>
+            </Marker>
+          )}
           {/* Drivers */}
           {drivers.map(driver => (
             driver.lat && driver.lng && (
