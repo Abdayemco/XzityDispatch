@@ -4,20 +4,23 @@ import { errorHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/auth.routes";
 import rideRoutes from "./routes/ride.routes";
 import testRoutes from "./routes/test.routes";
-import adminRoutes from "./routes/admin.routes"; // <-- Updated import
+import adminRoutes from "./routes/admin.routes";
 import contactRouter from "./routes/contact";
 import chatRoutes from "./routes/chat";
+import jwt from "jsonwebtoken";
 
 const app = express();
 
 // Parse JSON bodies BEFORE any route handlers
 app.use(express.json());
 
-// Allow CORS from Vite dev server and optional .env CLIENT_URL
+// --- CORS: Allow Vite dev server, .env CLIENT_URL, and production domains ---
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://www.xzity.com",
+  "https://xzity.com"
 ];
-if (process.env.CLIENT_URL) {
+if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
   allowedOrigins.push(process.env.CLIENT_URL);
 }
 app.use(
@@ -34,18 +37,14 @@ app.use((req, res, next) => {
 });
 
 // --- JWT AUTH HEADER PARSER (GLOBAL) ---
-// This middleware will decode the JWT from the Authorization header and add req.user for downstream handlers
-import jwt from "jsonwebtoken";
-app.use((req, res, next) => {
+app.use((req: any, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-      // Attach user info to req.user for downstream
       req.user = decoded;
     } catch (err) {
-      // Invalid token: do not set req.user, let protected routes handle 401
       req.user = undefined;
     }
   }
@@ -55,8 +54,8 @@ app.use((req, res, next) => {
 // Register routes
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
-app.use("/api/admin", adminRoutes); // <-- Admin routes
-app.use("/api", contactRouter);      // Contact router under /api ([POST] /api/contact-admin)
+app.use("/api/admin", adminRoutes);
+app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);
 
