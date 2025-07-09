@@ -24,6 +24,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // --- API BASE ---
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
+
   // Auth guard
   useEffect(() => {
     if (!token || role !== "admin") {
@@ -39,7 +44,7 @@ export default function AdminDashboard() {
     const fetchUsers = async () => {
       try {
         // Fetch drivers from the backend
-        const res = await fetch("/api/admin/drivers", {
+        const res = await fetch(`${API_URL}/api/admin/drivers`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
@@ -55,7 +60,7 @@ export default function AdminDashboard() {
 
     const fetchCustomers = async () => {
       try {
-        const res = await fetch("/api/admin/customers", {
+        const res = await fetch(`${API_URL}/api/admin/customers`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
@@ -71,7 +76,7 @@ export default function AdminDashboard() {
 
     const fetchRides = async () => {
       try {
-        const res = await fetch("/api/admin/rides", {
+        const res = await fetch(`${API_URL}/api/admin/rides`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
@@ -89,6 +94,7 @@ export default function AdminDashboard() {
     if (activeTab === "customers") fetchCustomers();
     if (activeTab === "rides") fetchRides();
     // No need to fetch pending drivers here anymore!
+    // eslint-disable-next-line
   }, [activeTab, token]);
 
   // Block/Unblock user (drivers)
@@ -97,7 +103,7 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       // Patch to /api/admin/drivers/:id/subscription to update 'disabled' status
-      const res = await fetch(`/api/admin/drivers/${userId}/subscription`, {
+      const res = await fetch(`${API_URL}/api/admin/drivers/${userId}/subscription`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -128,7 +134,7 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       // Patch to /api/admin/customers/:id/block (implement backend if needed)
-      const res = await fetch(`/api/admin/customers/${customerId}/block`, {
+      const res = await fetch(`${API_URL}/api/admin/customers/${customerId}/block`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
