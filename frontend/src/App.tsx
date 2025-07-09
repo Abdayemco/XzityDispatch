@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import DriverDashboard from "./pages/DriverDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminLiveMap from "./pages/AdminLiveMap";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyCodePage from "./pages/VerifyCodePage";
@@ -73,6 +74,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* New Admin Live Map Route */}
+        <Route
+          path="/admin/live-map"
+          element={
+            <ProtectedRoute>
+              <AdminLiveMap />
             </ProtectedRoute>
           }
         />

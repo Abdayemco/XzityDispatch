@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
 import PendingDriversList from "../components/PendingDriversList"; // Make sure the path is correct
 
@@ -18,9 +18,9 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("users");
 
   // Data state
-  const [users, setUsers] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [rides, setRides] = useState([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -98,7 +98,7 @@ export default function AdminDashboard() {
   }, [activeTab, token]);
 
   // Block/Unblock user (drivers)
-  async function handleBlockToggle(userId, isBlocked) {
+  async function handleBlockToggle(userId: string, isBlocked: boolean) {
     try {
       setLoading(true);
       setError("");
@@ -121,7 +121,7 @@ export default function AdminDashboard() {
           u.id === userId ? { ...u, disabled: !isBlocked } : u
         )
       );
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message || "Failed to update user status.");
     } finally {
       setLoading(false);
@@ -129,7 +129,7 @@ export default function AdminDashboard() {
   }
 
   // Block/Unblock customer (optional, similar logic, update endpoint if needed)
-  async function handleBlockToggleCustomer(customerId, isBlocked) {
+  async function handleBlockToggleCustomer(customerId: string, isBlocked: boolean) {
     try {
       setLoading(true);
       setError("");
@@ -152,7 +152,7 @@ export default function AdminDashboard() {
           u.id === customerId ? { ...u, disabled: !isBlocked } : u
         )
       );
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message || "Failed to update customer status.");
     } finally {
       setLoading(false);
@@ -315,6 +315,26 @@ export default function AdminDashboard() {
   return (
     <div>
       <h2 style={{ textAlign: "center" }}>Admin Panel</h2>
+      {/* Live Map Link */}
+      <div style={{ textAlign: "center", marginTop: 8 }}>
+        <Link
+          to="/admin/live-map"
+          style={{
+            display: "inline-block",
+            margin: "0 0 24px 0",
+            background: "#1976d2",
+            color: "#fff",
+            padding: "8px 22px",
+            borderRadius: 8,
+            textDecoration: "none",
+            fontWeight: 600,
+            fontSize: 17,
+            boxShadow: "0 1px 5px #0001"
+          }}
+        >
+          Live Map of Drivers & Rides
+        </Link>
+      </div>
       <div style={tabBarStyle}>
         <TabIcon
           icon={<FaUsers size={28} />}
@@ -355,7 +375,7 @@ export default function AdminDashboard() {
 }
 
 // --- Styling helpers and TabIcon ---
-const tabBarStyle = {
+const tabBarStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
@@ -364,7 +384,14 @@ const tabBarStyle = {
   marginBottom: 16,
 };
 
-function TabIcon({ icon, label, active, onClick }) {
+type TabIconProps = {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+};
+
+function TabIcon({ icon, label, active, onClick }: TabIconProps) {
   return (
     <div
       onClick={onClick}
@@ -386,14 +413,14 @@ function TabIcon({ icon, label, active, onClick }) {
   );
 }
 
-const thStyle = {
+const thStyle: React.CSSProperties = {
   border: "1px solid #ddd",
   padding: "8px",
   background: "#f5f5f5",
   textAlign: "left",
 };
 
-const tdStyle = {
+const tdStyle: React.CSSProperties = {
   border: "1px solid #ddd",
   padding: "8px",
   textAlign: "left",
