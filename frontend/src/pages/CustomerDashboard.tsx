@@ -681,7 +681,8 @@ export default function CustomerDashboard() {
                 fontSize: "1.05em"
               }}
             >
-              <img src={opt.icon} alt={opt.label} style={{ width: 32, height: 32, marginBottom: 3 }} />
+              {/* Size reduced by 25%: 32*0.75=24 */}
+              <img src={opt.icon} alt={opt.label} style={{ width: 24, height: 24, marginBottom: 3 }} />
               {opt.label}
             </button>
           ))}
