@@ -38,6 +38,11 @@ function getSavedChatSession() {
   return { rideId: rideId || null, jobStatus: jobStatus || null };
 }
 
+// --- API BASE ---
+const API_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "";
+
 export default function DriverDashboard() {
   // ---- ALL useState hooks FIRST ----
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -82,7 +87,7 @@ export default function DriverDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
       try {
-        const res = await fetch("/api/rides/current", {
+        const res = await fetch(`${API_URL}/api/rides/current`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
@@ -149,7 +154,7 @@ export default function DriverDashboard() {
   const fetchJobs = useCallback(async () => {
     try {
       setErrorMsg(null);
-      const url = `/api/rides/available?vehicleType=${driverVehicleType}&driverId=${driverId}`;
+      const url = `${API_URL}/api/rides/available?vehicleType=${driverVehicleType}&driverId=${driverId}`;
       const res = await fetch(url, {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
@@ -179,7 +184,7 @@ export default function DriverDashboard() {
     setErrorMsg(null);
     try {
       const now = Date.now();
-      const res = await fetch(`/api/rides/${jobId}/accept?driverId=${driverId}`, {
+      const res = await fetch(`${API_URL}/api/rides/${jobId}/accept?driverId=${driverId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -212,7 +217,7 @@ export default function DriverDashboard() {
     setErrorMsg(null);
     try {
       const now = Date.now();
-      const res = await fetch(`/api/rides/${driverJobId}/start?driverId=${driverId}`, {
+      const res = await fetch(`${API_URL}/api/rides/${driverJobId}/start?driverId=${driverId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -241,7 +246,7 @@ export default function DriverDashboard() {
     let localTimer: NodeJS.Timeout | null = null;
     const pollStatus = async () => {
       try {
-        const res = await fetch(`/api/rides/${driverJobId}/status`, {
+        const res = await fetch(`${API_URL}/api/rides/${driverJobId}/status`, {
           headers: token ? { "Authorization": `Bearer ${token}` } : {},
         });
         const data = await res.json();
@@ -405,7 +410,7 @@ export default function DriverDashboard() {
     async function fetchMessages() {
       if (!polling) return;
       try {
-        const res = await fetch(`/api/rides/${rideId}/chat/messages`, {
+        const res = await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
           headers: token ? { "Authorization": `Bearer ${token}` } : {},
         });
         if (res.ok) {
@@ -443,7 +448,7 @@ export default function DriverDashboard() {
   // The following sends the correct role and structure!
   const handleSendMessage = async (text: string) => {
     if (!chatId || !getNumericDriverId()) return;
-    await fetch(`/api/rides/${chatId}/chat/messages`, {
+    await fetch(`${API_URL}/api/rides/${chatId}/chat/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
