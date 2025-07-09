@@ -30,6 +30,11 @@ export default function ContactAdminButton() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
+  // Use API_URL for all backend requests
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -40,7 +45,7 @@ export default function ContactAdminButton() {
     e.preventDefault();
     setError("");
     try {
-      const res = await fetch("/api/contact-admin", {
+      const res = await fetch(`${API_URL}/api/contact-admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
