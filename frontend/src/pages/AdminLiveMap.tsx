@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import carIcon from "../assets/marker-car.png";
-import markerCustomer from "../assets/marker-customer.png";
+import carIconUrl from "../assets/marker-car.png";
+import markerCustomerUrl from "../assets/marker-customer.png";
 import { useNavigate } from "react-router-dom";
 
 type Driver = {
@@ -26,22 +26,22 @@ type Ride = {
 };
 
 const driverIcon = new L.Icon({
-  iconUrl: carIcon,
+  iconUrl: carIconUrl,
   iconSize: [32, 32],
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
 });
 
 const customerIcon = new L.Icon({
-  iconUrl: markerCustomer,
-  iconSize: [15, 15],
+  iconUrl: markerCustomerUrl,
+  iconSize: [32, 41],
   iconAnchor: [16, 41],
   popupAnchor: [0, -41],
 });
 
 const adminIcon = new L.Icon({
   iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
-  iconSize: [15, 15],
+  iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
 });
@@ -50,7 +50,6 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-// Define which ride statuses are considered "live"
 const liveStatuses = ["active", "ongoing", "in_progress"];
 
 export default function AdminLiveMap() {
@@ -64,15 +63,12 @@ export default function AdminLiveMap() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!token) {
       navigate("/login", { replace: true });
     }
-    // eslint-disable-next-line
   }, [token, navigate]);
 
-  // Get admin's current location on mount
   useEffect(() => {
     let didCancel = false;
     navigator.geolocation.getCurrentPosition(
@@ -85,20 +81,17 @@ export default function AdminLiveMap() {
       },
       () => {
         if (!didCancel) {
-          setMapCenter([30.0444, 31.2357]); // Cairo fallback
+          setMapCenter([30.0444, 31.2357]);
           setAdminLocation(null);
         }
       }
     );
-    // Fallback if geolocation is very slow
     setTimeout(() => {
       if (!didCancel && mapCenter === null) setMapCenter([30.0444, 31.2357]);
     }, 3000);
     return () => { didCancel = true; };
-    // eslint-disable-next-line
   }, []);
 
-  // Fetch online drivers and active rides
   async function fetchData() {
     setError("");
     setLoading(true);
@@ -112,7 +105,6 @@ export default function AdminLiveMap() {
         fetch(`${API_URL}/api/admin/rides?status=active`, { headers, credentials: "include" }),
       ]);
       if (!driversRes.ok || !ridesRes.ok) {
-        // Show backend error messages if available
         let msg = "Failed to fetch map data.";
         if (!driversRes.ok) {
           try { const data = await driversRes.json(); msg = data.error || msg; } catch {}
@@ -136,12 +128,10 @@ export default function AdminLiveMap() {
   useEffect(() => {
     if (!token) return;
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Auto-refresh every 10s
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line
   }, [token]);
 
-  // Only show live/current rides
   const liveRides = rides.filter(
     (r) => r.status && liveStatuses.includes(r.status.toLowerCase())
   );
