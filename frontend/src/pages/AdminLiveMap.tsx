@@ -3,6 +3,12 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet"
 import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import carIconUrl from "../assets/marker-car.png";
+import tuktukIconUrl from "../assets/marker-toktok.png";
+import deliveryIconUrl from "../assets/marker-delivery.png";
+import truckIconUrl from "../assets/marker-truck.png";
+import waterTruckIconUrl from "../assets/marker-water-truck.png";
+import towTruckIconUrl from "../assets/marker-towtruck.png";
+import wheelchairIconUrl from "../assets/marker-wheelchair.png";
 import markerCustomerUrl from "../assets/marker-customer.png";
 import { useNavigate } from "react-router-dom";
 
@@ -26,19 +32,40 @@ type Ride = {
   destLng?: number;
 };
 
-const driverIcon = new L.Icon({
-  iconUrl: carIconUrl,
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
-});
+// Helper to choose the icon based on vehicleType
+function getVehicleIcon(vehicleType?: string) {
+  switch ((vehicleType || "").toUpperCase()) {
+    case "CAR":
+      return carIconUrl;
+    case "TUKTUK":
+    case "TOKTOK":
+      return tuktukIconUrl;
+    case "DELIVERY":
+      return deliveryIconUrl;
+    case "TRUCK":
+      return truckIconUrl;
+    case "WATER_TRUCK":
+      return waterTruckIconUrl;
+    case "TOW_TRUCK":
+      return towTruckIconUrl;
+    case "WHEELCHAIR":
+      return wheelchairIconUrl;
+    default:
+      return carIconUrl;
+  }
+}
 
-const customerIcon = new L.Icon({
-  iconUrl: markerCustomerUrl,
-  iconSize: [32, 41],
-  iconAnchor: [16, 41],
-  popupAnchor: [0, -41],
-});
+function createLeafletIcon(url: string, w = 32, h = 41) {
+  return L.icon({
+    iconUrl: url,
+    iconSize: [w, h],
+    iconAnchor: [w / 2, h],
+    popupAnchor: [0, -h + 10],
+    shadowUrl: undefined,
+  });
+}
+
+const customerIcon = createLeafletIcon(markerCustomerUrl, 32, 41);
 
 const adminIcon = new L.Icon({
   iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
@@ -193,7 +220,7 @@ export default function AdminLiveMap() {
               <Marker
                 key={`driver-${driver.id}`}
                 position={[driver.lat, driver.lng]}
-                icon={driverIcon}
+                icon={createLeafletIcon(getVehicleIcon(driver.vehicleType), 40, 51)}
               >
                 <Popup>
                   <b>Driver:</b> {driver.name || driver.phone || driver.id}
