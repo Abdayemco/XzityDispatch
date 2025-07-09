@@ -5,7 +5,7 @@ import { prisma } from "../utils/prisma";
 export const getDrivers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const drivers = await prisma.user.findMany({
-      where: { role: "DRIVER" },
+      where: { role: "DRIVER", online: true },
       select: {
         id: true,
         name: true,
@@ -19,6 +19,7 @@ export const getDrivers = async (req: Request, res: Response, next: NextFunction
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        online: true, // Add online field if you want to see it in the results
       },
       orderBy: { id: "desc" },
     });
@@ -46,6 +47,7 @@ export const getDriver = async (req: Request, res: Response, next: NextFunction)
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        online: true,
       },
     });
     if (!driver) return res.status(404).json({ error: "Driver not found" });
@@ -96,6 +98,7 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        online: true,
       }
     });
     res.json(updated);
@@ -156,7 +159,23 @@ export const blockCustomer = async (req: Request, res: Response, next: NextFunct
 // --- RIDES ---
 export const getRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Get status param (e.g., "live", "not_done")
+    const statusParam = (req.query.status as string)?.toLowerCase();
+    let statusFilter = undefined;
+
+    // Define "live" statuses
+    const liveStatuses = ["active", "ongoing", "in_progress"];
+
+    if (statusParam === "live") {
+      statusFilter = { status: { in: liveStatuses } };
+    } else if (statusParam === "not_done") {
+      // All except completed/canceled/done
+      statusFilter = { status: { notIn: ["completed", "canceled", "cancelled", "done"] } };
+    }
+    // Default: show all (no filter) if not specified
+
     const rides = await prisma.ride.findMany({
+      where: statusFilter,
       include: {
         customer: { select: { id: true, name: true, phone: true, email: true } },
         driver: { select: { id: true, name: true, phone: true, email: true } },
