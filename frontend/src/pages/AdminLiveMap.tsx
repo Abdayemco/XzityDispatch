@@ -13,6 +13,7 @@ type Driver = {
   vehicleType?: string;
   lat: number;
   lng: number;
+  online?: boolean; // Optional, but if present can be used for future filtering
 };
 type Ride = {
   id: string | number;
@@ -50,7 +51,8 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-const liveStatuses = ["active", "ongoing", "in_progress"];
+// List of ride status values to exclude from map (case-insensitive)
+const excludedStatuses = ["completed", "canceled", "cancelled", "done"];
 
 export default function AdminLiveMap() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -100,9 +102,10 @@ export default function AdminLiveMap() {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       };
+      // Fetch all drivers and all rides
       const [driversRes, ridesRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/drivers?online=true`, { headers, credentials: "include" }),
-        fetch(`${API_URL}/api/admin/rides?status=active`, { headers, credentials: "include" }),
+        fetch(`${API_URL}/api/admin/drivers`, { headers, credentials: "include" }),
+        fetch(`${API_URL}/api/admin/rides`, { headers, credentials: "include" }),
       ]);
       if (!driversRes.ok || !ridesRes.ok) {
         let msg = "Failed to fetch map data.";
@@ -132,9 +135,15 @@ export default function AdminLiveMap() {
     return () => clearInterval(interval);
   }, [token]);
 
-  const liveRides = rides.filter(
-    (r) => r.status && liveStatuses.includes(r.status.toLowerCase())
+  // Exclude only rides with completed/canceled statuses
+  const filteredRides = rides.filter(
+    (r) =>
+      r.status &&
+      !excludedStatuses.includes(r.status.toLowerCase())
   );
+
+  // Show all drivers received from API (could add filter for online/disabled if desired)
+  const filteredDrivers = drivers; // Change this if you want to filter for only online
 
   return (
     <div style={{ padding: 24 }}>
@@ -179,7 +188,7 @@ export default function AdminLiveMap() {
             </Marker>
           )}
           {/* Drivers */}
-          {drivers.map(driver => (
+          {filteredDrivers.map(driver => (
             driver.lat && driver.lng && (
               <Marker
                 key={`driver-${driver.id}`}
@@ -196,8 +205,8 @@ export default function AdminLiveMap() {
               </Marker>
             )
           ))}
-          {/* Customers (origin of live rides) */}
-          {liveRides.map(ride => (
+          {/* Customers (origin of filtered rides) */}
+          {filteredRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
                 key={`customer-${ride.id}`}
@@ -218,8 +227,8 @@ export default function AdminLiveMap() {
               </Marker>
             )
           ))}
-          {/* Polylines for live rides */}
-          {liveRides.map(ride => (
+          {/* Polylines for filtered rides */}
+          {filteredRides.map(ride => (
             ride.originLat && ride.originLng && ride.destLat && ride.destLng ? (
               <Polyline
                 key={`poly-${ride.id}`}
@@ -234,7 +243,7 @@ export default function AdminLiveMap() {
         </MapContainer>
       )}
       <div style={{ textAlign: "center", marginTop: 16, color: "#555" }}>
-        Showing <b>{drivers.length}</b> online drivers and <b>{liveRides.length}</b> live rides.
+        Showing <b>{filteredDrivers.length}</b> drivers and <b>{filteredRides.length}</b> rides (excluding completed/canceled).
       </div>
     </div>
   );
