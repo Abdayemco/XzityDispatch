@@ -17,7 +17,7 @@ export default function VerifyCodePage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [redirectTo, setRedirectTo] = useState<string | null>(null);
+  const [redirectTo, setRedirectTo] = useState(null);
 
   // Retrieve phone and role from location state or localStorage
   const phone = location.state?.phone || localStorage.getItem("pendingPhone");
@@ -30,13 +30,15 @@ export default function VerifyCodePage() {
     // eslint-disable-next-line
   }, [phone, role, navigate]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
     try {
       const deviceId = getDeviceId();
-      const res = await fetch("http://localhost:5000/api/auth/verify", {
+      // Use environment variable for API URL
+      const API_URL = import.meta.env.VITE_API_URL.replace(/\/$/, "");
+      const res = await fetch(`${API_URL}/api/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, code, deviceId }),
