@@ -32,16 +32,16 @@ const driverIcon = new L.Icon({
   popupAnchor: [0, -32],
 });
 
-const rideIcon = new L.Icon({
+const customerIcon = new L.Icon({
   iconUrl: markerCustomer,
-  iconSize: [32, 41],
+  iconSize: [15, 15],
   iconAnchor: [16, 41],
   popupAnchor: [0, -41],
 });
 
 const adminIcon = new L.Icon({
   iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
-  iconSize: [25, 41],
+  iconSize: [15, 15],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
 });
@@ -49,6 +49,9 @@ const adminIcon = new L.Icon({
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
+
+// Define which ride statuses are considered "live"
+const liveStatuses = ["active", "ongoing", "in_progress"];
 
 export default function AdminLiveMap() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -138,6 +141,11 @@ export default function AdminLiveMap() {
     // eslint-disable-next-line
   }, [token]);
 
+  // Only show live/current rides
+  const liveRides = rides.filter(
+    (r) => r.status && liveStatuses.includes(r.status.toLowerCase())
+  );
+
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>
@@ -184,7 +192,7 @@ export default function AdminLiveMap() {
           {drivers.map(driver => (
             driver.lat && driver.lng && (
               <Marker
-                key={driver.id}
+                key={`driver-${driver.id}`}
                 position={[driver.lat, driver.lng]}
                 icon={driverIcon}
               >
@@ -198,18 +206,18 @@ export default function AdminLiveMap() {
               </Marker>
             )
           ))}
-          {/* Active rides (show origin and destination) */}
-          {rides.map(ride => (
+          {/* Customers (origin of live rides) */}
+          {liveRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
-                key={`ride-${ride.id}`}
+                key={`customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
-                icon={rideIcon}
+                icon={customerIcon}
               >
                 <Popup>
-                  <b>Ride:</b> {ride.id}
-                  <br />
                   <b>Customer:</b> {ride.customer?.name || ride.customerId}
+                  <br />
+                  <b>Ride ID:</b> {ride.id}
                   <br />
                   <b>Status:</b> {ride.status}
                   <br />
@@ -220,8 +228,8 @@ export default function AdminLiveMap() {
               </Marker>
             )
           ))}
-          {/* Polylines for rides */}
-          {rides.map(ride => (
+          {/* Polylines for live rides */}
+          {liveRides.map(ride => (
             ride.originLat && ride.originLng && ride.destLat && ride.destLng ? (
               <Polyline
                 key={`poly-${ride.id}`}
@@ -236,7 +244,7 @@ export default function AdminLiveMap() {
         </MapContainer>
       )}
       <div style={{ textAlign: "center", marginTop: 16, color: "#555" }}>
-        Showing <b>{drivers.length}</b> online drivers and <b>{rides.length}</b> active rides.
+        Showing <b>{drivers.length}</b> online drivers and <b>{liveRides.length}</b> live rides.
       </div>
     </div>
   );
