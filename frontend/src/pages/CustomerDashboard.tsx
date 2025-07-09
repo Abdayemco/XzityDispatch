@@ -81,10 +81,15 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Use API_URL for backend
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    await fetch(`/api/rides/${rideId}/rate`, {
+    await fetch(`${API_URL}/api/rides/${rideId}/rate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rating, feedback }),
@@ -138,6 +143,11 @@ function getSavedChatSession() {
   return { rideId: rideId || null, rideStatus: rideStatus || null };
 }
 
+// --- API BASE ---
+const API_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "";
+
 export default function CustomerDashboard() {
   // ------------------- STATE -------------------
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -167,7 +177,7 @@ export default function CustomerDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
       try {
-        const res = await fetch("/api/rides/current", {
+        const res = await fetch(`${API_URL}/api/rides/current`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
@@ -272,7 +282,7 @@ export default function CustomerDashboard() {
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`/api/rides/${rideId}/status`);
+          const res = await fetch(`${API_URL}/api/rides/${rideId}/status`);
           const data = await res.json();
           if (data.status) setRideStatus(data.status);
           if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
@@ -304,7 +314,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     setError(null);
     try {
-      const res = await fetch("/api/rides/request", {
+      const res = await fetch(`${API_URL}/api/rides/request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -342,7 +352,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/rides/${rideId}/cancel`, {
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -370,7 +380,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/rides/${rideId}/done`, {
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -414,7 +424,7 @@ export default function CustomerDashboard() {
       if (!polling) return;
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`/api/rides/${rideId}/chat/messages`, {
+        const res = await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
           headers: token ? { "Authorization": `Bearer ${token}` } : {},
         });
         if (res.ok) {
@@ -452,7 +462,7 @@ export default function CustomerDashboard() {
   const handleSendMessage = async (text: string) => {
     const customerId = getCustomerIdFromStorage();
     if (!rideId || !customerId) return;
-    await fetch(`/api/rides/${rideId}/chat/messages`, {
+    await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
