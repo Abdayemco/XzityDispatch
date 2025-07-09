@@ -13,7 +13,7 @@ type Driver = {
   vehicleType?: string;
   lat: number;
   lng: number;
-  online?: boolean; // Optional, but if present can be used for future filtering
+  online?: boolean; // Only online drivers are shown (from backend)
 };
 type Ride = {
   id: string | number;
@@ -102,7 +102,7 @@ export default function AdminLiveMap() {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       };
-      // Fetch all drivers and all rides
+      // Fetch only online drivers and all rides
       const [driversRes, ridesRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/drivers`, { headers, credentials: "include" }),
         fetch(`${API_URL}/api/admin/rides`, { headers, credentials: "include" }),
@@ -142,8 +142,8 @@ export default function AdminLiveMap() {
       !excludedStatuses.includes(r.status.toLowerCase())
   );
 
-  // Show all drivers received from API (could add filter for online/disabled if desired)
-  const filteredDrivers = drivers; // Change this if you want to filter for only online
+  // Only online drivers are already filtered by backend
+  const filteredDrivers = drivers;
 
   return (
     <div style={{ padding: 24 }}>
