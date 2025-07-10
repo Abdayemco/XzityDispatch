@@ -2,14 +2,6 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import carIconUrl from "../assets/marker-car.png";
-import tuktukIconUrl from "../assets/marker-toktok.png";
-import deliveryIconUrl from "../assets/marker-delivery.png";
-import truckIconUrl from "../assets/marker-truck.png";
-import waterTruckIconUrl from "../assets/marker-water-truck.png";
-import towTruckIconUrl from "../assets/marker-towtruck.png";
-import wheelchairIconUrl from "../assets/marker-wheelchair.png";
-import markerCustomerUrl from "../assets/marker-customer.png";
 import { useNavigate } from "react-router-dom";
 
 type Driver = {
@@ -32,52 +24,22 @@ type Ride = {
   destLng?: number;
 };
 
-// Lowercase vehicle type mapping for consistent icon selection
-function getVehicleIcon(vehicleType?: string) {
-  switch ((vehicleType || "car").toLowerCase()) {
-    case "car":
-      return carIconUrl;
-    case "tuktuk":
-    case "toktok":
-      return tuktukIconUrl;
-    case "delivery":
-      return deliveryIconUrl;
-    case "truck":
-      return truckIconUrl;
-    case "water_truck":
-      return waterTruckIconUrl;
-    case "tow_truck":
-      return towTruckIconUrl;
-    case "wheelchair":
-      return wheelchairIconUrl;
-    default:
-      return carIconUrl;
-  }
-}
-
-function createLeafletIcon(url: string, w = 40, h = 51) {
-  return L.icon({
-    iconUrl: url,
-    iconSize: [w, h],
-    iconAnchor: [w / 2, h],
-    popupAnchor: [0, -h + 10],
-    shadowUrl: undefined,
-  });
-}
-
-const customerIcon = createLeafletIcon(markerCustomerUrl, 32, 41);
-
-// Yellow marker icon for admin (from leaflet-color-markers)
+// Default Leaflet color marker icons from https://github.com/pointhi/leaflet-color-markers
 const adminIcon = new L.Icon({
+  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
+});
+const driverIcon = new L.Icon({
   iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-yellow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
 });
-
-// Red marker icon for customers (from leaflet-color-markers)
-const customerDefaultIcon = new L.Icon({
+const customerIcon = new L.Icon({
   iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-red.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -210,7 +172,14 @@ export default function AdminLiveMap() {
         <MapContainer
           center={mapCenter}
           zoom={mapZoom}
-          style={{ height: 520, width: "100%", borderRadius: 10, boxShadow: "0 2px 10px #0001", margin: "0 auto", maxWidth: 900 }}
+          style={{
+            height: 520,
+            width: "100%",
+            borderRadius: 10,
+            boxShadow: "0 2px 10px #0001",
+            margin: "0 auto",
+            maxWidth: 900
+          }}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {/* Admin marker */}
@@ -227,13 +196,7 @@ export default function AdminLiveMap() {
               <Marker
                 key={`driver-${driver.id}`}
                 position={[driver.lat, driver.lng]}
-                icon={L.icon({
-                  iconUrl: getVehicleIcon(driver.vehicleType),
-                  iconSize: [40, 51],
-                  iconAnchor: [20, 51],
-                  popupAnchor: [0, -41],
-                  shadowUrl: undefined,
-                })}
+                icon={driverIcon}
               >
                 <Popup>
                   <b>Driver:</b> {driver.name || driver.phone || driver.id}
@@ -251,7 +214,7 @@ export default function AdminLiveMap() {
               <Marker
                 key={`customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
-                icon={customerDefaultIcon}
+                icon={customerIcon}
               >
                 <Popup>
                   <b>Customer:</b> {ride.customer?.name || ride.customerId}
