@@ -216,7 +216,13 @@ export default function AdminLiveMap() {
               <Marker
                 key={`driver-${driver.id}`}
                 position={[driver.lat, driver.lng]}
-                icon={createLeafletIcon(getVehicleIcon(driver.vehicleType), 40, 51)}
+                icon={L.icon({
+                  iconUrl: getVehicleIcon(driver.vehicleType),
+                  iconSize: [40, 51],
+                  iconAnchor: [20, 51],
+                  popupAnchor: [0, -41],
+                  shadowUrl: undefined,
+                })}
               >
                 <Popup>
                   <b>Driver:</b> {driver.name || driver.phone || driver.id}
