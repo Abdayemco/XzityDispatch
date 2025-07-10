@@ -19,7 +19,7 @@ type Driver = {
   vehicleType?: string;
   lat: number;
   lng: number;
-  online?: boolean; // Only online drivers are shown (from backend)
+  online?: boolean;
 };
 type Ride = {
   id: string | number;
@@ -32,30 +32,30 @@ type Ride = {
   destLng?: number;
 };
 
-// Helper to choose the icon based on vehicleType
+// Lowercase vehicle type mapping for consistent icon selection
 function getVehicleIcon(vehicleType?: string) {
-  switch ((vehicleType || "").toUpperCase()) {
-    case "CAR":
+  switch ((vehicleType || "car").toLowerCase()) {
+    case "car":
       return carIconUrl;
-    case "TUKTUK":
-    case "TOKTOK":
+    case "tuktuk":
+    case "toktok":
       return tuktukIconUrl;
-    case "DELIVERY":
+    case "delivery":
       return deliveryIconUrl;
-    case "TRUCK":
+    case "truck":
       return truckIconUrl;
-    case "WATER_TRUCK":
+    case "water_truck":
       return waterTruckIconUrl;
-    case "TOW_TRUCK":
+    case "tow_truck":
       return towTruckIconUrl;
-    case "WHEELCHAIR":
+    case "wheelchair":
       return wheelchairIconUrl;
     default:
       return carIconUrl;
   }
 }
 
-function createLeafletIcon(url: string, w = 32, h = 41) {
+function createLeafletIcon(url: string, w = 40, h = 51) {
   return L.icon({
     iconUrl: url,
     iconSize: [w, h],
@@ -78,7 +78,6 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-// List of ride status values to exclude from map (case-insensitive)
 const excludedStatuses = ["completed", "canceled", "cancelled", "done"];
 
 export default function AdminLiveMap() {
@@ -129,7 +128,6 @@ export default function AdminLiveMap() {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       };
-      // Fetch only online drivers and all rides
       const [driversRes, ridesRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/drivers`, { headers, credentials: "include" }),
         fetch(`${API_URL}/api/admin/rides`, { headers, credentials: "include" }),
@@ -162,14 +160,12 @@ export default function AdminLiveMap() {
     return () => clearInterval(interval);
   }, [token]);
 
-  // Exclude only rides with completed/canceled statuses
   const filteredRides = rides.filter(
     (r) =>
       r.status &&
       !excludedStatuses.includes(r.status.toLowerCase())
   );
 
-  // Only online drivers are already filtered by backend
   const filteredDrivers = drivers;
 
   return (
