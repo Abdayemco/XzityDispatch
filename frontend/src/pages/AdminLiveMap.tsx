@@ -67,11 +67,22 @@ function createLeafletIcon(url: string, w = 40, h = 51) {
 
 const customerIcon = createLeafletIcon(markerCustomerUrl, 32, 41);
 
+// Yellow marker icon for admin (from leaflet-color-markers)
 const adminIcon = new L.Icon({
-  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
+  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-yellow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
+  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
+});
+
+// Red marker icon for customers (from leaflet-color-markers)
+const customerDefaultIcon = new L.Icon({
+  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-red.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
 });
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -240,7 +251,7 @@ export default function AdminLiveMap() {
               <Marker
                 key={`customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
-                icon={customerIcon}
+                icon={customerDefaultIcon}
               >
                 <Popup>
                   <b>Customer:</b> {ride.customer?.name || ride.customerId}
