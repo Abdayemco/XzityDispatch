@@ -4,12 +4,13 @@ import DriverDashboard from "./pages/DriverDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminLiveMap from "./pages/AdminLiveMap";
+import MinimalLeafletIconTest from "./pages/MinimalLeafletIconTest"; // <-- ADD THIS
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyCodePage from "./pages/VerifyCodePage";
 import ContactAdminButton from "./components/ContactAdminButton";
 import ShareButton from "./components/ShareButton";
-import logo from "./assets/logo.png"; // <-- import your logo
+import logo from "./assets/logo.png";
 
 // Protect a route, redirect to login if no token
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -45,7 +46,7 @@ export default function App() {
           objectFit: "contain"
         }}
       />
-      <ShareButton /> {/* Top-right floating share button */}
+      <ShareButton />
       <Routes>
         {/* Login page is now also the root page */}
         <Route path="/" element={<LoginPage />} />
@@ -77,8 +78,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* New Admin Live Map Route */}
         <Route
           path="/admin/live-map"
           element={
@@ -88,13 +87,15 @@ export default function App() {
           }
         />
 
+        {/* Minimal Leaflet Icon Test route */}
+        <Route path="/test-leaflet-icon" element={<MinimalLeafletIconTest />} />
+
         {/* Helper route to go to dashboard based on role */}
         <Route path="/dashboard" element={<DashboardRedirect />} />
 
         {/* Catch-all route */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {/* Contact button always at the bottom right */}
       <ContactAdminButton />
     </>
   );
