@@ -133,12 +133,23 @@ export default function AdminLiveMap() {
     return () => clearInterval(interval);
   }, [token]);
 
+  // DEBUG: Log drivers and rides
+  console.log("filteredDrivers:", drivers);
+  console.log("filteredRides:", rides);
+
   const filteredRides = rides.filter(
     (r) =>
       r.status &&
       !excludedStatuses.includes(r.status.toLowerCase())
   );
 
+  // Uncomment below to force dummy drivers for visibility test
+  /*
+  const filteredDrivers = [
+    { id: 1, lat: 30.045, lng: 31.235, name: "Test Driver 1" },
+    { id: 2, lat: 30.046, lng: 31.236, name: "Test Driver 2" }
+  ];
+  */
   const filteredDrivers = drivers;
 
   return (
@@ -190,25 +201,29 @@ export default function AdminLiveMap() {
               </Popup>
             </Marker>
           )}
-          {/* Drivers */}
-          {filteredDrivers.map(driver => (
-            driver.lat && driver.lng && (
-              <Marker
-                key={`driver-${driver.id}`}
-                position={[driver.lat, driver.lng]}
-                icon={driverIcon}
-              >
-                <Popup>
-                  <b>Driver:</b> {driver.name || driver.phone || driver.id}
-                  <br />
-                  <b>Vehicle:</b> {driver.vehicleType || "Unknown"}
-                  <br />
-                  <b>Status:</b> Online
-                </Popup>
-              </Marker>
-            )
-          ))}
-          {/* Customers (origin of filtered rides) */}
+          {/* Driver markers */}
+          {filteredDrivers.map(driver => {
+            if (driver.lat && driver.lng) {
+              console.log("Rendering driver marker:", driver);
+              return (
+                <Marker
+                  key={`driver-${driver.id}`}
+                  position={[driver.lat, driver.lng]}
+                  icon={driverIcon}
+                >
+                  <Popup>
+                    <b>Driver:</b> {driver.name || driver.phone || driver.id}
+                    <br />
+                    <b>Vehicle:</b> {driver.vehicleType || "Unknown"}
+                    <br />
+                    <b>Status:</b> Online
+                  </Popup>
+                </Marker>
+              );
+            }
+            return null;
+          })}
+          {/* Customer (ride origin) markers */}
           {filteredRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
@@ -230,7 +245,7 @@ export default function AdminLiveMap() {
               </Marker>
             )
           ))}
-          {/* Polylines for filtered rides */}
+          {/* Ride polylines */}
           {filteredRides.map(ride => (
             ride.originLat && ride.originLng && ride.destLat && ride.destLng ? (
               <Polyline
