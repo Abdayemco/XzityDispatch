@@ -13,6 +13,14 @@ type Driver = {
   lng: number;
   online?: boolean;
 };
+type Customer = {
+  id: string | number;
+  name?: string;
+  phone?: string;
+  lat: number;
+  lng: number;
+  online?: boolean;
+};
 type Ride = {
   id: string | number;
   customer?: { name?: string; id?: string | number };
@@ -55,6 +63,7 @@ const excludedStatuses = ["completed", "canceled", "cancelled", "done"];
 
 export default function AdminLiveMap() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -101,23 +110,30 @@ export default function AdminLiveMap() {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       };
-      const [driversRes, ridesRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/drivers`, { headers, credentials: "include" }),
+      // Use new endpoints for only online drivers/customers with location
+      const [driversRes, customersRes, ridesRes] = await Promise.all([
+        fetch(`${API_URL}/api/admin/map/drivers`, { headers, credentials: "include" }),
+        fetch(`${API_URL}/api/admin/map/customers`, { headers, credentials: "include" }),
         fetch(`${API_URL}/api/admin/rides`, { headers, credentials: "include" }),
       ]);
-      if (!driversRes.ok || !ridesRes.ok) {
+      if (!driversRes.ok || !customersRes.ok || !ridesRes.ok) {
         let msg = "Failed to fetch map data.";
         if (!driversRes.ok) {
           try { const data = await driversRes.json(); msg = data.error || msg; } catch {}
         }
+        if (!customersRes.ok) {
+          try { const data = await customersRes.json(); msg = data.error || msg; } catch {}
+        }
         if (!ridesRes.ok) {
           try { const data = await ridesRes.json(); msg = data.error || msg; } catch {}
         }
-        throw new Error(msg + ` (${driversRes.status}/${ridesRes.status})`);
+        throw new Error(msg + ` (${driversRes.status}/${customersRes.status}/${ridesRes.status})`);
       }
       const driversData = await driversRes.json();
+      const customersData = await customersRes.json();
       const ridesData = await ridesRes.json();
       setDrivers(Array.isArray(driversData) ? driversData : []);
+      setCustomers(Array.isArray(customersData) ? customersData : []);
       setRides(Array.isArray(ridesData) ? ridesData : []);
     } catch (e: any) {
       setError(e.message || "Failed to fetch map data.");
@@ -133,8 +149,9 @@ export default function AdminLiveMap() {
     return () => clearInterval(interval);
   }, [token]);
 
-  // DEBUG: Log drivers and rides
+  // DEBUG: Log drivers, customers, and rides
   console.log("filteredDrivers:", drivers);
+  console.log("filteredCustomers:", customers);
   console.log("filteredRides:", rides);
 
   const filteredRides = rides.filter(
@@ -142,15 +159,6 @@ export default function AdminLiveMap() {
       r.status &&
       !excludedStatuses.includes(r.status.toLowerCase())
   );
-
-  // Uncomment below to force dummy drivers for visibility test
-  /*
-  const filteredDrivers = [
-    { id: 1, lat: 30.045, lng: 31.235, name: "Test Driver 1" },
-    { id: 2, lat: 30.046, lng: 31.236, name: "Test Driver 2" }
-  ];
-  */
-  const filteredDrivers = drivers;
 
   return (
     <div style={{ padding: 24 }}>
@@ -202,32 +210,44 @@ export default function AdminLiveMap() {
             </Marker>
           )}
           {/* Driver markers */}
-          {filteredDrivers.map(driver => {
-            if (driver.lat && driver.lng) {
-              console.log("Rendering driver marker:", driver);
-              return (
-                <Marker
-                  key={`driver-${driver.id}`}
-                  position={[driver.lat, driver.lng]}
-                  icon={driverIcon}
-                >
-                  <Popup>
-                    <b>Driver:</b> {driver.name || driver.phone || driver.id}
-                    <br />
-                    <b>Vehicle:</b> {driver.vehicleType || "Unknown"}
-                    <br />
-                    <b>Status:</b> Online
-                  </Popup>
-                </Marker>
-              );
-            }
-            return null;
-          })}
+          {drivers.map(driver => (
+            driver.lat && driver.lng ? (
+              <Marker
+                key={`driver-${driver.id}`}
+                position={[driver.lat, driver.lng]}
+                icon={driverIcon}
+              >
+                <Popup>
+                  <b>Driver:</b> {driver.name || driver.phone || driver.id}
+                  <br />
+                  <b>Vehicle:</b> {driver.vehicleType || "Unknown"}
+                  <br />
+                  <b>Status:</b> Online
+                </Popup>
+              </Marker>
+            ) : null
+          ))}
+          {/* Customer markers */}
+          {customers.map(customer => (
+            customer.lat && customer.lng ? (
+              <Marker
+                key={`customer-${customer.id}`}
+                position={[customer.lat, customer.lng]}
+                icon={customerIcon}
+              >
+                <Popup>
+                  <b>Customer:</b> {customer.name || customer.phone || customer.id}
+                  <br />
+                  <b>Status:</b> Online
+                </Popup>
+              </Marker>
+            ) : null
+          ))}
           {/* Customer (ride origin) markers */}
           {filteredRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
-                key={`customer-${ride.id}`}
+                key={`ride-customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
                 icon={customerIcon}
               >
@@ -261,7 +281,7 @@ export default function AdminLiveMap() {
         </MapContainer>
       )}
       <div style={{ textAlign: "center", marginTop: 16, color: "#555" }}>
-        Showing <b>{filteredDrivers.length}</b> drivers and <b>{filteredRides.length}</b> rides (excluding completed/canceled).
+        Showing <b>{drivers.length}</b> drivers, <b>{customers.length}</b> customers, and <b>{filteredRides.length}</b> rides (excluding completed/canceled).
       </div>
     </div>
   );
