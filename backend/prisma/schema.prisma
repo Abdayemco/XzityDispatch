@@ -60,6 +60,11 @@ model User {
   subscriptionFee        Float?         @default(0)
   paymentMethod          String?        // e.g. "credit_card", "wish", "omt", etc.
   isSubscriptionDisabled Boolean?       @default(false)
+
+  // --- Location fields for map display ---
+  lat         Float?     // <--- ADD THIS LINE
+  lng         Float?     // <--- ADD THIS LINE
+  online      Boolean?   @default(false) // <--- ADD THIS LINE (if you want to show only online drivers)
 }
 
 model Ride {
