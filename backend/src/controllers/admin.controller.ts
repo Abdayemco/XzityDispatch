@@ -1,17 +1,26 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
+import { RideStatus } from "@prisma/client";
 
 // --- DRIVERS ---
 export const getDrivers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const drivers = await prisma.user.findMany({
-      where: { role: "DRIVER", online: true },
+      where: { 
+        role: "DRIVER", 
+        online: true, 
+        lat: { not: null },
+        lng: { not: null }
+      },
       select: {
         id: true,
         name: true,
         phone: true,
         email: true,
         avatar: true,
+        lat: true,
+        lng: true,
+        online: true,
         trialStart: true,
         trialEnd: true,
         subscriptionStatus: true,
@@ -19,7 +28,6 @@ export const getDrivers = async (req: Request, res: Response, next: NextFunction
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
-        online: true, // Add online field if you want to see it in the results
       },
       orderBy: { id: "desc" },
     });
@@ -40,6 +48,9 @@ export const getDriver = async (req: Request, res: Response, next: NextFunction)
         phone: true,
         email: true,
         avatar: true,
+        lat: true,
+        lng: true,
+        online: true,
         trialStart: true,
         trialEnd: true,
         subscriptionStatus: true,
@@ -47,7 +58,6 @@ export const getDriver = async (req: Request, res: Response, next: NextFunction)
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
-        online: true,
       },
     });
     if (!driver) return res.status(404).json({ error: "Driver not found" });
@@ -68,6 +78,9 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
       paymentMethod,
       isSubscriptionDisabled,
       disabled,
+      lat,
+      lng,
+      online
     } = req.body;
 
     const driver = await prisma.user.findUnique({ where: { id } });
@@ -84,6 +97,9 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
         paymentMethod,
         isSubscriptionDisabled,
         disabled,
+        lat,
+        lng,
+        online
       },
       select: {
         id: true,
@@ -91,6 +107,9 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
         phone: true,
         email: true,
         avatar: true,
+        lat: true,
+        lng: true,
+        online: true,
         trialStart: true,
         trialEnd: true,
         subscriptionStatus: true,
@@ -98,7 +117,6 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
-        online: true,
       }
     });
     res.json(updated);
@@ -119,7 +137,6 @@ export const getCustomers = async (req: Request, res: Response, next: NextFuncti
         email: true,
         avatar: true,
         disabled: true,
-        // createdAt: true,  <-- REMOVE THIS LINE!
       },
       orderBy: { id: "desc" },
     });
@@ -147,7 +164,6 @@ export const blockCustomer = async (req: Request, res: Response, next: NextFunct
         email: true,
         avatar: true,
         disabled: true,
-        // createdAt: true,  <-- REMOVE THIS LINE!
       },
     });
     res.json(updated);
@@ -163,14 +179,20 @@ export const getRides = async (req: Request, res: Response, next: NextFunction) 
     const statusParam = (req.query.status as string)?.toLowerCase();
     let statusFilter = undefined;
 
-    // Define "live" statuses
-    const liveStatuses = ["active", "ongoing", "in_progress"];
+    // Define "live" statuses using enum
+    const liveStatuses: RideStatus[] = [
+      RideStatus.ACCEPTED,
+      RideStatus.IN_PROGRESS
+    ];
+    const notDoneStatuses: RideStatus[] = [
+      RideStatus.COMPLETED,
+      RideStatus.CANCELLED
+    ];
 
     if (statusParam === "live") {
       statusFilter = { status: { in: liveStatuses } };
     } else if (statusParam === "not_done") {
-      // All except completed/canceled/done
-      statusFilter = { status: { notIn: ["completed", "canceled", "cancelled", "done"] } };
+      statusFilter = { status: { notIn: notDoneStatuses } };
     }
     // Default: show all (no filter) if not specified
 
