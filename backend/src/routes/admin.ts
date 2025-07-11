@@ -75,6 +75,35 @@ router.get("/pending-drivers", isAdmin, async (req, res) => {
   }
 });
 
+// --- NEW: List all online drivers with location for admin live map ---
+router.get("/drivers", isAdmin, async (req, res) => {
+  console.log("HIT /api/admin/drivers");
+  try {
+    const drivers = await prisma.user.findMany({
+      where: {
+        role: "DRIVER",
+        online: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        vehicleType: true,
+        lat: true,        // <-- Location
+        lng: true,        // <-- Location
+        online: true,
+        disabled: true,
+      },
+      orderBy: { id: "desc" },
+    });
+    console.log("DRIVERS FETCHED:", drivers.length);
+    res.json(drivers);
+  } catch (error) {
+    console.error("Failed to fetch drivers:", error);
+    res.status(500).json({ error: "Failed to fetch drivers" });
+  }
+});
+
 // PATCH block/unblock user (used by frontend)
 router.patch("/users/:userId/block", isAdmin, async (req, res) => {
   try {
