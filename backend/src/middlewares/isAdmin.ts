@@ -5,10 +5,9 @@ import { prisma } from "../utils/prisma";
 /**
  * isAdmin middleware:
  * - Authenticates the JWT token
- * - Checks user is admin (role = "admin")
+ * - Checks user is admin (role = "admin" case-insensitive)
  * - Checks user is not disabled
- * - If any check fails, responds with appropriate error
- * - Otherwise, attaches user payload to req.user and calls next()
+ * - Attaches full user object to req.user for downstream handlers
  */
 export const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -38,12 +37,13 @@ export const isAdmin = async (req: Request, res: Response, next: NextFunction) =
     }
     if (user.disabled) {
       return res.status(403).json({
-        error: "Your account is currently on hold. Kindly call the administrator to reinstate your account."
+        error:
+          "Your account is currently on hold. Kindly call the administrator to reinstate your account.",
       });
     }
 
-    // Attach user info to req for downstream handlers
-    req.user = payload;
+    // Attach full user object to req.user for downstream handlers
+    req.user = user;
 
     next();
   } catch (error) {
