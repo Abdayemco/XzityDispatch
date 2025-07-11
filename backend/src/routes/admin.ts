@@ -66,13 +66,12 @@ router.get("/pending-drivers", isAdmin, async (req, res) => {
   }
 });
 
-// List all online drivers with location for admin live map
+// List all drivers with location for admin live map (regardless of online status)
 router.get("/drivers", isAdmin, async (req, res) => {
   try {
     const drivers = await prisma.user.findMany({
       where: {
         role: "DRIVER",
-        online: true,
         lat: { not: null },
         lng: { not: null },
       },
