@@ -7,6 +7,7 @@ import testRoutes from "./routes/test.routes";
 import adminRoutes from "./routes/admin.routes";
 import contactRouter from "./routes/contact";
 import chatRoutes from "./routes/chat";
+import driverRoutes from "./routes/driver.routes"; // <-- ADD THIS LINE
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -55,6 +56,7 @@ app.use((req: any, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/driver", driverRoutes); // <-- ADD THIS LINE
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);

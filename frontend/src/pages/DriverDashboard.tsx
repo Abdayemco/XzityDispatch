@@ -138,18 +138,56 @@ export default function DriverDashboard() {
     if (!token) navigate("/login", { replace: true });
   }, [navigate, token]);
 
+  // --- NEW: Update driver location/status on backend ---
+  const updateDriverLocationOnBackend = useCallback(
+    async (lat: number, lng: number) => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      try {
+        await fetch(`${API_URL}/api/driver/location`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ lat, lng, online: true })
+        });
+      } catch (e) {
+        // Optionally: show error or log
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setDriverLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationLoaded(true);
+
+        // Update backend with initial location
+        updateDriverLocationOnBackend(pos.coords.latitude, pos.coords.longitude);
       },
       () => {
+        // Fallback location (London)
         setDriverLocation({ lat: 51.505, lng: -0.09 });
         setLocationLoaded(true);
+
+        // Update backend with fallback location
+        updateDriverLocationOnBackend(51.505, -0.09);
       }
     );
+    // Only want to run once on mount
+    // eslint-disable-next-line
   }, []);
+
+  // If driverLocation changes (for example, you want to update periodically as driver moves)
+  useEffect(() => {
+    if (driverLocation && locationLoaded) {
+      updateDriverLocationOnBackend(driverLocation.lat, driverLocation.lng);
+    }
+    // You can add a timer here to update every N seconds if needed
+  }, [driverLocation, locationLoaded, updateDriverLocationOnBackend]);
 
   const fetchJobs = useCallback(async () => {
     try {
