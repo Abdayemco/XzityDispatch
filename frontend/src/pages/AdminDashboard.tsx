@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
-import PendingDriversList from "../components/PendingDriversList"; // Make sure the path is correct
+import PendingDriversList from "../components/PendingDriversList";
+import AdminDriversTable from "../components/AdminDriversTable";
+import AdminCustomersTable from "../components/AdminCustomersTable";
 
 /**
  * AdminDashboard
  * - Shows tabbed views for: All Drivers, All Customers, All Rides, Approvals
- * - Fetches data for each tab when selected
- * - Allows blocking/unblocking users from the users tab
+ * - Uses advanced tables for drivers/customers (sortable/filterable/searchable)
  */
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -16,10 +17,6 @@ export default function AdminDashboard() {
 
   // UI state
   const [activeTab, setActiveTab] = useState("users");
-
-  // Data state
-  const [users, setUsers] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
   const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,246 +26,29 @@ export default function AdminDashboard() {
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
 
-  // Auth guard
   useEffect(() => {
     if (!token || role !== "admin") {
       navigate("/login", { replace: true });
     }
   }, [navigate, token, role]);
 
-  // Fetchers
+  // Fetch rides for rides tab
   useEffect(() => {
+    if (activeTab !== "rides") return;
     setError("");
     setLoading(true);
-
-    const fetchUsers = async () => {
-      try {
-        // Fetch drivers from the backend
-        const res = await fetch(`${API_URL}/api/admin/drivers`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to fetch users");
-        const data = await res.json();
-        setUsers(data);
-      } catch (e) {
-        setError("Failed to load users.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchCustomers = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/admin/customers`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to fetch customers");
-        const data = await res.json();
-        setCustomers(data);
-      } catch (e) {
-        setError("Failed to load customers.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchRides = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/admin/rides`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
+    fetch(`${API_URL}/api/admin/rides`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
+      .then(async (res) => {
         if (!res.ok) throw new Error("Failed to fetch rides");
         const data = await res.json();
         setRides(data);
-      } catch (e) {
-        setError("Failed to load rides.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (activeTab === "users") fetchUsers();
-    if (activeTab === "customers") fetchCustomers();
-    if (activeTab === "rides") fetchRides();
-    // No need to fetch pending drivers here anymore!
-    // eslint-disable-next-line
-  }, [activeTab, token]);
-
-  // Block/Unblock user (drivers)
-  async function handleBlockToggle(userId: string, isBlocked: boolean) {
-    try {
-      setLoading(true);
-      setError("");
-      // Patch to /api/admin/drivers/:id/subscription to update 'disabled' status
-      const res = await fetch(`${API_URL}/api/admin/drivers/${userId}/subscription`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ isSubscriptionDisabled: !isBlocked, disabled: !isBlocked }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to update user status");
-      }
-      // Update users state to reflect changed status
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId ? { ...u, disabled: !isBlocked } : u
-        )
-      );
-    } catch (e: any) {
-      setError(e.message || "Failed to update user status.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Block/Unblock customer (optional, similar logic, update endpoint if needed)
-  async function handleBlockToggleCustomer(customerId: string, isBlocked: boolean) {
-    try {
-      setLoading(true);
-      setError("");
-      // Patch to /api/admin/customers/:id/block (implement backend if needed)
-      const res = await fetch(`${API_URL}/api/admin/customers/${customerId}/block`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ disabled: !isBlocked }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to update customer status");
-      }
-      // Update customers state to reflect changed status
-      setCustomers((prev) =>
-        prev.map((u) =>
-          u.id === customerId ? { ...u, disabled: !isBlocked } : u
-        )
-      );
-    } catch (e: any) {
-      setError(e.message || "Failed to update customer status.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Section renderers
-  function renderUsers() {
-    return (
-      <div style={{ margin: "30px auto", maxWidth: 900 }}>
-        <h3>All Drivers</h3>
-        {loading && <p>Loading drivers...</p>}
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {!loading && !error && (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Phone</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Trial Start</th>
-                <th style={thStyle}>Trial End</th>
-                <th style={thStyle}>Subscription Status</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Block/Unblock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td style={tdStyle}>{u.name}</td>
-                  <td style={tdStyle}>{u.phone}</td>
-                  <td style={tdStyle}>{u.email}</td>
-                  <td style={tdStyle}>{u.trialStart ? new Date(u.trialStart).toLocaleDateString() : "-"}</td>
-                  <td style={tdStyle}>{u.trialEnd ? new Date(u.trialEnd).toLocaleDateString() : "-"}</td>
-                  <td style={tdStyle}>{u.subscriptionStatus || "-"}</td>
-                  <td style={tdStyle}>{u.disabled ? "Blocked" : "Active"}</td>
-                  <td style={tdStyle}>
-                    <button
-                      style={{
-                        padding: "6px 16px",
-                        background: u.disabled ? "#388e3c" : "#d32f2f",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: loading ? "not-allowed" : "pointer",
-                        fontWeight: 600,
-                        fontSize: 14,
-                        transition: "background 0.2s",
-                      }}
-                      disabled={loading}
-                      onClick={() => handleBlockToggle(u.id, u.disabled)}
-                    >
-                      {u.disabled ? "Unblock" : "Block"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  }
-
-  function renderCustomers() {
-    return (
-      <div style={{ margin: "30px auto", maxWidth: 900 }}>
-        <h3>All Customers</h3>
-        {loading && <p>Loading customers...</p>}
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {!loading && !error && (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Phone</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Block/Unblock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((u) => (
-                <tr key={u.id}>
-                  <td style={tdStyle}>{u.name}</td>
-                  <td style={tdStyle}>{u.phone}</td>
-                  <td style={tdStyle}>{u.email}</td>
-                  <td style={tdStyle}>{u.disabled ? "Blocked" : "Active"}</td>
-                  <td style={tdStyle}>
-                    <button
-                      style={{
-                        padding: "6px 16px",
-                        background: u.disabled ? "#388e3c" : "#d32f2f",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: loading ? "not-allowed" : "pointer",
-                        fontWeight: 600,
-                        fontSize: 14,
-                        transition: "background 0.2s",
-                      }}
-                      disabled={loading}
-                      onClick={() => handleBlockToggleCustomer(u.id, u.disabled)}
-                    >
-                      {u.disabled ? "Unblock" : "Block"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  }
+      })
+      .catch(() => setError("Failed to load rides."))
+      .finally(() => setLoading(false));
+  }, [activeTab, token, API_URL]);
 
   function renderRides() {
     return (
@@ -361,8 +141,8 @@ export default function AdminDashboard() {
           onClick={() => setActiveTab("approvals")}
         />
       </div>
-      {activeTab === "users" && renderUsers()}
-      {activeTab === "customers" && renderCustomers()}
+      {activeTab === "users" && <AdminDriversTable />}
+      {activeTab === "customers" && <AdminCustomersTable />}
       {activeTab === "rides" && renderRides()}
       {activeTab === "approvals" && (
         <div style={{ margin: "30px auto", maxWidth: 900 }}>
