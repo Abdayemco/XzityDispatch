@@ -5,11 +5,6 @@ import PendingDriversList from "../components/PendingDriversList";
 import AdminDriversTable from "../components/AdminDriversTable";
 import AdminCustomersTable from "../components/AdminCustomersTable";
 
-/**
- * AdminDashboard
- * - Shows tabbed views for: All Drivers, All Customers, All Rides, Approvals
- * - Uses advanced tables for drivers/customers (sortable/filterable/searchable)
- */
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -21,7 +16,6 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // --- API BASE ---
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
@@ -154,7 +148,6 @@ export default function AdminDashboard() {
   );
 }
 
-// --- Styling helpers and TabIcon ---
 const tabBarStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "center",
