@@ -4,6 +4,77 @@ import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useNavigate } from "react-router-dom";
 
+// --- Import all vehicle icons (same as dashboard) ---
+import carIcon from "../assets/marker-car.png";
+import deliveryIcon from "../assets/marker-delivery.png";
+import tuktukIcon from "../assets/marker-toktok.png";
+import truckIcon from "../assets/marker-truck.png";
+import waterTruckIcon from "../assets/marker-watertruck.png";
+import towTruckIcon from "../assets/marker-towtruck.png";
+import wheelchairIcon from "../assets/marker-wheelchair.png";
+import markerCustomer from "../assets/marker-customer.png"; // for ride origins
+
+// --- Utility to get the correct vehicle icon PNG for a vehicleType ---
+const VEHICLE_TYPE_MARKERS: Record<string, string> = {
+  car: carIcon,
+  CAR: carIcon,
+  delivery: deliveryIcon,
+  DELIVERY: deliveryIcon,
+  tuktuk: tuktukIcon,
+  TUKTUK: tuktukIcon,
+  truck: truckIcon,
+  TRUCK: truckIcon,
+  water_truck: waterTruckIcon,
+  WATER_TRUCK: waterTruckIcon,
+  tow_truck: towTruckIcon,
+  TOW_TRUCK: towTruckIcon,
+  wheelchair: wheelchairIcon,
+  WHEELCHAIR: wheelchairIcon,
+};
+
+function getVehicleMarkerIcon(vehicleType: string | undefined): string {
+  if (!vehicleType) return carIcon;
+  return VEHICLE_TYPE_MARKERS[vehicleType] || VEHICLE_TYPE_MARKERS[vehicleType.toLowerCase()] || carIcon;
+}
+
+// --- Utility: create a Leaflet icon with optional grayscale ---
+function createLeafletIcon(url: string, w = 32, h = 41, grayscale = false) {
+  // Use an HTML divIcon to apply CSS grayscale filter if needed
+  if (grayscale) {
+    return L.divIcon({
+      className: "",
+      html: `<img src="${url}" style="width:${w}px;height:${h}px;filter: grayscale(100%);" />`,
+      iconSize: [w, h],
+      iconAnchor: [w / 2, h],
+      popupAnchor: [0, -h + 10],
+      shadowUrl: undefined,
+    });
+  } else {
+    return L.icon({
+      iconUrl: url,
+      iconSize: [w, h],
+      iconAnchor: [w / 2, h],
+      popupAnchor: [0, -h + 10],
+      shadowUrl: undefined,
+    });
+  }
+}
+
+// --- Admin marker (blue) ---
+const adminIcon = L.icon({
+  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
+});
+
+const API_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+  : "";
+
+const excludedStatuses = ["completed", "canceled", "cancelled", "done"];
+
 type Driver = {
   id: string | number;
   name?: string;
@@ -17,6 +88,7 @@ type Customer = {
   id: string | number;
   name?: string;
   phone?: string;
+  vehicleType?: string;
   lat: number;
   lng: number;
   online?: boolean;
@@ -30,36 +102,8 @@ type Ride = {
   originLng: number;
   destLat?: number;
   destLng?: number;
+  vehicleType?: string;
 };
-
-// Default Leaflet color marker icons from https://github.com/pointhi/leaflet-color-markers
-const adminIcon = new L.Icon({
-  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
-});
-const driverIcon = new L.Icon({
-  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-yellow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
-});
-const customerIcon = new L.Icon({
-  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-red.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png"
-});
-
-const API_URL = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
-  : "";
-
-const excludedStatuses = ["completed", "canceled", "cancelled", "done"];
 
 export default function AdminLiveMap() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -110,7 +154,6 @@ export default function AdminLiveMap() {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       };
-      // Use new endpoints for only online drivers/customers with location
       const [driversRes, customersRes, ridesRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/map/drivers`, { headers, credentials: "include" }),
         fetch(`${API_URL}/api/admin/map/customers`, { headers, credentials: "include" }),
@@ -148,11 +191,6 @@ export default function AdminLiveMap() {
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [token]);
-
-  // DEBUG: Log drivers, customers, and rides
-  console.log("filteredDrivers:", drivers);
-  console.log("filteredCustomers:", customers);
-  console.log("filteredRides:", rides);
 
   const filteredRides = rides.filter(
     (r) =>
@@ -209,36 +247,38 @@ export default function AdminLiveMap() {
               </Popup>
             </Marker>
           )}
-          {/* Driver markers */}
+          {/* Driver markers (grayscale vehicle PNG) */}
           {drivers.map(driver => (
             driver.lat && driver.lng ? (
               <Marker
                 key={`driver-${driver.id}`}
                 position={[driver.lat, driver.lng]}
-                icon={driverIcon}
+                icon={createLeafletIcon(getVehicleMarkerIcon(driver.vehicleType), 32, 41, true)} // grayscale
               >
                 <Popup>
                   <b>Driver:</b> {driver.name || driver.phone || driver.id}
                   <br />
                   <b>Vehicle:</b> {driver.vehicleType || "Unknown"}
                   <br />
-                  <b>Status:</b> Online
+                  <b>Status:</b> {driver.online ? "Online" : "Offline"}
                 </Popup>
               </Marker>
             ) : null
           ))}
-          {/* Customer markers */}
+          {/* Customer markers (full color vehicle PNG) */}
           {customers.map(customer => (
             customer.lat && customer.lng ? (
               <Marker
                 key={`customer-${customer.id}`}
                 position={[customer.lat, customer.lng]}
-                icon={customerIcon}
+                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)} // full color
               >
                 <Popup>
                   <b>Customer:</b> {customer.name || customer.phone || customer.id}
                   <br />
-                  <b>Status:</b> Online
+                  <b>Vehicle:</b> {customer.vehicleType || "Unknown"}
+                  <br />
+                  <b>Status:</b> {customer.online ? "Online" : "Offline"}
                 </Popup>
               </Marker>
             ) : null
@@ -249,7 +289,7 @@ export default function AdminLiveMap() {
               <Marker
                 key={`ride-customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
-                icon={customerIcon}
+                icon={createLeafletIcon(markerCustomer, 32, 41, false)}
               >
                 <Popup>
                   <b>Customer:</b> {ride.customer?.name || ride.customerId}
