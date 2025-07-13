@@ -70,7 +70,7 @@ model User {
   // --- New fields for phone-based location ---
   country         String?   // ISO country code, e.g. "LB"
   countryName     String?   // Human readable, e.g. "Lebanon"
-  area            String?   // Area/prefix, e.g. "71" or "212"
+  area            String?   // Area/prefix, e.g. "70" or "212"
 }
 
 model Ride {
