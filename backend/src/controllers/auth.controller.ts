@@ -3,7 +3,32 @@ import { prisma } from "../utils/prisma";
 import transporter from "../config/email";
 import jwt from "jsonwebtoken";
 
+// ---- Add this import for phone parsing ----
+import parsePhoneNumber from "libphonenumber-js";
+
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
+
+// --- Helper function to get country and area from phone ---
+function detectCountryArea(phone: string) {
+  try {
+    const phoneNumber = parsePhoneNumber(phone);
+    if (!phoneNumber) return { country: null, area: null };
+    const country = phoneNumber.country || null;
+    // Area: get the national number and take first few digits as area code
+    // You may want a more advanced mapping based on the country
+    const nationalNumber = phoneNumber.nationalNumber || "";
+    let area = null;
+    if (country === "LB") { // Lebanon
+      // Lebanese mobile prefixes: 70, 71, 76, 78, 79, 81, 03, etc.
+      // We'll take first 2 digits for area code
+      area = nationalNumber.slice(0, 2);
+    }
+    // You can add more mappings for other countries here
+    return { country, area };
+  } catch (err) {
+    return { country: null, area: null };
+  }
+}
 
 // --- REGISTER CONTROLLER ---
 export const register = async (req: Request, res: Response, next: NextFunction) => {
@@ -46,6 +71,9 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       subscriptionStatus = "trial";
     }
 
+    // --- Detect Country and Area from Phone ---
+    const { country, area } = detectCountryArea(phone.trim());
+
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
@@ -58,10 +86,12 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         phoneVerified: false,
         disabled: false,
         avatar: avatar?.trim() || null,
-        // Add the new fields below
         trialStart,
         trialEnd,
         subscriptionStatus,
+        // --- Add country and area ---
+        country,
+        area,
       },
     });
 
@@ -92,6 +122,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // --- LOGIN CONTROLLER ---
+// (No change needed for country/area detection here)
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone, deviceId } = req.body;
