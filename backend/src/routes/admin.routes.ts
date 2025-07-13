@@ -3,19 +3,41 @@ import { isAdmin } from "../middlewares/isAdmin";
 import { prisma } from "../utils/prisma";
 
 // Helper to get safe sort params
-function getSortParams(query: any, allowedFields: string[], defaultField: string = "id", defaultOrder: string = "desc") {
+function getSortParams(query: any, allowedFields: string[], defaultField = "id", defaultOrder = "desc") {
   const sortBy = allowedFields.includes(query.sortBy) ? query.sortBy : defaultField;
   const order = (query.order === "asc" || query.order === "desc") ? query.order : defaultOrder;
   return { sortBy, order };
 }
 
+// Helper for pagination
+function getPagination(query: any, defaultLimit = 50) {
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || defaultLimit));
+  const offset = Math.max(0, Number(query.offset) || 0);
+  return { take: limit, skip: offset };
+}
+
+// Helper for location radius filtering (Haversine formula)
+function locationRadiusFilter(query: any) {
+  const lat = query.lat ? Number(query.lat) : undefined;
+  const lng = query.lng ? Number(query.lng) : undefined;
+  const radiusKm = query.radiusKm ? Number(query.radiusKm) : undefined;
+  if (!lat || !lng || !radiusKm) return undefined;
+  // This assumes lat/lng are stored as Float in Prisma, and you want a simple filter
+  // For performance, you may want to use PostGIS or similar for geospatial queries
+  // Here, we filter with a bounding box for simplicity
+  const deltaLat = radiusKm / 111; // ~111km per degree latitude
+  const deltaLng = radiusKm / (111 * Math.cos(lat * Math.PI / 180));
+  return {
+    lat: { gte: lat - deltaLat, lte: lat + deltaLat },
+    lng: { gte: lng - deltaLng, lte: lng + deltaLng },
+  };
+}
+
 const router = Router();
 
-// Apply isAdmin middleware to all admin endpoints
 router.use(isAdmin);
 
 // --- Live Map Endpoints ---
-// Online drivers with location (for admin map)
 router.get("/map/drivers", async (req, res) => {
   try {
     const drivers = await prisma.user.findMany({
@@ -43,7 +65,6 @@ router.get("/map/drivers", async (req, res) => {
   }
 });
 
-// Online customers with location (for admin map)
 router.get("/map/customers", async (req, res) => {
   try {
     const customers = await prisma.user.findMany({
@@ -57,6 +78,7 @@ router.get("/map/customers", async (req, res) => {
         id: true,
         name: true,
         phone: true,
+        vehicleType: true,
         lat: true,
         lng: true,
         online: true,
@@ -70,24 +92,51 @@ router.get("/map/customers", async (req, res) => {
   }
 });
 
-// --- Drivers (all drivers, sortable) ---
+// --- Advanced Drivers endpoint ---
 router.get("/drivers", async (req, res) => {
   try {
     const allowedFields = [
-      "id", "name", "phone", "email", "avatar",
-      "trialStart", "trialEnd", "subscriptionStatus",
-      "subscriptionFee", "paymentMethod", "isSubscriptionDisabled",
-      "disabled", "online"
+      "id", "name", "phone", "email", "avatar", "vehicleType",
+      "trialStart", "trialEnd", "subscriptionStatus", "subscriptionFee",
+      "paymentMethod", "isSubscriptionDisabled", "disabled", "online",
+      "lat", "lng"
+      // Add "area" here if you add it to your schema
     ];
     const { sortBy, order } = getSortParams(req.query, allowedFields, "id", "desc");
+    const { take, skip } = getPagination(req.query);
+
+    // Build "where" filter
+    const where: any = { role: "DRIVER" };
+    if (req.query.online !== undefined) where.online = req.query.online === "true";
+    if (req.query.disabled !== undefined) where.disabled = req.query.disabled === "true";
+    if (req.query.vehicleType) where.vehicleType = req.query.vehicleType;
+    if (req.query.subscriptionStatus) where.subscriptionStatus = req.query.subscriptionStatus;
+    if (req.query.lat) where.lat = Number(req.query.lat);
+    if (req.query.lng) where.lng = Number(req.query.lng);
+    // For location radius filter
+    Object.assign(where, locationRadiusFilter(req.query));
+    // For area filter (if you add area to schema)
+    if (req.query.area) where.area = req.query.area;
+
+    // Text search (by name, phone, email)
+    if (req.query.search) {
+      const search = String(req.query.search);
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } }
+      ];
+    }
+
     const drivers = await prisma.user.findMany({
-      where: { role: "DRIVER" },
+      where,
       select: {
         id: true,
         name: true,
         phone: true,
         email: true,
         avatar: true,
+        vehicleType: true,
         lat: true,
         lng: true,
         online: true,
@@ -98,8 +147,11 @@ router.get("/drivers", async (req, res) => {
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        // area: true, // uncomment if area in schema
       },
       orderBy: { [sortBy]: order },
+      skip,
+      take
     });
     res.json(drivers);
   } catch (error) {
@@ -107,7 +159,7 @@ router.get("/drivers", async (req, res) => {
   }
 });
 
-// Get a single driver
+// --- Single driver ---
 router.get("/drivers/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -119,6 +171,7 @@ router.get("/drivers/:id", async (req, res) => {
         phone: true,
         email: true,
         avatar: true,
+        vehicleType: true,
         lat: true,
         lng: true,
         online: true,
@@ -129,6 +182,7 @@ router.get("/drivers/:id", async (req, res) => {
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        // area: true,
       },
     });
     if (!driver) return res.status(404).json({ error: "Driver not found" });
@@ -138,7 +192,7 @@ router.get("/drivers/:id", async (req, res) => {
   }
 });
 
-// Update a driver's subscription & location & status
+// --- Update driver subscription/location/status ---
 router.patch("/drivers/:id/subscription", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -153,6 +207,7 @@ router.patch("/drivers/:id/subscription", async (req, res) => {
       lat,
       lng,
       online
+      // area // if you add area
     } = req.body;
 
     const driver = await prisma.user.findUnique({ where: { id } });
@@ -171,7 +226,8 @@ router.patch("/drivers/:id/subscription", async (req, res) => {
         disabled,
         lat,
         lng,
-        online
+        online,
+        // area
       },
       select: {
         id: true,
@@ -179,6 +235,7 @@ router.patch("/drivers/:id/subscription", async (req, res) => {
         phone: true,
         email: true,
         avatar: true,
+        vehicleType: true,
         lat: true,
         lng: true,
         online: true,
@@ -189,6 +246,7 @@ router.patch("/drivers/:id/subscription", async (req, res) => {
         paymentMethod: true,
         isSubscriptionDisabled: true,
         disabled: true,
+        // area: true,
       }
     });
     res.json(updated);
@@ -197,23 +255,52 @@ router.patch("/drivers/:id/subscription", async (req, res) => {
   }
 });
 
-// --- Customers (all customers, sortable) ---
+// --- Advanced Customers endpoint ---
 router.get("/customers", async (req, res) => {
   try {
-    const allowedFields = ["id", "name", "phone", "email", "avatar", "disabled", "online"];
+    const allowedFields = [
+      "id", "name", "phone", "email", "avatar", "disabled", "online", "lat", "lng"
+      // Add "area" if you add to schema
+    ];
     const { sortBy, order } = getSortParams(req.query, allowedFields, "id", "desc");
+    const { take, skip } = getPagination(req.query);
+
+    // Build "where" filter
+    const where: any = { role: "CUSTOMER" };
+    if (req.query.online !== undefined) where.online = req.query.online === "true";
+    if (req.query.disabled !== undefined) where.disabled = req.query.disabled === "true";
+    if (req.query.lat) where.lat = Number(req.query.lat);
+    if (req.query.lng) where.lng = Number(req.query.lng);
+    if (req.query.area) where.area = req.query.area;
+    Object.assign(where, locationRadiusFilter(req.query));
+
+    // Text search
+    if (req.query.search) {
+      const search = String(req.query.search);
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } }
+      ];
+    }
+
     const customers = await prisma.user.findMany({
-      where: { role: "CUSTOMER" },
+      where,
       select: {
         id: true,
         name: true,
         phone: true,
         email: true,
         avatar: true,
-        disabled: true,
+        lat: true,
+        lng: true,
         online: true,
+        disabled: true,
+        // area: true,
       },
       orderBy: { [sortBy]: order },
+      skip,
+      take
     });
     res.json(customers);
   } catch (error) {
@@ -221,7 +308,7 @@ router.get("/customers", async (req, res) => {
   }
 });
 
-// Block/unblock customer
+// --- Block/unblock customer ---
 router.patch("/customers/:id/block", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -241,6 +328,7 @@ router.patch("/customers/:id/block", async (req, res) => {
         avatar: true,
         disabled: true,
         online: true,
+        // area: true,
       },
     });
     res.json(updated);
@@ -249,17 +337,21 @@ router.patch("/customers/:id/block", async (req, res) => {
   }
 });
 
-// --- Rides (sortable by id, requestedAt) ---
+// --- Rides endpoint (sortable, paginated) ---
 router.get("/rides", async (req, res) => {
   try {
     const allowedFields = ["id", "requestedAt"];
     const { sortBy, order } = getSortParams(req.query, allowedFields, "requestedAt", "desc");
+    const { take, skip } = getPagination(req.query);
+
     const rides = await prisma.ride.findMany({
       include: {
         customer: { select: { id: true, name: true, phone: true, email: true } },
         driver: { select: { id: true, name: true, phone: true, email: true } },
       },
       orderBy: { [sortBy]: order },
+      skip,
+      take
     });
     res.json(rides);
   } catch (error) {
