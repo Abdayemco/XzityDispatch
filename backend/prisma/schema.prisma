@@ -21,6 +21,7 @@ enum VehicleType {
   WATER_TRUCK
   TOW_TRUCK
   WHEELCHAIR
+  LIMO
 }
 
 enum RideStatus {
@@ -48,7 +49,7 @@ model User {
   trustedDevices   TrustedDevice[]
   avatar           String?
 
-  // Chat relations (for direct access to chats if needed)
+  // Chat relations
   chatsAsCustomer  Chat[]          @relation("ChatCustomer")
   chatsAsDriver    Chat[]          @relation("ChatDriver")
   messages         Message[]
@@ -56,15 +57,20 @@ model User {
   // --- Subscription & Free Trial Fields for DRIVERS only ---
   trialStart             DateTime?      @map("trial_start")
   trialEnd               DateTime?      @map("trial_end")
-  subscriptionStatus     String?        @default("trial") // e.g. "trial", "active", "expired", "disabled"
+  subscriptionStatus     String?        @default("trial")
   subscriptionFee        Float?         @default(0)
-  paymentMethod          String?        // e.g. "credit_card", "wish", "omt", etc.
+  paymentMethod          String?
   isSubscriptionDisabled Boolean?       @default(false)
 
   // --- Location fields for map display ---
-  lat         Float?     // <--- ADD THIS LINE
-  lng         Float?     // <--- ADD THIS LINE
-  online      Boolean?   @default(false) // <--- ADD THIS LINE (if you want to show only online drivers)
+  lat         Float?
+  lng         Float?
+  online      Boolean?      @default(false)
+  
+  // --- New fields for phone-based location ---
+  country         String?   // ISO country code, e.g. "LB"
+  countryName     String?   // Human readable, e.g. "Lebanon"
+  area            String?   // Area/prefix, e.g. "71" or "212"
 }
 
 model Ride {
@@ -86,8 +92,6 @@ model Ride {
   vehicleType VehicleType
   rating      Int?
   feedback    String?
-
-  // Each ride can have one chat (1-1 rides)
   chat        Chat?
 }
 
@@ -97,7 +101,6 @@ model TrustedDevice {
   userId    Int
   deviceId  String
   addedAt   DateTime @default(now())
-
   @@unique([userId, deviceId])
 }
 

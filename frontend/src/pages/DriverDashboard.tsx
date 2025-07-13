@@ -13,6 +13,7 @@ const VEHICLE_TYPE_LABELS = {
   water_truck: { label: "Water Truck", icon: <FaTruckPickup /> },
   tow_truck: { label: "Tow Truck", icon: <FaTruckPickup /> },
   wheelchair: { label: "Wheelchair", icon: <FaWheelchair /> },
+  limo: { label: "Limo", icon: <FaCar style={{ transform: "scaleX(1.8)" }} /> }, // Added Limo type (using stretched car icon as placeholder)
 };
 
 type Job = {

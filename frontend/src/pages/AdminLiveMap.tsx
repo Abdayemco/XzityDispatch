@@ -12,6 +12,7 @@ import truckIcon from "../assets/marker-truck.png";
 import waterTruckIcon from "../assets/marker-watertruck.png";
 import towTruckIcon from "../assets/marker-towtruck.png";
 import wheelchairIcon from "../assets/marker-wheelchair.png";
+import limoIcon from "../assets/marker-limo.png";
 import markerCustomer from "../assets/marker-customer.png"; // for ride origins
 
 // --- Utility to get the correct vehicle icon PNG for a vehicleType ---
@@ -30,6 +31,8 @@ const VEHICLE_TYPE_MARKERS: Record<string, string> = {
   TOW_TRUCK: towTruckIcon,
   wheelchair: wheelchairIcon,
   WHEELCHAIR: wheelchairIcon,
+  limo: limoIcon,
+  LIMO: limoIcon,
 };
 
 function getVehicleMarkerIcon(vehicleType: string | undefined): string {
@@ -265,13 +268,13 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Customer markers (full color vehicle PNG) */}
+          {/* Customer markers (vehicle PNG based on requested ride type) */}
           {customers.map(customer => (
             customer.lat && customer.lng ? (
               <Marker
                 key={`customer-${customer.id}`}
                 position={[customer.lat, customer.lng]}
-                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)} // full color
+                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)} // colored vehicle icon
               >
                 <Popup>
                   <b>Customer:</b> {customer.name || customer.phone || customer.id}

@@ -25,6 +25,7 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   WATER_TRUCK: "Water Truck",
   TOW_TRUCK: "Tow Truck",
   WHEELCHAIR: "Wheelchair",
+  LIMO: "Limo", // <-- Added Limo here
 };
 
 export default function AdminDriversTable() {

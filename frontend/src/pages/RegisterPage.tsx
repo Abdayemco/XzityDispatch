@@ -13,6 +13,7 @@ const vehicleOptions = [
   { value: "water_truck", label: "Water Truck" },
   { value: "tow_truck", label: "Tow Truck" },
   { value: "wheelchair", label: "Wheelchair / Special Needs" },
+  { value: "limo", label: "Limo" }, // <-- Added Limo option
 ];
 
 // Utility: guess country from browser or IP
