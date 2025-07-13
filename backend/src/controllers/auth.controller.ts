@@ -2,9 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
 import transporter from "../config/email";
 import jwt from "jsonwebtoken";
-
-// ---- Add this import for phone parsing ----
 import parsePhoneNumber from "libphonenumber-js";
+import { getName } from "country-list";
 
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
 
@@ -12,21 +11,22 @@ const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
 function detectCountryArea(phone: string) {
   try {
     const phoneNumber = parsePhoneNumber(phone);
-    if (!phoneNumber) return { country: null, area: null };
+    if (!phoneNumber) return { country: null, countryName: null, area: null };
+    // ISO country code, e.g. "LB", "US", "FR", etc.
     const country = phoneNumber.country || null;
-    // Area: get the national number and take first few digits as area code
-    // You may want a more advanced mapping based on the country
+    // Human readable country name
+    const countryName = country ? getName(country) : null;
+    // Area: for most countries, first 2-4 digits of the national number (after country code)
+    // You can further customize for specific countries if needed
     const nationalNumber = phoneNumber.nationalNumber || "";
     let area = null;
-    if (country === "LB") { // Lebanon
-      // Lebanese mobile prefixes: 70, 71, 76, 78, 79, 81, 03, etc.
-      // We'll take first 2 digits for area code
-      area = nationalNumber.slice(0, 2);
+    if (nationalNumber.length >= 2) {
+      // Default: first 2-4 digits, tweak as needed for your use case
+      area = nationalNumber.slice(0, 4);
     }
-    // You can add more mappings for other countries here
-    return { country, area };
+    return { country, countryName, area };
   } catch (err) {
-    return { country: null, area: null };
+    return { country: null, countryName: null, area: null };
   }
 }
 
@@ -72,7 +72,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
 
     // --- Detect Country and Area from Phone ---
-    const { country, area } = detectCountryArea(phone.trim());
+    const { country, countryName, area } = detectCountryArea(phone.trim());
 
     const user = await prisma.user.create({
       data: {
@@ -89,9 +89,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         trialStart,
         trialEnd,
         subscriptionStatus,
-        // --- Add country and area ---
-        country,
-        area,
+        // --- Add country, countryName, and area ---
+        country,        // ISO code (e.g. "LB", "US")
+        countryName,    // Full name (e.g. "Lebanon", "United States")
+        area,           // Area code (first few digits of local number)
       },
     });
 
@@ -105,6 +106,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         `Name: ${name}`,
         `Phone: ${phone}`,
         `User Email: ${email?.trim() || "N/A"}`,
+        `Country: ${countryName || country || "N/A"}`,
+        `Area: ${area || "N/A"}`,
         `Verification Code: ${verificationCode}`,
         "",
         "Please send the verification code to the user via SMS or WhatsApp."
@@ -112,7 +115,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     });
 
     return res.status(201).json({
-      user: { id: user.id, phone: user.phone, email: user.email, avatar: user.avatar },
+      user: { id: user.id, phone: user.phone, email: user.email, avatar: user.avatar, country, countryName, area },
       message: "User registered. The admin has received the verification code and will contact you soon.",
     });
   } catch (error) {
@@ -122,7 +125,6 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // --- LOGIN CONTROLLER ---
-// (No change needed for country/area detection here)
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { phone, deviceId } = req.body;
@@ -193,6 +195,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           email: user.email,
           vehicleType: user.vehicleType || undefined,
           avatar: user.avatar || null,
+          country: user.country || null,
+          countryName: user.countryName || null,
+          area: user.area || null,
         }
       });
     }
@@ -282,6 +287,9 @@ export const verifyCode = async (req: Request, res: Response, next: NextFunction
         email: user.email,
         vehicleType: user.vehicleType || undefined,
         avatar: user.avatar || null,
+        country: user.country || null,
+        countryName: user.countryName || null,
+        area: user.area || null,
       }
     });
   } catch (error) {
