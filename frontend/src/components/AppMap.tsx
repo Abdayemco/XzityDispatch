@@ -10,8 +10,9 @@ import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 import towTruckIcon from "../assets/marker-towtruck.png";
 import wheelchairIcon from "../assets/marker-wheelchair.png";
+import limoIcon from "../assets/marker-limo.png"; // <-- Add limo icon
 
-// Updated getVehicleIcon to support TOW_TRUCK and WHEELCHAIR
+// Updated getVehicleIcon to support LIMO, TOW_TRUCK and WHEELCHAIR
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType.toUpperCase()) {
     case "CAR":
@@ -29,6 +30,8 @@ function getVehicleIcon(vehicleType: string) {
       return towTruckIcon;
     case "WHEELCHAIR":
       return wheelchairIcon;
+    case "LIMO":
+      return limoIcon; // <-- Add support for LIMO
     default:
       return carIcon;
   }
