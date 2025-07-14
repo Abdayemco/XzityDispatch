@@ -9,7 +9,7 @@ const VEHICLE_TYPE_LABELS = {
   car: { label: "Car", icon: <FaCar /> },
   tuktuk: { label: "Tuktuk", icon: <FaMotorcycle /> },
   delivery: { label: "Delivery", icon: <FaBox /> },
-  limo: { label: "Limo", icon: <FaLimo /> },
+  limo: { label: "Limo", icon: <FaLimo style={{ transform: "scaleX(1.8)" }} /> },
   wheelchair: { label: "Wheelchair", icon: <FaWheelchair /> },
   truck: { label: "Truck", icon: <FaTruck /> },
   water_truck: { label: "Water Truck", icon: <FaTruckPickup /> },
