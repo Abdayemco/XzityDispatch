@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
 import PendingDriversList from "../components/PendingDriversList";
-import AdminDriversTable from "../components/AdminDriversTable";
-import AdminCustomersTable from "../components/AdminCustomersTable";
+import AdminDriversTable from "../pages/AdminDriversTable";
+import AdminCustomersTable from "../pages/AdminCustomersTable";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
