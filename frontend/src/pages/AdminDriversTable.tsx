@@ -25,10 +25,14 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   WATER_TRUCK: "Water Truck",
   TOW_TRUCK: "Tow Truck",
   WHEELCHAIR: "Wheelchair",
-  LIMO: "Limo", // <-- Added Limo here
+  LIMO: "Limo",
 };
 
 export default function AdminDriversTable() {
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
+
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -57,7 +61,7 @@ export default function AdminDriversTable() {
     if (country) params.append("country", country);
     if (area) params.append("area", area);
 
-    fetch(`/api/admin/drivers?${params.toString()}`, {
+    fetch(`${API_URL}/api/admin/drivers?${params.toString()}`, {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
     })
@@ -69,7 +73,7 @@ export default function AdminDriversTable() {
       })
       .catch(() => setDrivers([]))
       .finally(() => setLoading(false));
-  }, [page, sortBy, order, search, online, vehicleType, disabled, country, area]);
+  }, [API_URL, page, sortBy, order, search, online, vehicleType, disabled, country, area]);
 
   // Table column headers
   const columns: { label: string; key: keyof Driver }[] = [

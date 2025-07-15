@@ -17,6 +17,10 @@ type Customer = {
 const DEFAULT_PAGE_SIZE = 20;
 
 export default function AdminCustomersTable() {
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -42,7 +46,7 @@ export default function AdminCustomersTable() {
     if (country) params.append("country", country);
     if (area) params.append("area", area);
 
-    fetch(`/api/admin/customers?${params.toString()}`, {
+    fetch(`${API_URL}/api/admin/customers?${params.toString()}`, {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
     })
@@ -58,7 +62,7 @@ export default function AdminCustomersTable() {
       })
       .catch(() => setCustomers([]))
       .finally(() => setLoading(false));
-  }, [page, sortBy, order, search, online, disabled, country, area]);
+  }, [API_URL, page, sortBy, order, search, online, disabled, country, area]);
 
   // Table column headers
   const columns: { label: string; key: keyof Customer }[] = [
