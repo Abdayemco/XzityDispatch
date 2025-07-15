@@ -97,6 +97,44 @@ router.get("/drivers", async (req, res) => {
   }
 });
 
+// --- Enable/Disable Driver endpoints ---
+router.put("/drivers/:id/disable", async (req, res) => {
+  try {
+    const driverId = Number(req.params.id);
+    const driver = await prisma.user.update({
+      where: { id: driverId, role: "DRIVER" },
+      data: { disabled: true },
+      select: {
+        id: true, name: true, disabled: true
+      }
+    });
+    res.json(driver);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    res.status(500).json({ error: "Failed to disable driver" });
+  }
+});
+router.put("/drivers/:id/enable", async (req, res) => {
+  try {
+    const driverId = Number(req.params.id);
+    const driver = await prisma.user.update({
+      where: { id: driverId, role: "DRIVER" },
+      data: { disabled: false },
+      select: {
+        id: true, name: true, disabled: true
+      }
+    });
+    res.json(driver);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    res.status(500).json({ error: "Failed to enable driver" });
+  }
+});
+
 // --- Advanced Customers endpoint ---
 router.get("/customers", async (req, res) => {
   try {
@@ -146,6 +184,44 @@ router.get("/customers", async (req, res) => {
     res.json(customers);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch customers" });
+  }
+});
+
+// --- Enable/Disable Customer endpoints ---
+router.put("/customers/:id/disable", async (req, res) => {
+  try {
+    const customerId = Number(req.params.id);
+    const customer = await prisma.user.update({
+      where: { id: customerId, role: "CUSTOMER" },
+      data: { disabled: true },
+      select: {
+        id: true, name: true, disabled: true
+      }
+    });
+    res.json(customer);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    res.status(500).json({ error: "Failed to disable customer" });
+  }
+});
+router.put("/customers/:id/enable", async (req, res) => {
+  try {
+    const customerId = Number(req.params.id);
+    const customer = await prisma.user.update({
+      where: { id: customerId, role: "CUSTOMER" },
+      data: { disabled: false },
+      select: {
+        id: true, name: true, disabled: true
+      }
+    });
+    res.json(customer);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    res.status(500).json({ error: "Failed to enable customer" });
   }
 });
 

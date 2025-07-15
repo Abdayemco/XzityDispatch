@@ -12,10 +12,8 @@ import jwt from "jsonwebtoken";
 
 const app = express();
 
-// Parse JSON bodies BEFORE any route handlers
 app.use(express.json());
 
-// --- CORS: Allow Vite dev server, .env CLIENT_URL, and production domains ---
 const allowedOrigins = [
   "http://localhost:5173",
   "https://www.xzity.com",
@@ -31,13 +29,11 @@ app.use(
   })
 );
 
-// Optional: Basic request logger (for debugging)
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl}`);
   next();
 });
 
-// --- JWT AUTH HEADER PARSER (GLOBAL) ---
 app.use((req: any, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -52,7 +48,6 @@ app.use((req: any, res, next) => {
   next();
 });
 
-// Register routes
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
@@ -61,12 +56,10 @@ app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);
 
-// 404 handler for undefined routes
 app.use((req, res, next) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// Error handler (should be last)
 app.use(errorHandler);
 
 export default app;

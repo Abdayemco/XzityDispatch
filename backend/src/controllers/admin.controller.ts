@@ -8,9 +8,7 @@ export const getDrivers = async (req: Request, res: Response, next: NextFunction
     const drivers = await prisma.user.findMany({
       where: { 
         role: "DRIVER", 
-        online: true, 
-        lat: { not: null },
-        lng: { not: null }
+        // Remove online/lat/lng filters to show all drivers
       },
       select: {
         id: true,
@@ -125,6 +123,38 @@ export const updateDriverSubscription = async (req: Request, res: Response, next
   }
 };
 
+export const adminDisableDriver = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const driverId = Number(req.params.id);
+    const driver = await prisma.user.update({
+      where: { id: driverId },
+      data: { disabled: true },
+    });
+    res.json(driver);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    next(error);
+  }
+};
+
+export const adminEnableDriver = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const driverId = Number(req.params.id);
+    const driver = await prisma.user.update({
+      where: { id: driverId },
+      data: { disabled: false },
+    });
+    res.json(driver);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Driver not found" });
+    }
+    next(error);
+  }
+};
+
 // --- CUSTOMERS ---
 export const getCustomers = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -172,14 +202,43 @@ export const blockCustomer = async (req: Request, res: Response, next: NextFunct
   }
 };
 
+export const adminDisableCustomer = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const customerId = Number(req.params.id);
+    const customer = await prisma.user.update({
+      where: { id: customerId },
+      data: { disabled: true },
+    });
+    res.json(customer);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    next(error);
+  }
+};
+
+export const adminEnableCustomer = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const customerId = Number(req.params.id);
+    const customer = await prisma.user.update({
+      where: { id: customerId },
+      data: { disabled: false },
+    });
+    res.json(customer);
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    next(error);
+  }
+};
+
 // --- RIDES ---
 export const getRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Get status param (e.g., "live", "not_done")
     const statusParam = (req.query.status as string)?.toLowerCase();
     let statusFilter = undefined;
-
-    // Define "live" statuses using enum
     const liveStatuses: RideStatus[] = [
       RideStatus.ACCEPTED,
       RideStatus.IN_PROGRESS
@@ -194,7 +253,6 @@ export const getRides = async (req: Request, res: Response, next: NextFunction) 
     } else if (statusParam === "not_done") {
       statusFilter = { status: { notIn: notDoneStatuses } };
     }
-    // Default: show all (no filter) if not specified
 
     const rides = await prisma.ride.findMany({
       where: statusFilter,
