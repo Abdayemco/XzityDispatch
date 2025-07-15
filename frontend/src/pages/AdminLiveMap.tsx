@@ -201,6 +201,18 @@ export default function AdminLiveMap() {
       !excludedStatuses.includes(r.status.toLowerCase())
   );
 
+  // --- Choose customer marker: use ride request marker if customer has requested a ride ---
+  function getCustomerMarkerIcon(customer: Customer) {
+    // Find a live ride for this customer
+    const liveRide = filteredRides.find(
+      (ride) =>
+        (ride.customer?.id === customer.id || ride.customerId === customer.id)
+    );
+    // If customer has a live ride, use markerCustomer icon, else use vehicle icon
+    if (liveRide) return createLeafletIcon(markerCustomer, 32, 41, false);
+    return createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false);
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>
@@ -268,13 +280,13 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Customer markers (vehicle PNG based on requested ride type) */}
+          {/* Customer markers: use ride marker if customer has a live ride, else vehicle PNG */}
           {customers.map(customer => (
             customer.lat && customer.lng ? (
               <Marker
                 key={`customer-${customer.id}`}
                 position={[customer.lat, customer.lng]}
-                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)} // colored vehicle icon
+                icon={getCustomerMarkerIcon(customer)}
               >
                 <Popup>
                   <b>Customer:</b> {customer.name || customer.phone || customer.id}
