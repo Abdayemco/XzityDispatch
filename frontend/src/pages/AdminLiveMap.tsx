@@ -201,16 +201,12 @@ export default function AdminLiveMap() {
       !excludedStatuses.includes(r.status.toLowerCase())
   );
 
-  // --- Choose customer marker: use ride request marker if customer has requested a ride ---
-  function getCustomerMarkerIcon(customer: Customer) {
-    // Find a live ride for this customer
-    const liveRide = filteredRides.find(
+  // Helper: does this customer have a live ride?
+  function customerHasLiveRide(customer: Customer) {
+    return filteredRides.some(
       (ride) =>
         (ride.customer?.id === customer.id || ride.customerId === customer.id)
     );
-    // If customer has a live ride, use markerCustomer icon, else use vehicle icon
-    if (liveRide) return createLeafletIcon(markerCustomer, 32, 41, false);
-    return createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false);
   }
 
   return (
@@ -280,13 +276,13 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Customer markers: use ride marker if customer has a live ride, else vehicle PNG */}
+          {/* Customer markers: show vehicle PNG only if NOT in a live ride */}
           {customers.map(customer => (
-            customer.lat && customer.lng ? (
+            customer.lat && customer.lng && !customerHasLiveRide(customer) ? (
               <Marker
                 key={`customer-${customer.id}`}
                 position={[customer.lat, customer.lng]}
-                icon={getCustomerMarkerIcon(customer)}
+                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)}
               >
                 <Popup>
                   <b>Customer:</b> {customer.name || customer.phone || customer.id}
@@ -298,7 +294,7 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Customer (ride origin) markers */}
+          {/* Ride origin markers (marker-customer.png) */}
           {filteredRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
