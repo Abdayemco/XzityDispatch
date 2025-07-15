@@ -33,6 +33,8 @@ export default function AdminDriversTable() {
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
 
+  const token = localStorage.getItem("token");
+
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -45,10 +47,12 @@ export default function AdminDriversTable() {
   const [country, setCountry] = useState<string>("");
   const [area, setArea] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
 
   // Fetch drivers from API
   useEffect(() => {
     setLoading(true);
+    setError("");
     const params = new URLSearchParams();
     params.append("limit", String(DEFAULT_PAGE_SIZE));
     params.append("offset", String((page - 1) * DEFAULT_PAGE_SIZE));
@@ -63,17 +67,28 @@ export default function AdminDriversTable() {
 
     fetch(`${API_URL}/api/admin/drivers?${params.toString()}`, {
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     })
       .then(async (res) => {
+        if (res.status === 401) {
+          setError("Unauthorized. Please log in again.");
+          setDrivers([]);
+          return;
+        }
         if (!res.ok) throw new Error("Failed to fetch drivers");
         const data = await res.json();
         setDrivers(data);
         setTotal(data.length < DEFAULT_PAGE_SIZE ? (page - 1) * DEFAULT_PAGE_SIZE + data.length : page * DEFAULT_PAGE_SIZE + 1);
       })
-      .catch(() => setDrivers([]))
+      .catch((e) => {
+        setDrivers([]);
+        setError("Failed to fetch drivers.");
+      })
       .finally(() => setLoading(false));
-  }, [API_URL, page, sortBy, order, search, online, vehicleType, disabled, country, area]);
+  }, [API_URL, page, sortBy, order, search, online, vehicleType, disabled, country, area, token]);
 
   // Table column headers
   const columns: { label: string; key: keyof Driver }[] = [
@@ -146,6 +161,11 @@ export default function AdminDriversTable() {
         </select>
       </div>
       <div style={{ overflowX: "auto" }}>
+        {error && (
+          <div style={{ color: "red", marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
