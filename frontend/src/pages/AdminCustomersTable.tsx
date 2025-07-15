@@ -16,11 +16,26 @@ type Customer = {
 
 const DEFAULT_PAGE_SIZE = 20;
 
+function customersToCSV(customers: Customer[]): string {
+  const columns = [
+    "id", "name", "phone", "email", "online", "disabled", "country", "area", "lat", "lng"
+  ];
+  const header = columns.join(",");
+  const rows = customers.map(customer =>
+    columns.map(col => {
+      let value = customer[col as keyof Customer];
+      if (col === "online") value = customer.online ? "Online" : "Offline";
+      if (col === "disabled") value = customer.disabled ? "Disabled" : "Active";
+      return `"${value ?? ""}"`;
+    }).join(",")
+  );
+  return [header, ...rows].join("\r\n");
+}
+
 export default function AdminCustomersTable() {
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
-
   const token = localStorage.getItem("token");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -112,6 +127,45 @@ export default function AdminCustomersTable() {
     if (page > 1) setPage(page - 1);
   }
 
+  function handleExportCSV() {
+    const csv = customersToCSV(customers);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `customers-page${page}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Enable/disable customer
+  async function handleToggleDisabled(customer: Customer) {
+    const endpoint = customer.disabled
+      ? `${API_URL}/api/admin/customers/${customer.id}/enable`
+      : `${API_URL}/api/admin/customers/${customer.id}/disable`;
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to update customer");
+      setCustomers(list =>
+        list.map(c =>
+          c.id === customer.id ? { ...c, disabled: !c.disabled } : c
+        )
+      );
+    } catch (err) {
+      setError("Failed to update customer.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
       <h2>Admin - Customer List</h2>
@@ -148,6 +202,7 @@ export default function AdminCustomersTable() {
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
+        <button onClick={handleExportCSV}>Export CSV</button>
       </div>
       <div style={{ overflowX: "auto" }}>
         {error && (
@@ -173,18 +228,19 @@ export default function AdminCustomersTable() {
                   {sortBy === col.key ? (order === "asc" ? " ▲" : " ▼") : ""}
                 </th>
               ))}
+              <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={columns.length} style={{ textAlign: "center", padding: 30 }}>
+                <td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>
                   Loading...
                 </td>
               </tr>
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} style={{ textAlign: "center", padding: 30 }}>
+                <td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>
                   No customers found.
                 </td>
               </tr>
@@ -200,6 +256,22 @@ export default function AdminCustomersTable() {
                         : customer[col.key] ?? "-"}
                     </td>
                   ))}
+                  <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
+                    <button
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 4,
+                        background: customer.disabled ? "#1976d2" : "#d32f2f",
+                        color: "#fff",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => handleToggleDisabled(customer)}
+                      disabled={loading}
+                    >
+                      {customer.disabled ? "Enable" : "Disable"}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
