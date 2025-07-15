@@ -8,11 +8,18 @@ type Driver = {
   avatar?: string;
   vehicleType?: string;
   online?: boolean;
-  disabled?: boolean;
   lat?: number;
   lng?: number;
   country?: string;
   area?: string;
+  // Subscription fields
+  trialStart?: string | null;
+  trialEnd?: string | null;
+  subscriptionStatus?: string | null;
+  subscriptionFee?: number | null;
+  paymentMethod?: string | null;
+  isSubscriptionDisabled?: boolean;
+  disabled?: boolean;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -30,7 +37,7 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
 
 function driversToCSV(drivers: Driver[]): string {
   const columns = [
-    "id", "name", "phone", "email", "vehicleType", "online", "disabled", "country", "area", "lat", "lng"
+    "id", "name", "phone", "email", "vehicleType", "online", "subscriptionStatus", "trialEnd", "lat", "lng"
   ];
   const header = columns.join(",");
   const rows = drivers.map(driver =>
@@ -38,11 +45,34 @@ function driversToCSV(drivers: Driver[]): string {
       let value = driver[col as keyof Driver];
       if (col === "vehicleType") value = VEHICLE_TYPE_LABELS[value as string] || value || "";
       if (col === "online") value = driver.online ? "Online" : "Offline";
-      if (col === "disabled") value = driver.disabled ? "Disabled" : "Active";
+      if (col === "trialEnd" && driver.trialEnd) value = new Date(driver.trialEnd).toISOString().split("T")[0];
       return `"${value ?? ""}"`;
     }).join(",")
   );
   return [header, ...rows].join("\r\n");
+}
+
+// Subscription status logic
+function getSubscriptionStatus(driver: Driver) {
+  if (driver.disabled) return { text: "Disabled", color: "#888" };
+  if (driver.isSubscriptionDisabled) return { text: "Account on Hold", color: "#888" };
+
+  const now = Date.now();
+  const trialEnd = driver.trialEnd ? new Date(driver.trialEnd).getTime() : null;
+  const sub = (driver.subscriptionStatus || "").toLowerCase();
+
+  if (sub === "active" && (!trialEnd || trialEnd > now)) {
+    return { text: "Active", color: "#2e7d32" }; // Green
+  }
+  if (trialEnd && trialEnd > now) {
+    // Show days left on trial
+    const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+    return { text: `Trial (${daysLeft} days left)`, color: "#388e3c" }; // Green
+  }
+  if (trialEnd && trialEnd <= now && sub !== "active") {
+    return { text: "Expired", color: "#d32f2f" }; // Red
+  }
+  return { text: "Unknown", color: "#aaa" };
 }
 
 export default function AdminDriversTable() {
@@ -53,13 +83,11 @@ export default function AdminDriversTable() {
 
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<keyof Driver>("id");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [online, setOnline] = useState<"" | "true" | "false">("");
   const [vehicleType, setVehicleType] = useState<string>("");
-  const [disabled, setDisabled] = useState<"" | "true" | "false">("");
   const [country, setCountry] = useState<string>("");
   const [area, setArea] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -77,7 +105,6 @@ export default function AdminDriversTable() {
     if (search) params.append("search", search);
     if (online) params.append("online", online);
     if (vehicleType) params.append("vehicleType", vehicleType);
-    if (disabled) params.append("disabled", disabled);
     if (country) params.append("country", country);
     if (area) params.append("area", area);
 
@@ -97,16 +124,15 @@ export default function AdminDriversTable() {
         if (!res.ok) throw new Error("Failed to fetch drivers");
         const data = await res.json();
         setDrivers(data);
-        setTotal(data.length < DEFAULT_PAGE_SIZE ? (page - 1) * DEFAULT_PAGE_SIZE + data.length : page * DEFAULT_PAGE_SIZE + 1);
       })
       .catch((e) => {
         setDrivers([]);
         setError("Failed to fetch drivers.");
       })
       .finally(() => setLoading(false));
-  }, [API_URL, page, sortBy, order, search, online, vehicleType, disabled, country, area, token]);
+  }, [API_URL, page, sortBy, order, search, online, vehicleType, country, area, token]);
 
-  // Table column headers
+  // Table column headers (Removed Disabled, Added Subscription Status)
   const columns: { label: string; key: keyof Driver }[] = [
     { label: "ID", key: "id" },
     { label: "Name", key: "name" },
@@ -114,7 +140,7 @@ export default function AdminDriversTable() {
     { label: "Email", key: "email" },
     { label: "Vehicle", key: "vehicleType" },
     { label: "Online", key: "online" },
-    { label: "Disabled", key: "disabled" },
+    { label: "Subscription Status", key: "subscriptionStatus" },
     { label: "Country", key: "country" },
     { label: "Area", key: "area" },
     { label: "Lat", key: "lat" },
@@ -167,15 +193,19 @@ export default function AdminDriversTable() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      if (!res.ok) throw new Error("Failed to update driver");
-      // Optionally, refresh only this driver in the table
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to update driver");
+      }
+      // Update driver locally based on response
+      const updated = await res.json();
       setDrivers(list =>
         list.map(d =>
-          d.id === driver.id ? { ...d, disabled: !d.disabled } : d
+          d.id === driver.id ? { ...d, disabled: updated.disabled } : d
         )
       );
-    } catch (err) {
-      setError("Failed to update driver.");
+    } catch (err: any) {
+      setError(err.message || "Failed to update driver.");
     } finally {
       setLoading(false);
     }
@@ -202,11 +232,6 @@ export default function AdminDriversTable() {
           {vehicleTypes.map(([key, label]) => (
             <option key={key} value={key}>{label}</option>
           ))}
-        </select>
-        <select value={disabled} onChange={e => { setDisabled(e.target.value as any); setPage(1); }}>
-          <option value="">Disabled (All)</option>
-          <option value="true">Disabled</option>
-          <option value="false">Active</option>
         </select>
         <select value={country} onChange={e => { setCountry(e.target.value); setPage(1); }}>
           <option value="">Country (All)</option>
@@ -251,11 +276,27 @@ export default function AdminDriversTable() {
                   {columns.map(col => (
                     <td key={col.key} style={{ padding: "7px 12px", borderBottom: "1px solid #eee" }}>
                       {col.key === "vehicleType"
-                        ? VEHICLE_TYPE_LABELS[driver.vehicleType || ""] || driver.vehicleType || "-"
+                        ? VEHICLE_TYPE_LABELS[(driver.vehicleType || "").toUpperCase()] || driver.vehicleType || "-"
                         : col.key === "online"
                         ? driver.online ? "Online" : "Offline"
-                        : col.key === "disabled"
-                        ? driver.disabled ? "Disabled" : "Active"
+                        : col.key === "subscriptionStatus"
+                        ? (() => {
+                            const status = getSubscriptionStatus(driver);
+                            return (
+                              <span style={{
+                                padding: "3px 9px",
+                                borderRadius: 12,
+                                background: status.color === "#d32f2f" ? "#ffd6d6"
+                                  : status.color === "#2e7d32" || status.color === "#388e3c" ? "#e0f8e4"
+                                  : "#eee",
+                                color: status.color,
+                                fontWeight: 600,
+                                fontSize: 13,
+                              }}>
+                                {status.text}
+                              </span>
+                            );
+                          })()
                         : driver[col.key] ?? "-"}
                     </td>
                   ))}
