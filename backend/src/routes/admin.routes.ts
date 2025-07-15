@@ -135,6 +135,32 @@ router.put("/drivers/:id/enable", async (req, res) => {
   }
 });
 
+// --- MAP DRIVERS endpoint for admin live map ---
+router.get("/map/drivers", async (req, res) => {
+  try {
+    const drivers = await prisma.user.findMany({
+      where: {
+        role: "DRIVER",
+        online: true,
+        lat: { not: null },
+        lng: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        vehicleType: true,
+        lat: true,
+        lng: true,
+        online: true,
+      },
+    });
+    res.json(drivers);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch map drivers" });
+  }
+});
+
 // --- Advanced Customers endpoint ---
 router.get("/customers", async (req, res) => {
   try {
@@ -222,6 +248,32 @@ router.put("/customers/:id/enable", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
     res.status(500).json({ error: "Failed to enable customer" });
+  }
+});
+
+// --- MAP CUSTOMERS endpoint for admin live map ---
+router.get("/map/customers", async (req, res) => {
+  try {
+    const customers = await prisma.user.findMany({
+      where: {
+        role: "CUSTOMER",
+        online: true,
+        lat: { not: null },
+        lng: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        vehicleType: true,
+        lat: true,
+        lng: true,
+        online: true,
+      },
+    });
+    res.json(customers);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch map customers" });
   }
 });
 
