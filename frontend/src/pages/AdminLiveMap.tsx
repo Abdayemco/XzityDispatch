@@ -13,7 +13,7 @@ import waterTruckIcon from "../assets/marker-watertruck.png";
 import towTruckIcon from "../assets/marker-towtruck.png";
 import wheelchairIcon from "../assets/marker-wheelchair.png";
 import limoIcon from "../assets/marker-limo.png";
-import markerCustomer from "../assets/marker-customer.png"; // for ride origins
+import markerCustomer from "../assets/marker-customer.png"; // for online customers
 
 // --- Utility to get the correct vehicle icon PNG for a vehicleType ---
 const VEHICLE_TYPE_MARKERS: Record<string, string> = {
@@ -42,7 +42,6 @@ function getVehicleMarkerIcon(vehicleType: string | undefined): string {
 
 // --- Utility: create a Leaflet icon with optional grayscale ---
 function createLeafletIcon(url: string, w = 32, h = 41, grayscale = false) {
-  // Use an HTML divIcon to apply CSS grayscale filter if needed
   if (grayscale) {
     return L.divIcon({
       className: "",
@@ -276,13 +275,13 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Customer markers: show vehicle PNG only if NOT in a live ride */}
+          {/* Customer markers: show RED marker (markerCustomer) only if NOT in a live ride */}
           {customers.map(customer => (
             customer.lat && customer.lng && !customerHasLiveRide(customer) ? (
               <Marker
                 key={`customer-${customer.id}`}
                 position={[customer.lat, customer.lng]}
-                icon={createLeafletIcon(getVehicleMarkerIcon(customer.vehicleType), 32, 41, false)}
+                icon={createLeafletIcon(markerCustomer, 32, 41, false)}
               >
                 <Popup>
                   <b>Customer:</b> {customer.name || customer.phone || customer.id}
@@ -294,18 +293,20 @@ export default function AdminLiveMap() {
               </Marker>
             ) : null
           ))}
-          {/* Ride origin markers (marker-customer.png) */}
+          {/* Ride origin markers: show the VEHICLE PNG requested for each ride */}
           {filteredRides.map(ride => (
             ride.originLat && ride.originLng && (
               <Marker
                 key={`ride-customer-${ride.id}`}
                 position={[ride.originLat, ride.originLng]}
-                icon={createLeafletIcon(markerCustomer, 32, 41, false)}
+                icon={createLeafletIcon(getVehicleMarkerIcon(ride.vehicleType), 32, 41, false)}
               >
                 <Popup>
                   <b>Customer:</b> {ride.customer?.name || ride.customerId}
                   <br />
                   <b>Ride ID:</b> {ride.id}
+                  <br />
+                  <b>Vehicle Requested:</b> {ride.vehicleType || "Unknown"}
                   <br />
                   <b>Status:</b> {ride.status}
                   <br />
