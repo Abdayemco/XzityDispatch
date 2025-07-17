@@ -7,7 +7,7 @@ import {
   getCustomerNoShowCount,
   getDriverNoShowCount,
   assignDriverToScheduledRide
-} from "../controllers/adminController";
+} from "../controllers/admin.controller";
 
 // Helper to get safe sort params
 function getSortParams(query: any, allowedFields: string[], defaultField = "id", defaultOrder = "desc") {
