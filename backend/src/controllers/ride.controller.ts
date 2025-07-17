@@ -35,13 +35,14 @@ async function isDriverBusy(driverId: number) {
       NOT: [
         { status: RideStatus.COMPLETED },
         { status: RideStatus.CANCELLED },
+        { status: RideStatus.NO_SHOW },
       ],
     },
   });
   return !!busyRide;
 }
 
-// Customer requests a ride with vehicle type and location
+// --- CREATE RIDE (REGULAR OR SCHEDULED) ---
 export const requestRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const {
@@ -51,11 +52,11 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       destLat,
       destLng,
       vehicleType,
+      scheduledAt, // optional, ISO string for scheduled ride
     } = req.body;
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
 
-    // Ensure customerId is an integer and not a string/UUID
     const numericCustomerId = Number(customerId);
     if (
       !numericCustomerId ||
@@ -70,21 +71,24 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing or invalid required fields" });
     }
 
+    // If scheduledAt supplied, create as SCHEDULED ride
     const ride = await prisma.ride.create({
       data: {
         customer: { connect: { id: numericCustomerId } },
-        status: RideStatus.PENDING,
+        status: scheduledAt ? RideStatus.SCHEDULED : RideStatus.PENDING,
         originLat,
         originLng,
         destLat,
         destLng,
         vehicleType: normalizedVehicleType,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
       },
     });
 
     res.json({
       rideId: ride.id,
       status: ride.status,
+      scheduledAt: ride.scheduledAt,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
@@ -92,17 +96,13 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-// Get available rides for drivers (pending status, for their vehicle type or delivery)
-// UPDATED LOGIC for Tow Truck and Wheelchair drivers
+// --- GET AVAILABLE RIDES FOR DRIVER (SCHEDULED & REGULAR) ---
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Accept driverId as a query param for development
     const driverId = Number(req.query.driverId);
     if (!driverId) {
       return res.status(401).json({ error: "Unauthorized: Missing driver id" });
     }
-
-    // Find driver's vehicle type
     const driver = await prisma.user.findUnique({
       where: { id: driverId },
       select: { vehicleType: true },
@@ -110,12 +110,6 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     if (!driver) {
       return res.status(404).json({ error: "Driver not found" });
     }
-
-    // --- NEW LOGIC ---
-    // - TOW_TRUCK: can accept TRUCK and TOW_TRUCK rides
-    // - WHEELCHAIR: can accept WHEELCHAIR, CAR, DELIVERY, TUKTUK rides
-    // - CAR and TUKTUK drivers can accept DELIVERY rides too
-    // - all others: only their own type
 
     let rideTypes: VehicleType[] = [];
     if (driver.vehicleType === "TOW_TRUCK") {
@@ -128,36 +122,57 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       rideTypes = [driver.vehicleType];
     }
 
-    const where: any = {
-      status: RideStatus.PENDING,
-      driverId: null,
-    };
-    if (rideTypes.length > 0) {
-      where.vehicleType = { in: rideTypes };
-    }
+    // Scheduled rides logic: show only within 30 min before pickup
+    const now = new Date();
+    const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
+    const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
     const rides = await prisma.ride.findMany({
-      where,
+      where: {
+        OR: [
+          // Scheduled rides: visible 30min before scheduledAt up to 1hr after
+          {
+            status: RideStatus.SCHEDULED,
+            scheduledAt: {
+              lte: thirtyMinFromNow,
+              gte: oneHourAgo,
+            },
+            driverId: null,
+            vehicleType: { in: rideTypes },
+          },
+          // Regular rides: not yet accepted/in_progress/done/cancelled
+          {
+            status: RideStatus.PENDING,
+            driverId: null,
+            vehicleType: { in: rideTypes },
+          }
+        ]
+      },
       select: {
         id: true,
         originLat: true,
         originLng: true,
         vehicleType: true,
         customer: { select: { name: true } },
+        scheduledAt: true,
+        status: true,
+        destLat: true,
+        destLng: true,
       },
+      orderBy: { scheduledAt: "asc" }
     });
 
-    // Map fields for frontend compatibility
     const mappedRides = rides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
+      scheduledAt: ride.scheduledAt,
+      destinationLat: ride.destLat,
+      destinationLng: ride.destLng,
+      status: ride.status,
     }));
-
-    // Debug log to see what rides are being returned
-    console.log("Available rides found:", mappedRides);
 
     res.json(mappedRides);
   } catch (error) {
@@ -166,27 +181,26 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
   }
 };
 
-// Driver accepts a ride
+// --- DRIVER ACCEPTS A RIDE (SCHEDULED OR REGULAR) ---
 export const acceptRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Accept driverId as a query param for development
     const driverId = Number(req.query.driverId);
     if (!driverId) {
       return res.status(401).json({ error: "Unauthorized: Missing driver id" });
     }
-
-    // Check if driver is already busy (accepted/in_progress) in the last 15 minutes
     const busy = await isDriverBusy(driverId);
     if (busy) {
       return res.status(400).json({ error: "You already have an active or recent job. Finish it or wait 15 minutes before accepting a new one." });
     }
-
-    // Make sure to convert rideId to a number!
     const rideId = Number(req.params.rideId);
 
-    // Only allow accepting if ride is still pending and unassigned
+    // Accept pending or scheduled ride
     const ride = await prisma.ride.updateMany({
-      where: { id: rideId, status: RideStatus.PENDING, driverId: null },
+      where: {
+        id: rideId,
+        driverId: null,
+        status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] }
+      },
       data: { status: RideStatus.ACCEPTED, driverId, acceptedAt: new Date() },
     });
 
@@ -194,7 +208,6 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
       return res.status(400).json({ error: "Ride already assigned or not available." });
     }
 
-    // Mark the driver as busy
     await prisma.user.update({
       where: { id: driverId },
       data: { isBusy: true },
@@ -212,7 +225,7 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-// Driver starts a ride (NEW ENDPOINT FOR IN_PROGRESS STATUS)
+// --- DRIVER STARTS A RIDE ---
 export const startRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const driverId = Number(req.query.driverId);
@@ -222,7 +235,7 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
-    // Only allow starting a ride if it is accepted by this driver
+    // Only allow starting if accepted
     const ride = await prisma.ride.findFirst({
       where: {
         id: rideId,
@@ -240,7 +253,7 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
       data: { status: RideStatus.IN_PROGRESS, startedAt: new Date() },
     });
 
-    return res.json({
+    res.json({
       status: "in_progress",
       ride: updated,
     });
@@ -250,24 +263,54 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-// Get ride status for polling (UPDATED)
+// --- DRIVER MARKS RIDE AS "NO SHOW" ---
+export const markRideNoShow = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const driverId = Number(req.query.driverId);
+    const rideId = Number(req.params.rideId);
+
+    if (!driverId || !rideId) {
+      return res.status(400).json({ error: "Invalid driverId or rideId" });
+    }
+
+    // Only scheduled rides, after scheduledAt + grace period
+    const ride = await prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) return res.status(404).json({ error: "Ride not found" });
+    if (ride.status !== RideStatus.SCHEDULED) {
+      return res.status(400).json({ error: "Ride is not scheduled" });
+    }
+    const graceMs = 10 * 60 * 1000; // 10 min grace period
+    const now = Date.now();
+    const scheduledTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : null;
+    if (!scheduledTime || now < scheduledTime + graceMs) {
+      return res.status(400).json({ error: "Cannot mark No Show before scheduled time + 10 min grace period." });
+    }
+    const updated = await prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.NO_SHOW, noShowReportedAt: new Date() },
+    });
+
+    res.json({ message: "Ride marked as No Show", ride: updated });
+  } catch (error) {
+    console.error("Error marking ride as No Show:", error);
+    next(error);
+  }
+};
+
+// --- GET RIDE STATUS FOR POLLING ---
 export const getRideStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
     if (!rideId) {
       return res.status(400).json({ error: "Invalid rideId" });
     }
-
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
       select: { status: true }
     });
-
     if (!ride) {
       return res.status(404).json({ error: "Ride not found" });
     }
-
-    // Map DB enum to user-friendly lowercase status for frontend
     let statusForFrontend: string;
     switch (ride.status) {
       case RideStatus.PENDING:
@@ -285,10 +328,15 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
       case RideStatus.COMPLETED:
         statusForFrontend = "done";
         break;
+      case RideStatus.NO_SHOW:
+        statusForFrontend = "no_show";
+        break;
+      case RideStatus.SCHEDULED:
+        statusForFrontend = "scheduled";
+        break;
       default:
         statusForFrontend = String(ride.status || "unknown").toLowerCase();
     }
-
     return res.json({ status: statusForFrontend });
   } catch (error) {
     console.error("Error fetching ride status:", error);
@@ -296,7 +344,7 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-// --- NEW: Customer rates a ride ---
+// --- CUSTOMER RATES RIDE ---
 export const rateRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
@@ -305,13 +353,10 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
     if (!rideId || !rating || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "Invalid rideId or rating (must be 1-5)" });
     }
-
-    // Only allow rating a completed ride, and only if not rated yet
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
       select: { status: true, rating: true }
     });
-
     if (!ride) {
       return res.status(404).json({ error: "Ride not found" });
     }
@@ -321,12 +366,10 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
     if (ride.rating !== null && ride.rating !== undefined) {
       return res.status(400).json({ error: "Ride already rated" });
     }
-
     const updated = await prisma.ride.update({
       where: { id: rideId },
       data: { rating, feedback }
     });
-
     res.json({ message: "Thank you for rating your driver!", ride: updated });
   } catch (error) {
     console.error("Error rating ride:", error);
@@ -334,32 +377,26 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
   }
 };
 
-// --- GET CURRENT RIDE FOR CUSTOMER/DRIVER (FIXED ROLE CHECK) ---
+// --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Assumes authentication middleware sets req.user and req.user.role
-    // Accepts both customer and driver
     const user = req.user as { id: number; role: string };
     if (!user) return res.status(401).json({ error: "Not authenticated" });
-
-    // Accept "customer", "CUSTOMER", "driver", "DRIVER" etc.
     const role = user.role?.toLowerCase();
     let where: any = {};
     if (role === "customer") {
       where = {
         customerId: user.id,
-        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS] },
+        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS, RideStatus.SCHEDULED] },
       };
     } else if (role === "driver") {
       where = {
         driverId: user.id,
-        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS] },
+        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS, RideStatus.SCHEDULED] },
       };
     } else {
       return res.status(400).json({ error: "Invalid user role" });
     }
-
-    // Always include both customer and driver for correct TypeScript inference
     const ride = await prisma.ride.findFirst({
       where,
       include: {
@@ -367,10 +404,7 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
         customer: true,
       }
     });
-
     if (!ride) return res.status(404).json({ error: "No active ride" });
-
-    // Normalize vehicleType and user names for frontend
     res.json({
       rideId: ride.id,
       rideStatus:
@@ -384,6 +418,10 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
           ? "cancelled"
           : ride.status === RideStatus.COMPLETED
           ? "done"
+          : ride.status === RideStatus.NO_SHOW
+          ? "no_show"
+          : ride.status === RideStatus.SCHEDULED
+          ? "scheduled"
           : String(ride.status).toLowerCase(),
       originLat: ride.originLat,
       originLng: ride.originLng,
@@ -401,6 +439,9 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
             name: ride.customer.name,
           }
         : undefined,
+      scheduledAt: ride.scheduledAt,
+      destLat: ride.destLat,
+      destLng: ride.destLng,
     });
   } catch (error) {
     console.error("Error fetching current ride:", error);
@@ -408,14 +449,13 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// --- Mark ride as done (completed) ---
+// --- MARK RIDE AS DONE ---
 export const markRideAsDone = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
     if (!rideId) {
       return res.status(400).json({ error: "Invalid rideId" });
     }
-
     const ride = await prisma.ride.update({
       where: { id: rideId },
       data: { status: RideStatus.COMPLETED, completedAt: new Date() },
@@ -424,7 +464,6 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
         driver: true,
       },
     });
-
     res.json({
       message: "Ride marked as completed",
       rideId: ride.id,
@@ -439,14 +478,13 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// --- Cancel a ride ---
+// --- CANCEL RIDE ---
 export const cancelRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
     if (!rideId) {
       return res.status(400).json({ error: "Invalid rideId" });
     }
-
     const ride = await prisma.ride.update({
       where: { id: rideId },
       data: { status: RideStatus.CANCELLED, cancelledAt: new Date() },
@@ -455,7 +493,6 @@ export const cancelRide = async (req: Request, res: Response, next: NextFunction
         driver: true,
       },
     });
-
     res.json({
       message: "Ride cancelled",
       rideId: ride.id,
@@ -471,12 +508,11 @@ export const cancelRide = async (req: Request, res: Response, next: NextFunction
 };
 
 /**
- * CLEANUP JOB: Cancels "stuck" rides that are still in ACCEPTED/IN_PROGRESS after 15 minutes.
+ * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
  * Should be imported and started in index.ts
  */
 export async function cleanupStuckRides() {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-  // Cancel rides stuck in ACCEPTED for >15 min
   const result1 = await prisma.ride.updateMany({
     where: {
       status: RideStatus.ACCEPTED,
@@ -487,7 +523,6 @@ export async function cleanupStuckRides() {
       cancelledAt: new Date(),
     },
   });
-  // Cancel rides stuck in IN_PROGRESS for >15 min
   const result2 = await prisma.ride.updateMany({
     where: {
       status: RideStatus.IN_PROGRESS,

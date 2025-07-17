@@ -12,7 +12,6 @@ type Driver = {
   lng?: number;
   country?: string;
   area?: string;
-  // Subscription fields
   trialStart?: string | null;
   trialEnd?: string | null;
   subscriptionStatus?: string | null;
@@ -20,6 +19,15 @@ type Driver = {
   paymentMethod?: string | null;
   isSubscriptionDisabled?: boolean;
   disabled?: boolean;
+};
+
+type ScheduledRide = {
+  scheduledAt: string;
+  destLat: number;
+  destLng: number;
+  customerName?: string;
+  status?: string;
+  vehicleType?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -52,7 +60,6 @@ function driversToCSV(drivers: Driver[]): string {
   return [header, ...rows].join("\r\n");
 }
 
-// Subscription status logic
 function getSubscriptionStatus(driver: Driver) {
   if (driver.disabled) return { text: "Disabled", color: "#888" };
   if (driver.isSubscriptionDisabled) return { text: "Account on Hold", color: "#888" };
@@ -62,15 +69,14 @@ function getSubscriptionStatus(driver: Driver) {
   const sub = (driver.subscriptionStatus || "").toLowerCase();
 
   if (sub === "active" && (!trialEnd || trialEnd > now)) {
-    return { text: "Active", color: "#2e7d32" }; // Green
+    return { text: "Active", color: "#2e7d32" };
   }
   if (trialEnd && trialEnd > now) {
-    // Show days left on trial
     const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
-    return { text: `Trial (${daysLeft} days left)`, color: "#388e3c" }; // Green
+    return { text: `Trial (${daysLeft} days left)`, color: "#388e3c" };
   }
   if (trialEnd && trialEnd <= now && sub !== "active") {
-    return { text: "Expired", color: "#d32f2f" }; // Red
+    return { text: "Expired", color: "#d32f2f" };
   }
   return { text: "Unknown", color: "#aaa" };
 }
@@ -82,6 +88,8 @@ export default function AdminDriversTable() {
   const token = localStorage.getItem("token");
 
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [scheduledRides, setScheduledRides] = useState<{ [id: number]: ScheduledRide | null }>({});
+  const [noShowCounts, setNoShowCounts] = useState<{ [id: number]: number }>({});
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<keyof Driver>("id");
@@ -93,7 +101,6 @@ export default function AdminDriversTable() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
 
-  // Fetch drivers from API
   useEffect(() => {
     setLoading(true);
     setError("");
@@ -132,7 +139,33 @@ export default function AdminDriversTable() {
       .finally(() => setLoading(false));
   }, [API_URL, page, sortBy, order, search, online, vehicleType, country, area, token]);
 
-  // Table column headers (Removed Disabled, Added Subscription Status)
+  // Fetch scheduled ride + no show count for each driver on page
+  useEffect(() => {
+    drivers.forEach((driver) => {
+      // Scheduled ride info
+      fetch(`${API_URL}/api/admin/drivers/${driver.id}/scheduled_ride`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("No scheduled ride");
+          const data = await res.json();
+          setScheduledRides((prev) => ({ ...prev, [driver.id]: data }));
+        })
+        .catch(() => setScheduledRides((prev) => ({ ...prev, [driver.id]: null })));
+
+      // No Show count
+      fetch(`${API_URL}/api/admin/drivers/${driver.id}/no_show_count`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("No show count");
+          const data = await res.json();
+          setNoShowCounts((prev) => ({ ...prev, [driver.id]: data.count || 0 }));
+        })
+        .catch(() => setNoShowCounts((prev) => ({ ...prev, [driver.id]: 0 })));
+    });
+  }, [drivers, API_URL, token]);
+
   const columns: { label: string; key: keyof Driver }[] = [
     { label: "ID", key: "id" },
     { label: "Name", key: "name" },
@@ -147,7 +180,6 @@ export default function AdminDriversTable() {
     { label: "Lng", key: "lng" },
   ];
 
-  // Change sorting
   function handleSort(key: keyof Driver) {
     if (sortBy === key) setOrder(order === "asc" ? "desc" : "asc");
     else {
@@ -157,16 +189,13 @@ export default function AdminDriversTable() {
     setPage(1);
   }
 
-  // Filter options
   const vehicleTypes = Object.entries(VEHICLE_TYPE_LABELS);
   const countries = Array.from(new Set(drivers.map(d => d.country).filter(Boolean))) as string[];
   const areas = Array.from(new Set(drivers.map(d => d.area).filter(Boolean))) as string[];
 
-  // Pagination logic
   function nextPage() { setPage(page + 1); }
   function prevPage() { if (page > 1) setPage(page - 1); }
 
-  // Export drivers to CSV
   function handleExportCSV() {
     const csv = driversToCSV(drivers);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -178,7 +207,6 @@ export default function AdminDriversTable() {
     document.body.removeChild(link);
   }
 
-  // Enable/disable driver
   async function handleToggleDisabled(driver: Driver) {
     const endpoint = driver.disabled
       ? `${API_URL}/api/admin/drivers/${driver.id}/enable`
@@ -197,7 +225,6 @@ export default function AdminDriversTable() {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to update driver");
       }
-      // Update driver locally based on response
       const updated = await res.json();
       setDrivers(list =>
         list.map(d =>
@@ -262,14 +289,16 @@ export default function AdminDriversTable() {
                   {sortBy === col.key ? (order === "asc" ? " ▲" : " ▼") : ""}
                 </th>
               ))}
+              <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>Scheduled Ride</th>
+              <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>No Show Count</th>
               <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>Loading...</td></tr>
+              <tr><td colSpan={columns.length + 3} style={{ textAlign: "center", padding: 30 }}>Loading...</td></tr>
             ) : drivers.length === 0 ? (
-              <tr><td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>No drivers found.</td></tr>
+              <tr><td colSpan={columns.length + 3} style={{ textAlign: "center", padding: 30 }}>No drivers found.</td></tr>
             ) : (
               drivers.map(driver => (
                 <tr key={driver.id} style={{ background: driver.disabled ? "#ffe0e0" : undefined }}>
@@ -300,6 +329,19 @@ export default function AdminDriversTable() {
                         : driver[col.key] ?? "-"}
                     </td>
                   ))}
+                  <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
+                    {scheduledRides[driver.id] ? (
+                      <span>
+                        {new Date(scheduledRides[driver.id]!.scheduledAt).toLocaleString()}<br />
+                        Dest: {scheduledRides[driver.id]!.destLat}, {scheduledRides[driver.id]!.destLng}<br />
+                        {scheduledRides[driver.id]!.vehicleType && <span>Vehicle: {scheduledRides[driver.id]!.vehicleType}</span>}
+                        {scheduledRides[driver.id]!.status === "no_show" && <span style={{ color: "#f44336" }}>No Show</span>}
+                      </span>
+                    ) : "-"}
+                  </td>
+                  <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
+                    {noShowCounts[driver.id] ?? 0}
+                  </td>
                   <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
                     <button
                       style={{

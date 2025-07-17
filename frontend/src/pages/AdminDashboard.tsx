@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
+import { FaUsers, FaCar, FaUserShield, FaUser, FaUserCheck } from "react-icons/fa";
 import PendingDriversList from "../components/PendingDriversList";
 import AdminDriversTable from "./AdminDriversTable";
 import AdminCustomersTable from "./AdminCustomersTable";
@@ -15,6 +15,10 @@ export default function AdminDashboard() {
   const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [assigning, setAssigning] = useState<string | null>(null); // ride id being assigned
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [driverSelections, setDriverSelections] = useState<{ [rideId: string]: string }>({}); // selected driver per ride
+  const [assignStatus, setAssignStatus] = useState<{ [rideId: string]: string }>({}); // assign result per ride
 
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
@@ -44,6 +48,46 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }, [activeTab, token, API_URL]);
 
+  // Fetch available drivers for assignment (when rides tab active)
+  useEffect(() => {
+    if (activeTab !== "rides") return;
+    fetch(`${API_URL}/api/admin/drivers`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch drivers");
+        const data = await res.json();
+        setDrivers(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setDrivers([]));
+  }, [activeTab, token, API_URL]);
+
+  // Handle assigning driver to scheduled ride
+  async function handleAssignDriver(rideId: string) {
+    const driverId = driverSelections[rideId];
+    if (!driverId) return;
+    setAssigning(rideId);
+    setAssignStatus({});
+    try {
+      const res = await fetch(`${API_URL}/api/admin/rides/${rideId}/assign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ driverId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAssignStatus((prev) => ({ ...prev, [rideId]: "Assigned!" }));
+        setTimeout(() => setAssignStatus((prev) => ({ ...prev, [rideId]: "" })), 2500);
+      } else {
+        setAssignStatus((prev) => ({ ...prev, [rideId]: data.error || "Failed to assign" }));
+      }
+    } catch {
+      setAssignStatus((prev) => ({ ...prev, [rideId]: "Network error" }));
+    } finally {
+      setAssigning(null);
+    }
+  }
+
   function renderRides() {
     return (
       <div style={{ margin: "30px auto", maxWidth: 1100 }}>
@@ -61,22 +105,71 @@ export default function AdminDashboard() {
                 <th style={thStyle}>Destination</th>
                 <th style={thStyle}>Vehicle</th>
                 <th style={thStyle}>Status</th>
-                <th style={thStyle}>Requested</th>
+                <th style={thStyle}>Pickup Time</th>
                 <th style={thStyle}>Rating</th>
+                <th style={thStyle}>Assign Driver</th>
               </tr>
             </thead>
             <tbody>
               {rides.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} style={r.status === "scheduled" ? { background: "#e3f2fd" } : undefined}>
                   <td style={tdStyle}>{r.id}</td>
                   <td style={tdStyle}>{r.customer?.name || r.customerId}</td>
                   <td style={tdStyle}>{r.driver?.name || r.driverId || "-"}</td>
                   <td style={tdStyle}>{`${r.originLat}, ${r.originLng}`}</td>
                   <td style={tdStyle}>{`${r.destLat}, ${r.destLng}`}</td>
                   <td style={tdStyle}>{r.vehicleType}</td>
-                  <td style={tdStyle}>{r.status}</td>
-                  <td style={tdStyle}>{r.requestedAt ? new Date(r.requestedAt).toLocaleString() : "-"}</td>
+                  <td style={tdStyle}>
+                    {r.status}
+                    {r.status === "no_show" && <span style={{ color: "#f44336", fontWeight: "bold", marginLeft: 4 }}>No Show</span>}
+                  </td>
+                  <td style={tdStyle}>
+                    {r.scheduledAt
+                      ? new Date(r.scheduledAt).toLocaleString()
+                      : r.requestedAt
+                        ? new Date(r.requestedAt).toLocaleString()
+                        : "-"}
+                  </td>
                   <td style={tdStyle}>{r.rating || "-"}</td>
+                  <td style={tdStyle}>
+                    {/* Only allow assignment for scheduled, unassigned rides */}
+                    {r.status === "scheduled" && !r.driverId && (
+                      <>
+                        <select
+                          value={driverSelections[r.id] || ""}
+                          onChange={e => setDriverSelections(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          style={{ padding: "4px 8px", marginRight: 6 }}
+                        >
+                          <option value="">Select Driver</option>
+                          {drivers.map(d => (
+                            <option key={d.id} value={d.id}>{d.name || d.id}</option>
+                          ))}
+                        </select>
+                        <button
+                          disabled={!driverSelections[r.id] || assigning === r.id}
+                          onClick={() => handleAssignDriver(r.id)}
+                          style={{
+                            padding: "4px 12px",
+                            background: "#1976d2",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 4,
+                            fontWeight: "bold"
+                          }}
+                        >
+                          <FaUserCheck style={{ marginRight: 4 }} />
+                          Assign
+                        </button>
+                        {assignStatus[r.id] && (
+                          <span style={{
+                            marginLeft: 8,
+                            color: assignStatus[r.id] === "Assigned!" ? "#388e3c" : "#f44336",
+                            fontWeight: "bold"
+                          }}>{assignStatus[r.id]}</span>
+                        )}
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

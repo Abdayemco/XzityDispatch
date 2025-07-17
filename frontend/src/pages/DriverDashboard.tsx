@@ -1,834 +1,200 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  FaHistory,
-  FaDollarSign,
-  FaUser,
-  FaCar,
-  FaMotorcycle,
-  FaBox,
-  FaTruck,
-  FaTruckPickup,
-  FaWheelchair
-} from "react-icons/fa";
-import AppMap from "../components/AppMap";
-import RestChatWindow from "../components/RestChatWindow";
-import markerLimo from "../assets/marker-limo.png"; // <-- limo icon
+import React, { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { FaUsers, FaCar, FaUserShield, FaUser } from "react-icons/fa";
+import PendingDriversList from "../components/PendingDriversList";
+import AdminDriversTable from "./AdminDriversTable";
+import AdminCustomersTable from "./AdminCustomersTable";
 
-// Extended vehicle types
-const VEHICLE_TYPE_LABELS = {
-  car: { label: "Car", icon: <FaCar /> },
-  tuktuk: { label: "Tuktuk", icon: <FaMotorcycle /> },
-  delivery: { label: "Delivery", icon: <FaBox /> },
-  limo: {
-    label: "Limo",
-    icon: (
-      <img
-        src={markerLimo}
-        alt="Limo"
-        style={{
-          height: 24,
-          width: 48, // wider for limo
-          objectFit: "contain",
-          verticalAlign: "middle"
-        }}
-      />
-    )
-  },
-  wheelchair: { label: "Wheelchair", icon: <FaWheelchair /> },
-  truck: { label: "Truck", icon: <FaTruck /> },
-  water_truck: { label: "Water Truck", icon: <FaTruckPickup /> },
-  tow_truck: { label: "Tow Truck", icon: <FaTruckPickup /> }
-};
-
-type Job = {
-  id: string | number;
-  pickupLat: number;
-  pickupLng: number;
-  customerName: string;
-  vehicleType: keyof typeof VEHICLE_TYPE_LABELS;
-  status?:
-    | "pending"
-    | "accepted"
-    | "cancelled"
-    | "done"
-    | "arrived"
-    | "in_progress";
-  assignedDriverId?: string | number;
-};
-
-const IN_PROGRESS_TIMEOUT_MINUTES = 15;
-const ACCEPTED_TIMEOUT_MINUTES = 15;
-
-function saveChatSession(rideId: number | null, jobStatus: string | null) {
-  localStorage.setItem("currentDriverRideId", rideId ? String(rideId) : "");
-  localStorage.setItem("currentDriverJobStatus", jobStatus || "");
-}
-function getSavedChatSession() {
-  const rideId = Number(localStorage.getItem("currentDriverRideId"));
-  const jobStatus = localStorage.getItem("currentDriverJobStatus");
-  return { rideId: rideId || null, jobStatus: jobStatus || null };
-}
-
-const API_URL = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
-  : "";
-
-export default function DriverDashboard() {
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem("token")
-  );
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [driverJobId, setDriverJobId] = useState<string | null>(null);
-  const [acceptedJob, setAcceptedJob] = useState<Job | null>(null);
-  const [driverLocation, setDriverLocation] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
-  const [locationLoaded, setLocationLoaded] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
-  const [cancelled, setCancelled] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [autoReleaseTimer, setAutoReleaseTimer] = useState<NodeJS.Timeout | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  const beepRef = useRef<HTMLAudioElement | null>(null);
+export default function AdminDashboard() {
   const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+  const role = localStorage.getItem("role");
 
-  const [rideStartedAt, setRideStartedAt] = useState<number | null>(() => {
-    const saved = localStorage.getItem("rideStartedAt");
-    return saved ? Number(saved) : null;
-  });
-  const [rideAcceptedAt, setRideAcceptedAt] = useState<number | null>(() => {
-    const saved = localStorage.getItem("rideAcceptedAt");
-    return saved ? Number(saved) : null;
-  });
+  // UI state
+  const [activeTab, setActiveTab] = useState("users");
+  const [rides, setRides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const driverId = localStorage.getItem("driverId") || "";
-  let driverVehicleType =
-    (localStorage.getItem("vehicleType") || "car").toLowerCase();
-  if (driverVehicleType === "toktok") driverVehicleType = "tuktuk";
+  const API_URL = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
+    : "";
 
   useEffect(() => {
-    const onStorage = () => setToken(localStorage.getItem("token"));
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  useEffect(() => {
-    async function restoreCurrentJobFromBackend() {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      try {
-        const res = await fetch(`${API_URL}/api/rides/current`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (
-            data &&
-            data.rideId &&
-            ["accepted", "in_progress", "pending"].includes(data.rideStatus)
-          ) {
-            setDriverJobId(String(data.rideId));
-            setJobStatus(data.rideStatus);
-            setAcceptedJob({
-              id: data.rideId,
-              pickupLat: data.originLat,
-              pickupLng: data.originLng,
-              customerName: data.customer?.name || "",
-              vehicleType: (data.vehicleType || "").toLowerCase(),
-              status: data.rideStatus
-            });
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
+    if (!token || role !== "admin") {
+      navigate("/login", { replace: true });
     }
-    if (!driverJobId && !acceptedJob) {
-      restoreCurrentJobFromBackend();
-    }
-  }, [driverJobId, acceptedJob]);
+  }, [navigate, token, role]);
 
+  // Fetch rides for rides tab
   useEffect(() => {
-    if (!driverJobId && !acceptedJob) {
-      const { rideId: storedId, jobStatus: storedStatus } = getSavedChatSession();
-      if (
-        storedId &&
-        (storedStatus === "accepted" ||
-          storedStatus === "in_progress" ||
-          storedStatus === "pending")
-      ) {
-        setDriverJobId(String(storedId));
-        setJobStatus(storedStatus);
-      }
-    }
-  }, [driverJobId, acceptedJob]);
-
-  useEffect(() => {
-    if (getRideId() && jobStatus) saveChatSession(Number(getRideId()), jobStatus);
-  }, [driverJobId, jobStatus, acceptedJob]);
-
-  useEffect(() => {
-    if (!token) navigate("/login", { replace: true });
-  }, [navigate, token]);
-
-  const updateDriverLocationOnBackend = useCallback(
-    async (lat: number, lng: number) => {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      try {
-        await fetch(`${API_URL}/api/driver/location`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ lat, lng, online: true })
-        });
-      } catch (e) {
-        // Optionally: show error or log
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setDriverLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocationLoaded(true);
-
-        updateDriverLocationOnBackend(pos.coords.latitude, pos.coords.longitude);
-      },
-      () => {
-        setDriverLocation({ lat: 51.505, lng: -0.09 });
-        setLocationLoaded(true);
-
-        updateDriverLocationOnBackend(51.505, -0.09);
-      }
-    );
-  }, []);
-
-  useEffect(() => {
-    if (driverLocation && locationLoaded) {
-      updateDriverLocationOnBackend(driverLocation.lat, driverLocation.lng);
-    }
-  }, [driverLocation, locationLoaded, updateDriverLocationOnBackend]);
-
-  const fetchJobs = useCallback(async () => {
-    try {
-      setErrorMsg(null);
-      const url = `${API_URL}/api/rides/available?vehicleType=${driverVehicleType}&driverId=${driverId}`;
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data)) setJobs(data);
-      else {
-        setErrorMsg(data?.error || "Server returned an error fetching jobs.");
-        setJobs([]);
-      }
-    } catch {
-      setErrorMsg("Network error fetching jobs.");
-      setJobs([]);
-    }
-  }, [driverVehicleType, token, driverId]);
-
-  useEffect(() => {
-    if (!locationLoaded || driverJobId || cancelled || completed) return;
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 10000);
-    return () => clearInterval(interval);
-  }, [fetchJobs, locationLoaded, driverJobId, cancelled, completed]);
-
-  const handleAccept = useCallback(
-    async (jobId: string) => {
-      if (driverJobId) return;
-      setStatusMsg(null);
-      setErrorMsg(null);
-      try {
-        const now = Date.now();
-        const res = await fetch(
-          `${API_URL}/api/rides/${jobId}/accept?driverId=${driverId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {})
-            }
-          }
-        );
+    if (activeTab !== "rides") return;
+    setError("");
+    setLoading(true);
+    fetch(`${API_URL}/api/admin/rides`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch rides");
         const data = await res.json();
-        if (res.ok) {
-          setDriverJobId(jobId);
-          setAcceptedJob(jobs.find((j) => String(j.id) === String(jobId)) || null);
-          setStatusMsg(`You have accepted job ${jobId}`);
-          setCancelled(false);
-          setCompleted(false);
-          setRideAcceptedAt(now);
-          localStorage.setItem("rideAcceptedAt", String(now));
-        } else setErrorMsg(data?.error || "Failed to accept job");
-      } catch {
-        setErrorMsg("Failed to accept job");
-      }
-    },
-    [driverJobId, driverId, token, jobs]
-  );
-
-  async function handleStartRide() {
-    if (!driverJobId) return;
-    setStatusMsg(null);
-    setErrorMsg(null);
-    try {
-      const now = Date.now();
-      const res = await fetch(
-        `${API_URL}/api/rides/${driverJobId}/start?driverId=${driverId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          }
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data?.error || "Failed to start ride");
-      } else {
-        setStatusMsg("Ride started! Take your customer to their destination.");
-        setJobStatus("in_progress");
-        setRideStartedAt(now);
-        localStorage.setItem("rideStartedAt", String(now));
-        setRideAcceptedAt(null);
-        localStorage.removeItem("rideAcceptedAt");
-      }
-    } catch {
-      setErrorMsg("Failed to start ride");
-    }
-  }
-
-  useEffect(() => {
-    if (!driverJobId || cancelled || completed) return;
-    let isMounted = true;
-    let localTimer: NodeJS.Timeout | null = null;
-    const pollStatus = async () => {
-      try {
-        const res = await fetch(
-          `${API_URL}/api/rides/${driverJobId}/status`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-          }
-        );
-        const data = await res.json();
-        const status = (data.status || "").toLowerCase();
-        setJobStatus(status);
-
-        if (status === "cancelled" && isMounted) {
-          setCancelled(true);
-          setStatusMsg(null);
-          setAcceptedJob(null);
-          setDriverJobId(null);
-          setRideStartedAt(null);
-          setRideAcceptedAt(null);
-          localStorage.removeItem("rideStartedAt");
-          localStorage.removeItem("rideAcceptedAt");
-          saveChatSession(null, null);
-          if (beepRef.current) {
-            beepRef.current.currentTime = 0;
-            beepRef.current.play();
-          }
-        }
-
-        if ((status === "done" || status === "arrived") && isMounted) {
-          setCompleted(true);
-          setAcceptedJob(null);
-          setDriverJobId(null);
-          setStatusMsg(null);
-          setRideStartedAt(null);
-          setRideAcceptedAt(null);
-          localStorage.removeItem("rideStartedAt");
-          localStorage.removeItem("rideAcceptedAt");
-          saveChatSession(null, null);
-          if (autoReleaseTimer) {
-            clearInterval(autoReleaseTimer);
-            setAutoReleaseTimer(null);
-            setCountdown(0);
-          }
-        }
-      } catch {}
-    };
-    pollStatus();
-    const interval = setInterval(pollStatus, 5000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-      if (localTimer) clearInterval(localTimer);
-    };
-  }, [driverJobId, token, cancelled, completed, autoReleaseTimer]);
-
-  useEffect(() => {
-    if (jobStatus !== "accepted" || !rideAcceptedAt || cancelled || completed) return;
-
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - rideAcceptedAt) / 1000);
-      const remaining = ACCEPTED_TIMEOUT_MINUTES * 60 - elapsed;
-      setCountdown(remaining > 0 ? remaining : 0);
-
-      if (remaining <= 0) {
-        setAcceptedJob(null);
-        setDriverJobId(null);
-        setJobStatus(null);
-        setStatusMsg(
-          "You can now accept new jobs! (You didn't start the ride in time)"
-        );
-        setCompleted(false);
-        setCancelled(false);
-        setCountdown(0);
-        setRideStartedAt(null);
-        setRideAcceptedAt(null);
-        localStorage.removeItem("rideStartedAt");
-        localStorage.removeItem("rideAcceptedAt");
-        saveChatSession(null, null);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [jobStatus, rideAcceptedAt, cancelled, completed]);
-
-  useEffect(() => {
-    if (jobStatus !== "in_progress" || !rideStartedAt || cancelled || completed)
-      return;
-
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - rideStartedAt) / 1000);
-      const remaining = IN_PROGRESS_TIMEOUT_MINUTES * 60 - elapsed;
-      setCountdown(remaining > 0 ? remaining : 0);
-
-      if (remaining <= 0) {
-        setAcceptedJob(null);
-        setDriverJobId(null);
-        setJobStatus(null);
-        setStatusMsg(
-          "You can now accept new jobs! (Customer did not mark as done in time)"
-        );
-        setCompleted(false);
-        setCancelled(false);
-        setCountdown(0);
-        setRideStartedAt(null);
-        setRideAcceptedAt(null);
-        localStorage.removeItem("rideStartedAt");
-        localStorage.removeItem("rideAcceptedAt");
-        saveChatSession(null, null);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [jobStatus, rideStartedAt, cancelled, completed]);
-
-  async function handleFindAnother() {
-    setDriverJobId(null);
-    setJobStatus(null);
-    setCancelled(false);
-    setCompleted(false);
-    setStatusMsg(null);
-    setAcceptedJob(null);
-    setCountdown(0);
-    setRideStartedAt(null);
-    setRideAcceptedAt(null);
-    localStorage.removeItem("rideStartedAt");
-    localStorage.removeItem("rideAcceptedAt");
-    saveChatSession(null, null);
-    if (autoReleaseTimer) {
-      clearInterval(autoReleaseTimer);
-      setAutoReleaseTimer(null);
-    }
-    await fetchJobs();
-  }
-
-  let jobsToShow: Job[] = [];
-  if (driverJobId && acceptedJob) jobsToShow = [acceptedJob];
-  else if (!driverJobId && !cancelled && !completed) jobsToShow = jobs;
-
-  function formatCountdown(secs: number) {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  }
-
-  // ------------------- CHAT STATE ---------------------
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatId, setChatId] = useState<string | null>(null);
-
-  function getNumericDriverId() {
-    if (!driverId) return null;
-    const idNum = Number(driverId);
-    return Number.isInteger(idNum) ? idNum : driverId;
-  }
-
-  function getRideId() {
-    if (acceptedJob && acceptedJob.id) return acceptedJob.id;
-    if (driverJobId) return driverJobId;
-    return null;
-  }
-
-  useEffect(() => {
-    const rideId = getRideId();
-    if (!rideId) return;
-    setChatId(String(rideId));
-
-    let polling = true;
-    async function fetchMessages() {
-      if (!polling) return;
-      try {
-        const res = await fetch(
-          `${API_URL}/api/rides/${rideId}/chat/messages`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-          }
-        );
-        if (res.ok) {
-          const msgs = await res.json();
-          setChatMessages(
-            Array.isArray(msgs)
-              ? msgs.filter(Boolean).map((m, idx) => ({
-                  ...m,
-                  id:
-                    m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
-                  sender: m?.sender ?? {
-                    id: m?.senderId ?? "unknown",
-                    name: m?.senderName ?? "",
-                    role: m?.senderRole ?? "",
-                    avatar: m?.senderAvatar ?? ""
-                  }
-                }))
-              : []
-          );
-        } else {
-          setChatMessages([]);
-        }
-      } catch {
-        setChatMessages([]);
-      }
-    }
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 3000);
-    return () => {
-      polling = false;
-      clearInterval(interval);
-      setChatMessages([]);
-    };
-  }, [driverJobId, acceptedJob, token]);
-
-  const handleSendMessage = async (text: string) => {
-    if (!chatId || !getNumericDriverId()) return;
-    await fetch(`${API_URL}/api/rides/${chatId}/chat/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sender: {
-          id: getNumericDriverId(),
-          name: "Driver",
-          role: "driver",
-          avatar: ""
-        },
-        content: text
+        setRides(data);
       })
-    });
-    // message will appear on next poll
-  };
+      .catch(() => setError("Failed to load rides."))
+      .finally(() => setLoading(false));
+  }, [activeTab, token, API_URL]);
+
+  function renderRides() {
+    return (
+      <div style={{ margin: "30px auto", maxWidth: 1100 }}>
+        <h3>All Rides</h3>
+        {loading && <p>Loading rides...</p>}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        {!loading && !error && (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>ID</th>
+                <th style={thStyle}>Customer</th>
+                <th style={thStyle}>Driver</th>
+                <th style={thStyle}>Origin</th>
+                <th style={thStyle}>Destination</th>
+                <th style={thStyle}>Vehicle</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Requested</th>
+                <th style={thStyle}>Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rides.map((r) => (
+                <tr key={r.id}>
+                  <td style={tdStyle}>{r.id}</td>
+                  <td style={tdStyle}>{r.customer?.name || r.customerId}</td>
+                  <td style={tdStyle}>{r.driver?.name || r.driverId || "-"}</td>
+                  <td style={tdStyle}>{`${r.originLat}, ${r.originLng}`}</td>
+                  <td style={tdStyle}>{`${r.destLat}, ${r.destLng}`}</td>
+                  <td style={tdStyle}>{r.vehicleType}</td>
+                  <td style={tdStyle}>{r.status}</td>
+                  <td style={tdStyle}>{r.requestedAt ? new Date(r.requestedAt).toLocaleString() : "-"}</td>
+                  <td style={tdStyle}>{r.rating || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          marginBottom: 8
-        }}
-      >
-        Available Rides By Xzity
-      </h2>
-      <audio
-        ref={beepRef}
-        src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YYwAAAABAAgAZGF0YYwAAAAA"
-        preload="auto"
-      />
-
-      {cancelled && (
-        <div
+      <h2 style={{ textAlign: "center" }}>Admin Panel</h2>
+      {/* Live Map Link */}
+      <div style={{ textAlign: "center", marginTop: 8 }}>
+        <Link
+          to="/admin/live-map"
           style={{
-            color: "#d32f2f",
-            textAlign: "center",
-            fontWeight: "bold",
-            marginTop: 60,
-            background: "#fff3e0",
-            padding: 32,
+            display: "inline-block",
+            margin: "0 0 24px 0",
+            background: "#1976d2",
+            color: "#fff",
+            padding: "8px 22px",
             borderRadius: 8,
-            border: "1px solid #ffcdd2"
+            textDecoration: "none",
+            fontWeight: 600,
+            fontSize: 17,
+            boxShadow: "0 1px 5px #0001"
           }}
         >
-          <div style={{ fontSize: 24, marginBottom: 16 }}>
-            Customer cancelled the ride.
-          </div>
-          <button
-            onClick={handleFindAnother}
-            style={{
-              padding: "0.8em 2em",
-              background: "#1976D2",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: 18
-            }}
-          >
-            Find Another Job
-          </button>
+          Live Map of Drivers & Rides
+        </Link>
+      </div>
+      <div style={tabBarStyle}>
+        <TabIcon
+          icon={<FaUsers size={28} />}
+          label="All Drivers"
+          active={activeTab === "users"}
+          onClick={() => setActiveTab("users")}
+        />
+        <TabIcon
+          icon={<FaUser size={28} />}
+          label="All Customers"
+          active={activeTab === "customers"}
+          onClick={() => setActiveTab("customers")}
+        />
+        <TabIcon
+          icon={<FaCar size={28} />}
+          label="All Rides"
+          active={activeTab === "rides"}
+          onClick={() => setActiveTab("rides")}
+        />
+        <TabIcon
+          icon={<FaUserShield size={28} />}
+          label="Approvals"
+          active={activeTab === "approvals"}
+          onClick={() => setActiveTab("approvals")}
+        />
+      </div>
+      {activeTab === "users" && <AdminDriversTable />}
+      {activeTab === "customers" && <AdminCustomersTable />}
+      {activeTab === "rides" && renderRides()}
+      {activeTab === "approvals" && (
+        <div style={{ margin: "30px auto", maxWidth: 900 }}>
+          <h3>Pending Driver Approvals</h3>
+          <PendingDriversList token={token} />
         </div>
-      )}
-
-      {completed && (
-        <div
-          style={{
-            color: "#388e3c",
-            textAlign: "center",
-            fontWeight: "bold",
-            marginTop: 60,
-            background: "#e8f5e9",
-            padding: 32,
-            borderRadius: 8,
-            border: "1px solid #c8e6c9"
-          }}
-        >
-          <div style={{ fontSize: 24, marginBottom: 16 }}>
-            Ride completed. Good job!
-          </div>
-          <button
-            onClick={handleFindAnother}
-            style={{
-              padding: "0.8em 2em",
-              background: "#1976D2",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: 18
-            }}
-          >
-            Find Another Job
-          </button>
-        </div>
-      )}
-
-      {driverJobId &&
-        ((jobStatus === "accepted" && countdown > 0) ||
-          (jobStatus === "in_progress" && countdown > 0)) &&
-        !completed &&
-        !cancelled && (
-          <div
-            style={{
-              color: jobStatus === "accepted" ? "#ff9800" : "#1976D2",
-              textAlign: "center",
-              fontWeight: "bold",
-              marginTop: 24,
-              background: "#fffde7",
-              padding: 18,
-              borderRadius: 8,
-              border: "1px solid #ffe0b2"
-            }}
-          >
-            <div>
-              {jobStatus === "accepted" ? (
-                <>
-                  You must start the ride within{" "}
-                  <span style={{ color: "#d32f2f" }}>
-                    {formatCountdown(countdown)}
-                  </span>{" "}
-                  or you'll be able to accept new jobs automatically.
-                </>
-              ) : (
-                <>
-                  Waiting for customer to mark the ride as done...
-                  <br />
-                  If not completed in{" "}
-                  <span style={{ color: "#d32f2f" }}>
-                    {formatCountdown(countdown)}
-                  </span>
-                  , you'll be able to accept new rides automatically.
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-      {driverJobId &&
-        jobStatus === "accepted" &&
-        !cancelled &&
-        !completed && (
-          <div style={{ textAlign: "center", marginTop: 24 }}>
-            <button
-              onClick={handleStartRide}
-              style={{
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                background: "#388e3c",
-                color: "#fff",
-                border: "none",
-                fontSize: 18,
-                fontWeight: "bold",
-                margin: "0 12px"
-              }}
-            >
-              Start Ride
-            </button>
-            <div style={{ marginTop: 8, color: "#888" }}>
-              Press "Start Ride" when you pick up the customer.
-            </div>
-          </div>
-        )}
-
-      {driverJobId &&
-        (jobStatus === "accepted" || jobStatus === "in_progress") &&
-        !completed &&
-        !cancelled &&
-        getRideId() && (
-          <div
-            style={{
-              margin: "32px auto 0 auto",
-              display: "flex",
-              justifyContent: "center",
-              height: "250px",
-              maxHeight: "250px",
-              minHeight: "120px",
-              width: "100%",
-              maxWidth: "500px"
-            }}
-          >
-            <RestChatWindow
-              rideId={String(getRideId())}
-              sender={{
-                id: getNumericDriverId(),
-                name: "Driver",
-                role: "driver",
-                avatar: ""
-              }}
-              messages={chatMessages}
-              onSend={handleSendMessage}
-              style={{ height: "100%" }}
-            />
-          </div>
-        )}
-
-      {!cancelled && !completed && (
-        <>
-          {driverJobId ? (
-            <h2 style={{ textAlign: "center" }}>Your Ride</h2>
-          ) : null}
-          {errorMsg && (
-            <div style={{ color: "#d32f2f", textAlign: "center" }}>
-              {errorMsg}
-            </div>
-          )}
-          {statusMsg && (
-            <div style={{ color: "#388e3c", textAlign: "center" }}>
-              {statusMsg}
-            </div>
-          )}
-          {!locationLoaded ? (
-            <div
-              style={{
-                background: "#e0e0e0",
-                borderRadius: 8,
-                margin: "24px 0",
-                height: 320,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}
-            >
-              <span
-                style={{
-                  color: "#1976D2",
-                  fontWeight: "bold",
-                  fontSize: 20
-                }}
-              >
-                Loading your location...
-              </span>
-            </div>
-          ) : (
-            <AppMap
-              jobs={jobsToShow}
-              driverLocation={driverLocation || undefined}
-              driverVehicleType={driverVehicleType}
-              showDriverMarker={true}
-              vehicleTypeLabels={VEHICLE_TYPE_LABELS}
-              onAcceptRide={handleAccept}
-            />
-          )}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-around",
-              marginTop: 20
-            }}
-          >
-            <FaHistory size={32} title="Ride History" />
-            <FaDollarSign size={32} title="Earnings" />
-            <FaUser size={32} title="Profile" />
-          </div>
-          {!driverJobId && jobsToShow.length > 0 && (
-            <div style={{ textAlign: "center", marginTop: 16 }}>
-              <h4>Accept a Job</h4>
-              {jobsToShow.map((job) => (
-                <button
-                  key={job.id}
-                  onClick={() => handleAccept(String(job.id))}
-                  style={{
-                    margin: "0 8px",
-                    padding: "0.5em 1em",
-                    background: "#1976D2",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8
-                  }}
-                  disabled={!!driverJobId}
-                >
-                  {VEHICLE_TYPE_LABELS[job.vehicleType]?.icon}
-                  Accept Ride ({job.customerName}){" "}
-                  {VEHICLE_TYPE_LABELS[job.vehicleType]?.label && (
-                    <>- {VEHICLE_TYPE_LABELS[job.vehicleType].label}</>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-          {driverJobId &&
-            !cancelled &&
-            !completed &&
-            jobStatus !== "accepted" &&
-            jobStatus !== "in_progress" && (
-              <div style={{ marginTop: 16, textAlign: "center" }}>
-                <span style={{ color: "#388e3c", fontWeight: "bold" }}>
-                  Go to your customer and pick them up. You can't accept another
-                  job until this one is completed or cancelled.
-                </span>
-              </div>
-            )}
-        </>
       )}
     </div>
   );
 }
+
+const tabBarStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: 40,
+  marginTop: 24,
+  marginBottom: 16,
+};
+
+type TabIconProps = {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+};
+
+function TabIcon({ icon, label, active, onClick }: TabIconProps) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        color: active ? "#1976d2" : "#333",
+        borderBottom: active ? "3px solid #1976d2" : "3px solid transparent",
+        paddingBottom: 4,
+        fontWeight: active ? "bold" : "normal",
+        minWidth: 80,
+      }}
+    >
+      {icon}
+      <span style={{ fontSize: 15, marginTop: 3 }}>{label}</span>
+    </div>
+  );
+}
+
+const thStyle: React.CSSProperties = {
+  border: "1px solid #ddd",
+  padding: "8px",
+  background: "#f5f5f5",
+  textAlign: "left",
+};
+
+const tdStyle: React.CSSProperties = {
+  border: "1px solid #ddd",
+  padding: "8px",
+  textAlign: "left",
+};

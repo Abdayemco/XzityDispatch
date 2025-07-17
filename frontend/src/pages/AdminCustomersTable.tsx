@@ -14,6 +14,14 @@ type Customer = {
   area?: string;
 };
 
+type ScheduledRide = {
+  scheduledAt: string;
+  destLat: number;
+  destLng: number;
+  vehicleType?: string;
+  status?: string;
+};
+
 const DEFAULT_PAGE_SIZE = 20;
 
 function customersToCSV(customers: Customer[]): string {
@@ -39,6 +47,8 @@ export default function AdminCustomersTable() {
   const token = localStorage.getItem("token");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [scheduledRides, setScheduledRides] = useState<{ [id: number]: ScheduledRide | null }>({});
+  const [noShowCounts, setNoShowCounts] = useState<{ [id: number]: number }>({});
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -93,6 +103,33 @@ export default function AdminCustomersTable() {
       })
       .finally(() => setLoading(false));
   }, [API_URL, page, sortBy, order, search, online, disabled, country, area, token]);
+
+  // Fetch scheduled ride + no show count for each customer on page
+  useEffect(() => {
+    customers.forEach((customer) => {
+      // Scheduled ride info
+      fetch(`${API_URL}/api/admin/customers/${customer.id}/scheduled_ride`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("No scheduled ride");
+          const data = await res.json();
+          setScheduledRides((prev) => ({ ...prev, [customer.id]: data }));
+        })
+        .catch(() => setScheduledRides((prev) => ({ ...prev, [customer.id]: null })));
+
+      // No Show count
+      fetch(`${API_URL}/api/admin/customers/${customer.id}/no_show_count`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("No show count");
+          const data = await res.json();
+          setNoShowCounts((prev) => ({ ...prev, [customer.id]: data.count || 0 }));
+        })
+        .catch(() => setNoShowCounts((prev) => ({ ...prev, [customer.id]: 0 })));
+    });
+  }, [customers, API_URL, token]);
 
   // Table column headers
   const columns: { label: string; key: keyof Customer }[] = [
@@ -228,19 +265,21 @@ export default function AdminCustomersTable() {
                   {sortBy === col.key ? (order === "asc" ? " ▲" : " ▼") : ""}
                 </th>
               ))}
+              <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>Scheduled Ride</th>
+              <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>No Show Count</th>
               <th style={{ borderBottom: "2px solid #1976D2", padding: "7px 12px", background: "#e3eafc" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>
+                <td colSpan={columns.length + 3} style={{ textAlign: "center", padding: 30 }}>
                   Loading...
                 </td>
               </tr>
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + 1} style={{ textAlign: "center", padding: 30 }}>
+                <td colSpan={columns.length + 3} style={{ textAlign: "center", padding: 30 }}>
                   No customers found.
                 </td>
               </tr>
@@ -256,6 +295,19 @@ export default function AdminCustomersTable() {
                         : customer[col.key] ?? "-"}
                     </td>
                   ))}
+                  <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
+                    {scheduledRides[customer.id] ? (
+                      <span>
+                        {new Date(scheduledRides[customer.id]!.scheduledAt).toLocaleString()}<br />
+                        Dest: {scheduledRides[customer.id]!.destLat}, {scheduledRides[customer.id]!.destLng}<br />
+                        {scheduledRides[customer.id]!.vehicleType && <span>Vehicle: {scheduledRides[customer.id]!.vehicleType}</span>}
+                        {scheduledRides[customer.id]!.status === "no_show" && <span style={{ color: "#f44336" }}>No Show</span>}
+                      </span>
+                    ) : "-"}
+                  </td>
+                  <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
+                    {noShowCounts[customer.id] ?? 0}
+                  </td>
                   <td style={{ padding: "7px 12px", borderBottom: "1px solid #eee", textAlign: "center" }}>
                     <button
                       style={{

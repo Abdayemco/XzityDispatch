@@ -24,12 +24,15 @@ enum VehicleType {
   LIMO
 }
 
+// --- ADDED SCHEDULED & NO_SHOW ---
 enum RideStatus {
   PENDING
   ACCEPTED
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  SCHEDULED
+  NO_SHOW
 }
 
 model User {
@@ -74,25 +77,27 @@ model User {
 }
 
 model Ride {
-  id          Int         @id @default(autoincrement())
-  customer    User        @relation("CustomerRides", fields: [customerId], references: [id])
-  customerId  Int
-  driver      User?       @relation("DriverRides", fields: [driverId], references: [id])
-  driverId    Int?
-  originLat   Float
-  originLng   Float
-  destLat     Float
-  destLng     Float
-  requestedAt DateTime    @default(now())
-  acceptedAt  DateTime?
-  startedAt   DateTime?
-  completedAt DateTime?
-  cancelledAt DateTime?
-  status      RideStatus  @default(PENDING)
-  vehicleType VehicleType
-  rating      Int?
-  feedback    String?
-  chat        Chat?
+  id                Int         @id @default(autoincrement())
+  customer          User        @relation("CustomerRides", fields: [customerId], references: [id])
+  customerId        Int
+  driver            User?       @relation("DriverRides", fields: [driverId], references: [id])
+  driverId          Int?
+  originLat         Float
+  originLng         Float
+  destLat           Float
+  destLng           Float
+  requestedAt       DateTime    @default(now())
+  acceptedAt        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  status            RideStatus  @default(PENDING)
+  vehicleType       VehicleType
+  rating            Int?
+  feedback          String?
+  chat              Chat?
+  scheduledAt       DateTime?   // --- NEW: For scheduled rides
+  noShowReportedAt  DateTime?   // --- NEW: When "No Show" is marked
 }
 
 model TrustedDevice {

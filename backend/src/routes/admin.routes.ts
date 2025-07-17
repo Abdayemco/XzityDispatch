@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { isAdmin } from "../middlewares/isAdmin";
 import { prisma } from "../utils/prisma";
+import {
+  getCustomerScheduledRide,
+  getDriverScheduledRide,
+  getCustomerNoShowCount,
+  getDriverNoShowCount,
+  assignDriverToScheduledRide
+} from "../controllers/adminController";
 
 // Helper to get safe sort params
 function getSortParams(query: any, allowedFields: string[], defaultField = "id", defaultOrder = "desc") {
@@ -280,7 +287,7 @@ router.get("/map/customers", async (req, res) => {
 // --- Rides endpoint (sortable, paginated) ---
 router.get("/rides", async (req, res) => {
   try {
-    const allowedFields = ["id", "requestedAt"];
+    const allowedFields = ["id", "requestedAt", "scheduledAt"];
     const { sortBy, order } = getSortParams(req.query, allowedFields, "requestedAt", "desc");
     const { take, skip } = getPagination(req.query);
 
@@ -298,5 +305,18 @@ router.get("/rides", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch rides" });
   }
 });
+
+// --- SCHEDULED RIDE FOR CUSTOMER ---
+router.get("/customers/:id/scheduled_ride", getCustomerScheduledRide);
+
+// --- SCHEDULED RIDE FOR DRIVER ---
+router.get("/drivers/:id/scheduled_ride", getDriverScheduledRide);
+
+// --- NO SHOW COUNTS FOR CUSTOMER/DRIVER ---
+router.get("/customers/:id/no_show_count", getCustomerNoShowCount);
+router.get("/drivers/:id/no_show_count", getDriverNoShowCount);
+
+// --- ASSIGN DRIVER TO SCHEDULED RIDE ---
+router.put("/rides/:rideId/assign", assignDriverToScheduledRide);
 
 export default router;

@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { isAdmin } from "../middlewares/isAdmin";
 import { prisma } from "../utils/prisma";
+import {
+  getCustomerScheduledRide,
+  getDriverScheduledRide,
+  getCustomerNoShowCount,
+  getDriverNoShowCount,
+  assignDriverToScheduledRide
+} from "../controllers/adminController"; // <-- Add these controller imports
 
 const router = Router();
 
@@ -11,7 +18,7 @@ function getSortParams(query: any, allowedFields: string[], defaultField: string
   return { sortBy, order };
 }
 
-// List all users (all roles, sortable)
+// --- USER ENDPOINTS ---
 router.get("/users", isAdmin, async (req, res) => {
   try {
     const allowedFields = ["id", "name", "email", "phone", "role", "vehicleType", "isBusy", "phoneVerified", "disabled"];
@@ -36,10 +43,10 @@ router.get("/users", isAdmin, async (req, res) => {
   }
 });
 
-// List all rides (sortable by id, requestedAt)
+// --- RIDES ENDPOINTS ---
 router.get("/rides", isAdmin, async (req, res) => {
   try {
-    const allowedFields = ["id", "requestedAt"];
+    const allowedFields = ["id", "requestedAt", "scheduledAt"];
     const { sortBy, order } = getSortParams(req.query, allowedFields, "requestedAt", "desc");
     const rides = await prisma.ride.findMany({
       include: {
@@ -54,7 +61,20 @@ router.get("/rides", isAdmin, async (req, res) => {
   }
 });
 
-// List all drivers who are not verified by phone (sortable)
+// --- SCHEDULED RIDE FOR CUSTOMER ---
+router.get("/customers/:id/scheduled_ride", isAdmin, getCustomerScheduledRide);
+
+// --- SCHEDULED RIDE FOR DRIVER ---
+router.get("/drivers/:id/scheduled_ride", isAdmin, getDriverScheduledRide);
+
+// --- NO SHOW COUNTS FOR CUSTOMER/DRIVER ---
+router.get("/customers/:id/no_show_count", isAdmin, getCustomerNoShowCount);
+router.get("/drivers/:id/no_show_count", isAdmin, getDriverNoShowCount);
+
+// --- ASSIGN DRIVER TO SCHEDULED RIDE ---
+router.put("/rides/:rideId/assign", isAdmin, assignDriverToScheduledRide);
+
+// --- PENDING DRIVERS ---
 router.get("/pending-drivers", isAdmin, async (req, res) => {
   try {
     const allowedFields = ["id", "name", "email", "phone", "vehicleType", "phoneVerified", "disabled"];
@@ -81,7 +101,7 @@ router.get("/pending-drivers", isAdmin, async (req, res) => {
   }
 });
 
-// List all online drivers with location for admin live map
+// --- ADMIN LIVE MAP ENDPOINTS ---
 router.get("/map/drivers", isAdmin, async (req, res) => {
   try {
     const drivers = await prisma.user.findMany({
@@ -109,7 +129,6 @@ router.get("/map/drivers", isAdmin, async (req, res) => {
   }
 });
 
-// List all online customers with location for admin live map
 router.get("/map/customers", isAdmin, async (req, res) => {
   try {
     const customers = await prisma.user.findMany({
@@ -136,7 +155,7 @@ router.get("/map/customers", isAdmin, async (req, res) => {
   }
 });
 
-// List all drivers (sortable)
+// --- DRIVER ENDPOINTS ---
 router.get("/drivers", isAdmin, async (req, res) => {
   try {
     const allowedFields = [
@@ -173,7 +192,6 @@ router.get("/drivers", isAdmin, async (req, res) => {
   }
 });
 
-// Get a single driver
 router.get("/drivers/:id", isAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -204,7 +222,6 @@ router.get("/drivers/:id", isAdmin, async (req, res) => {
   }
 });
 
-// Update a driver's subscription & location & status
 router.patch("/drivers/:id/subscription", isAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -263,7 +280,7 @@ router.patch("/drivers/:id/subscription", isAdmin, async (req, res) => {
   }
 });
 
-// List all customers (sortable)
+// --- CUSTOMER ENDPOINTS ---
 router.get("/customers", isAdmin, async (req, res) => {
   try {
     const allowedFields = ["id", "name", "phone", "email", "avatar", "disabled", "online"];
@@ -287,7 +304,6 @@ router.get("/customers", isAdmin, async (req, res) => {
   }
 });
 
-// Block/unblock customer
 router.patch("/customers/:id/block", isAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
