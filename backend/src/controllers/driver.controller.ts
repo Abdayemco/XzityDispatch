@@ -32,7 +32,17 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
   try {
     const user = req.user as { id: number; role: string; vehicleType?: string };
     const driverId = user?.id;
-    const vehicleType = user?.vehicleType || req.query.vehicleType;
+    const vehicleTypeRaw = user?.vehicleType || req.query.vehicleType;
+    let vehicleType: string | undefined;
+
+    // Safely cast vehicleTypeRaw to string
+    if (typeof vehicleTypeRaw === "string") {
+      vehicleType = vehicleTypeRaw;
+    } else if (Array.isArray(vehicleTypeRaw)) {
+      vehicleType = vehicleTypeRaw[0];
+    } else {
+      vehicleType = undefined;
+    }
     const vehicleTypeUpper = vehicleType ? vehicleType.toUpperCase() : undefined;
 
     // Only show scheduled rides 30min before scheduledAt
@@ -45,9 +55,9 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     } else if (vehicleTypeUpper === "WHEELCHAIR") {
       rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
     } else if (vehicleTypeUpper === "CAR" || vehicleTypeUpper === "TUKTUK") {
-      rideTypes = [vehicleTypeUpper, "DELIVERY"];
+      rideTypes = [vehicleTypeUpper as VehicleType, "DELIVERY"];
     } else if (vehicleTypeUpper) {
-      rideTypes = [vehicleTypeUpper];
+      rideTypes = [vehicleTypeUpper as VehicleType];
     }
 
     const rides = await prisma.ride.findMany({
