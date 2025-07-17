@@ -1,32 +1,48 @@
 import { Router } from "express";
 import {
-  updateLocationStatus,
+  requestRide,
   getAvailableRides,
   acceptRide,
   startRide,
   markRideNoShow,
+  getRideStatus,
+  rateRide,
   getCurrentRide,
-} from "../controllers/driver.controller";
+  markRideAsDone,
+  cancelRide,
+} from "../controllers/ride.controller";
 import { checkUserStatus } from "../middlewares/checkUserStatus";
 
 const router = Router();
 
-// Update driver's location and status
-router.post("/location", checkUserStatus, updateLocationStatus);
+// Create a new ride (regular or scheduled)
+router.post("/schedule", checkUserStatus, requestRide);
 
 // Get available rides for driver (including scheduled)
-router.get("/rides/available", checkUserStatus, getAvailableRides);
+router.get("/available", checkUserStatus, getAvailableRides);
 
 // Driver accepts a ride (pending or scheduled)
-router.put("/rides/:rideId/accept", checkUserStatus, acceptRide);
+router.put("/:rideId/accept", checkUserStatus, acceptRide);
 
 // Driver starts a ride
-router.put("/rides/:rideId/start", checkUserStatus, startRide);
+router.put("/:rideId/start", checkUserStatus, startRide);
 
 // Driver marks scheduled ride as "No Show"
-router.put("/rides/:rideId/no_show", checkUserStatus, markRideNoShow);
+router.put("/:rideId/no_show", checkUserStatus, markRideNoShow);
 
-// Get current ride for logged-in driver
-router.get("/rides/current", checkUserStatus, getCurrentRide);
+// Get ride status for polling
+router.get("/:rideId/status", checkUserStatus, getRideStatus);
+
+// Customer rates ride
+router.post("/:rideId/rate", checkUserStatus, rateRide);
+
+// Get current ride for logged-in customer or driver
+router.get("/current", checkUserStatus, getCurrentRide);
+
+// Mark ride as completed
+router.put("/:rideId/done", checkUserStatus, markRideAsDone);
+
+// Cancel ride
+router.put("/:rideId/cancel", checkUserStatus, cancelRide);
 
 export default router;
