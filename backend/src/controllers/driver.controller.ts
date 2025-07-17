@@ -32,28 +32,20 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
   try {
     const user = req.user as { id: number; role: string; vehicleType?: string };
     const driverId = user?.id;
-    const vehicleTypeRaw = user?.vehicleType || req.query.vehicleType;
+
+    // Safely extract vehicleType as string
+    const vehicleTypeRaw = user?.vehicleType ?? req.query.vehicleType;
     let vehicleType: string | undefined;
 
-    // Safely cast vehicleTypeRaw to string
     if (typeof vehicleTypeRaw === "string") {
       vehicleType = vehicleTypeRaw;
-    } else if (Array.isArray(vehicleTypeRaw)) {
+    } else if (Array.isArray(vehicleTypeRaw) && typeof vehicleTypeRaw[0] === "string") {
       vehicleType = vehicleTypeRaw[0];
     } else {
       vehicleType = undefined;
     }
 
-    // Check if req.query.vehicleType is a ParsedQs object (from express)
-    if (
-      !vehicleType &&
-      typeof req.query.vehicleType === "object" &&
-      req.query.vehicleType !== null &&
-      "toString" in req.query.vehicleType
-    ) {
-      vehicleType = req.query.vehicleType.toString();
-    }
-
+    // Never assign ParsedQs to vehicleType (TypeScript safety)
     const vehicleTypeUpper = vehicleType ? vehicleType.toUpperCase() : undefined;
 
     // Only show scheduled rides 30min before scheduledAt
