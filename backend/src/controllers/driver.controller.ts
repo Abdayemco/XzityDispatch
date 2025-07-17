@@ -43,6 +43,17 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     } else {
       vehicleType = undefined;
     }
+
+    // Check if req.query.vehicleType is a ParsedQs object (from express)
+    if (
+      !vehicleType &&
+      typeof req.query.vehicleType === "object" &&
+      req.query.vehicleType !== null &&
+      "toString" in req.query.vehicleType
+    ) {
+      vehicleType = req.query.vehicleType.toString();
+    }
+
     const vehicleTypeUpper = vehicleType ? vehicleType.toUpperCase() : undefined;
 
     // Only show scheduled rides 30min before scheduledAt
