@@ -7,7 +7,7 @@ import {
   getCustomerNoShowCount,
   getDriverNoShowCount,
   assignDriverToScheduledRide
-} from "../controllers/adminController"; // <-- Add these controller imports
+} from "../controllers/admin.controller"; // <-- Add these controller imports
 
 const router = Router();
 
