@@ -51,8 +51,8 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       originLng,
       destLat,
       destLng,
-      destinationName, // <--- new
-      note,            // <--- new
+      destinationName, // new
+      note,            // new
       vehicleType,
       scheduledAt, // optional, ISO string for scheduled ride
     } = req.body;
@@ -164,8 +164,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         status: true,
         destLat: true,
         destLng: true,
-        destinationName: true, // <--- new
-        note: true,            // <--- new
+        destinationName: true, // new
+        note: true,            // new
       },
       orderBy: { scheduledAt: "asc" }
     });
@@ -390,6 +390,7 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
 // --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    console.log("getCurrentRide: req.user", req.user);
     const user = req.user as { id: number; role: string };
     if (!user) return res.status(401).json({ error: "Not authenticated" });
     const role = user.role?.toLowerCase();
@@ -452,8 +453,8 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
       scheduledAt: ride.scheduledAt,
       destLat: ride.destLat,
       destLng: ride.destLng,
-      destinationName: ride.destinationName,
-      note: ride.note,
+      destinationName: ride.destinationName ?? undefined,
+      note: ride.note ?? undefined,
     });
   } catch (error) {
     console.error("Error fetching current ride:", error);
