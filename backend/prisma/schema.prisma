@@ -86,6 +86,8 @@ model Ride {
   originLng         Float
   destLat           Float
   destLng           Float
+  destinationName   String?     // <-- ADDED: e.g. "Airport", "Mall", "Home"
+  note              String?     // <-- ADDED: customer instructions
   requestedAt       DateTime    @default(now())
   acceptedAt        DateTime?
   startedAt         DateTime?
@@ -96,8 +98,8 @@ model Ride {
   rating            Int?
   feedback          String?
   chat              Chat?
-  scheduledAt       DateTime?   // --- NEW: For scheduled rides
-  noShowReportedAt  DateTime?   // --- NEW: When "No Show" is marked
+  scheduledAt       DateTime?   // --- For scheduled rides
+  noShowReportedAt  DateTime?   // --- When "No Show" is marked
 }
 
 model TrustedDevice {

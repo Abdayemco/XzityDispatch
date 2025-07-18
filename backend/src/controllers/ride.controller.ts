@@ -51,6 +51,8 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       originLng,
       destLat,
       destLng,
+      destinationName, // <--- new
+      note,            // <--- new
       vehicleType,
       scheduledAt, // optional, ISO string for scheduled ride
     } = req.body;
@@ -80,6 +82,8 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
         originLng,
         destLat,
         destLng,
+        destinationName: typeof destinationName === "string" && destinationName.trim() ? destinationName.trim() : null,
+        note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
       },
@@ -89,6 +93,8 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       rideId: ride.id,
       status: ride.status,
       scheduledAt: ride.scheduledAt,
+      destinationName: ride.destinationName,
+      note: ride.note,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
@@ -158,6 +164,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         status: true,
         destLat: true,
         destLng: true,
+        destinationName: true, // <--- new
+        note: true,            // <--- new
       },
       orderBy: { scheduledAt: "asc" }
     });
@@ -171,6 +179,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       scheduledAt: ride.scheduledAt,
       destinationLat: ride.destLat,
       destinationLng: ride.destLng,
+      destinationName: ride.destinationName,
+      note: ride.note,
       status: ride.status,
     }));
 
@@ -442,6 +452,8 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
       scheduledAt: ride.scheduledAt,
       destLat: ride.destLat,
       destLng: ride.destLng,
+      destinationName: ride.destinationName,
+      note: ride.note,
     });
   } catch (error) {
     console.error("Error fetching current ride:", error);
