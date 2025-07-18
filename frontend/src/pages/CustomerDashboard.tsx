@@ -14,7 +14,7 @@ import towTruckIcon from "../assets/marker-towtruck.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
-import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
+import RestChatWindow from "../components/RestChatWindow";
 
 // ICONS
 function createLeafletIcon(url: string, w = 32, h = 41) {
@@ -56,7 +56,7 @@ function getCustomerIdFromStorage(): number | null {
 }
 
 // TYPES
-type RideStatus = "pending" | "accepted" | "in_progress" | "done" | "cancelled" | "scheduled" | null;
+type RideStatus = "pending" | "accepted" | "in_progress" | "done" | "cancelled" | "scheduled" | "no_show" | null;
 type EmergencyLocation = {
   type: "fire" | "police" | "hospital";
   name: string;
@@ -105,19 +105,73 @@ type ActiveRide = {
   destinationName?: string;
 };
 
-function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
-  localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
-  localStorage.setItem("currentRideStatus", rideStatus || "");
-}
-function getSavedChatSession() {
-  const rideId = Number(localStorage.getItem("currentRideId"));
-  const rideStatus = localStorage.getItem("currentRideStatus");
-  return { rideId: rideId || null, rideStatus: rideStatus || null };
-}
-
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
+
+// RATING COMPONENT
+function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
+  const [rating, setRating] = useState(5);
+  const [feedback, setFeedback] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, feedback }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to submit rating");
+        setSubmitting(false);
+        return;
+      }
+      onRated();
+    } catch {
+      setError("Network error, please try again");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <form onSubmit={handleSubmit} style={{ textAlign: "center", marginTop: 30 }}>
+      <h3>Rate your driver</h3>
+      <div style={{ marginBottom: 10 }}>
+        {[1,2,3,4,5].map(star => (
+          <button
+            type="button"
+            key={star}
+            onClick={() => setRating(star)}
+            style={{
+              color: rating >= star ? "#FFD700" : "#CCC",
+              fontSize: 28,
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            }}
+            aria-label={`${star} star`}
+          >★</button>
+        ))}
+      </div>
+      <textarea
+        value={feedback}
+        onChange={e => setFeedback(e.target.value)}
+        placeholder="Optional feedback"
+        rows={3}
+        style={{ display: "block", margin: "12px auto", width: "70%" }}
+      />
+      <button type="submit" disabled={submitting} style={{ padding: "0.5em 2em", marginTop: 8 }}>
+        {submitting ? "Submitting..." : "Submit & Request New Ride"}
+      </button>
+      {error && <div style={{ color: "#d32f2f", marginTop: 8 }}>{error}</div>}
+    </form>
+  );
+}
 
 export default function CustomerDashboard() {
   // --- State
@@ -140,19 +194,12 @@ export default function CustomerDashboard() {
   const [scheduledRide, setScheduledRide] = useState<ScheduledRide | null>(null);
   const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
 
-  // Schedule modal state
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduledVehicleType, setScheduledVehicleType] = useState<string>("");
-  const [scheduledDate, setScheduledDate] = useState<string>("");
-  const [scheduledTime, setScheduledTime] = useState<string>("");
-  const [scheduledNote, setScheduledNote] = useState<string>("");
-  const [scheduledDest, setScheduledDest] = useState<{ lng: number; lat: number } | null>(null);
-  const [scheduledDestName, setScheduledDestName] = useState<string>("");
-  const [scheduledWaiting, setScheduledWaiting] = useState(false);
-  const [scheduledError, setScheduledError] = useState<string | null>(null);
-
   // To detect ride status transition for chat opening
   const [prevRideStatus, setPrevRideStatus] = useState<RideStatus>(null);
+
+  // For rating UI
+  const [showRating, setShowRating] = useState(false);
+  const [lastFinishedRideId, setLastFinishedRideId] = useState<number | null>(null);
 
   // --- Reset functions
   function resetRegularRide() {
@@ -162,23 +209,9 @@ export default function CustomerDashboard() {
     setChatOpen(false);
     setActiveRide(null);
     setWaiting(false);
-    saveChatSession(null, null);
-  }
-  function resetScheduledRide() {
-    setScheduledRide(null);
-    setShowScheduleModal(false);
-    setScheduledVehicleType("");
-    setScheduledDate("");
-    setScheduledTime("");
-    setScheduledNote("");
-    setScheduledDest(null);
-    setScheduledDestName("");
-    setScheduledWaiting(false);
-    setScheduledError(null);
   }
   function resetAll() {
     resetRegularRide();
-    resetScheduledRide();
     setPickupSet(false);
     setVehicleType("");
     if (userLocation) setPickupLocation(userLocation);
@@ -194,13 +227,12 @@ export default function CustomerDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // --- Restore scheduled ride and active ride from backend on mount or after login
+  // --- Restore active ride from backend on mount or after login
   useEffect(() => {
-    async function restoreRides() {
+    async function restoreRide() {
       const token = localStorage.getItem("token");
       if (!token) return;
       try {
-        // Active ride
         const resActive = await fetch(`${API_URL}/api/rides/current`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -235,24 +267,11 @@ export default function CustomerDashboard() {
           setRideId(null);
           setRideStatus(null);
         }
-
-        // Scheduled ride (future ride, not 30min window yet)
-        const resScheduled = await fetch(`${API_URL}/api/rides/customer/scheduled`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const dataScheduled = resScheduled.ok ? await resScheduled.json() : null;
-        // Assuming the API returns the next scheduled ride for the customer, null if none
-        if (dataScheduled && dataScheduled.id) {
-          setScheduledRide(dataScheduled);
-        } else {
-          setScheduledRide(null);
-        }
       } catch (e) {
         setActiveRide(null);
-        setScheduledRide(null);
       }
     }
-    restoreRides();
+    restoreRide();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -334,42 +353,46 @@ export default function CustomerDashboard() {
 
   // POLLING ACTIVE RIDE STATUS (with chat open on accept)
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (activeRide && activeRide.status !== "done" && activeRide.status !== "cancelled") {
+    let interval: NodeJS.Timeout | undefined;
+    if (activeRide && ["pending", "accepted", "in_progress"].includes(activeRide.status || "")) {
       interval = setInterval(async () => {
         try {
           const res = await fetch(`${API_URL}/api/rides/${activeRide.id}/status`);
           const data = await res.json();
           if (data.status) setRideStatus(data.status);
 
-          // Detect transition from pending to accepted to open chat
-          if (activeRide.status === "pending" && data.status === "accepted") {
+          // Detect transition from pending to accepted/in_progress
+          if (
+            (activeRide.status === "pending" && (data.status === "accepted" || data.status === "in_progress")) ||
+            (activeRide.status === "accepted" && data.status === "in_progress")
+          ) {
             setChatOpen(true);
           }
-          if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
-            setDriverInfo({
-              name: data.driver.name || "",
-              vehicleType: data.driver.vehicleType || ""
-            });
-          }
-          if (data.status === "done" || data.status === "cancelled") {
+          // Reset chat if ride is done/cancelled
+          if (data.status === "done" || data.status === "cancelled" || data.status === "no_show") {
+            setChatOpen(false);
+            setLastFinishedRideId(activeRide.id);
+            setShowRating(true);
             resetRegularRide();
           }
         } catch (err) {}
       }, 3000);
     }
-    return () => clearInterval(interval);
+    return () => interval && clearInterval(interval);
   }, [activeRide]);
 
-  // Also, handle chat open on status change for activeRide change
+  // Also: If page is loaded and ride is already accepted/in_progress, open chat
   useEffect(() => {
     if (
-      prevRideStatus === "pending" &&
       activeRide &&
-      activeRide.status === "accepted"
+      (activeRide.status === "accepted" || activeRide.status === "in_progress")
     ) {
       setChatOpen(true);
     }
+  }, [activeRide?.status]);
+
+  // Save previous status to handle transitions on reloads
+  useEffect(() => {
     setPrevRideStatus(activeRide?.status ?? null);
   }, [activeRide?.status]);
 
@@ -426,6 +449,8 @@ export default function CustomerDashboard() {
       setRideId(data.rideId || data.id);
       setRideStatus("pending");
       setWaiting(false);
+      setShowRating(false); // New ride, hide rating
+      setLastFinishedRideId(null);
     } catch (err: any) {
       setError("Network or server error.");
     } finally {
@@ -451,12 +476,10 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      if (activeRide && activeRide.id === rideIdToCancel) {
-        resetRegularRide();
-      }
-      if (scheduledRide && scheduledRide.id === rideIdToCancel) {
-        resetScheduledRide();
-      }
+      setChatOpen(false);
+      setLastFinishedRideId(rideIdToCancel);
+      setShowRating(true);
+      resetRegularRide();
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
@@ -465,71 +488,9 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- SCHEDULE RIDE HANDLER
-  async function handleScheduleRide() {
-    if (
-      !pickupLocation ||
-      !scheduledVehicleType ||
-      !scheduledDate ||
-      !scheduledTime ||
-      !scheduledDestName ||
-      !scheduledDest
-    ) {
-      setScheduledError("All fields are required.");
-      return;
-    }
-    setScheduledWaiting(true);
-    setScheduledError(null);
-    const token = localStorage.getItem("token");
-    const customerId = getCustomerIdFromStorage();
-    if (!token || customerId === null) {
-      setScheduledError("Not logged in.");
-      setScheduledWaiting(false);
-      return;
-    }
-    try {
-      const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`);
-      if (isNaN(scheduledAt.getTime())) {
-        setScheduledError("Invalid date/time.");
-        setScheduledWaiting(false);
-        return;
-      }
-      const res = await fetch(`${API_URL}/api/rides/schedule`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          customerId,
-          originLat: pickupLocation.lat,
-          originLng: pickupLocation.lng,
-          destLat: scheduledDest.lat,
-          destLng: scheduledDest.lng,
-          destinationName: scheduledDestName,
-          vehicleType: scheduledVehicleType,
-          scheduledAt: scheduledAt.toISOString(),
-          note: scheduledNote,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setScheduledError(data.error || "Failed to schedule ride.");
-        setScheduledWaiting(false);
-        return;
-      }
-      resetScheduledRide();
-      setScheduledRide(data); // Or trigger reload from backend if you want
-    } catch (err) {
-      setScheduledError("Network or server error.");
-    } finally {
-      setScheduledWaiting(false);
-    }
-  }
-
   // --- UI
 
-  // 1. If active ride (pending/accepted/in_progress but not scheduled future ride)
+  // 1. If active ride (pending/accepted/in_progress)
   if (activeRide && ["pending", "accepted", "in_progress"].includes(activeRide.status || "")) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -554,9 +515,9 @@ export default function CustomerDashboard() {
             </button>
           </>
         )}
-        {activeRide.status === "accepted" && (
+        {(activeRide.status === "accepted" || activeRide.status === "in_progress") && (
           <>
-            <h2>Driver Accepted</h2>
+            <h2>{activeRide.status === "accepted" ? "Driver Accepted" : "On Trip"}</h2>
             <div style={{ margin: 10 }}>
               <b>Driver:</b> {activeRide.driver?.name || "Assigned driver"} <br />
               <b>Vehicle:</b> {activeRide.driver?.vehicleType || activeRide.vehicleType}
@@ -576,46 +537,6 @@ export default function CustomerDashboard() {
             >
               Cancel Ride
             </button>
-            <button
-              style={{
-                background: "#1976D2",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                marginLeft: 12,
-              }}
-              onClick={() => setChatOpen(true)}
-            >
-              Open Chat
-            </button>
-            {chatOpen && (
-              <RestChatWindow rideId={activeRide.id} userType="customer" />
-            )}
-          </>
-        )}
-        {activeRide.status === "in_progress" && (
-          <>
-            <h2>On Trip</h2>
-            <div style={{ margin: 10 }}>
-              <b>Driver:</b> {activeRide.driver?.name || "Assigned driver"} <br />
-              <b>Vehicle:</b> {activeRide.driver?.vehicleType || activeRide.vehicleType}
-            </div>
-            <button
-              style={{
-                background: "#1976D2",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                marginLeft: 12,
-              }}
-              onClick={() => setChatOpen(true)}
-            >
-              Open Chat
-            </button>
             {chatOpen && (
               <RestChatWindow rideId={activeRide.id} userType="customer" />
             )}
@@ -625,7 +546,33 @@ export default function CustomerDashboard() {
     );
   }
 
-  // 2. Main homepage UI: request ride, schedule ride, view/cancel scheduled
+  // 2. After ride is done/cancelled, show rating and allow new ride request
+  if (showRating && lastFinishedRideId) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <RateDriver
+          rideId={lastFinishedRideId}
+          onRated={() => {
+            setShowRating(false);
+            setLastFinishedRideId(null);
+            resetAll();
+          }}
+        />
+        <button
+          style={{ marginTop: 24, background: "#1976D2", color: "#fff", fontWeight: "bold", fontSize: 18, padding: "0.8em 2em", borderRadius: 6, border: "none" }}
+          onClick={() => {
+            setShowRating(false);
+            setLastFinishedRideId(null);
+            resetAll();
+          }}
+        >
+          Request New Ride
+        </button>
+      </div>
+    );
+  }
+
+  // 3. Main homepage UI
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>
@@ -740,39 +687,6 @@ export default function CustomerDashboard() {
         >
           Request Ride
         </button>
-        <button
-          disabled={waiting || !pickupLocation}
-          onClick={() => setShowScheduleModal(true)}
-          style={{
-            background: "#1976D2",
-            color: "#fff",
-            border: "none",
-            padding: "0.9em 2em",
-            borderRadius: 6,
-            fontSize: 18,
-            fontWeight: "bold",
-            opacity: waiting ? 0.7 : 1
-          }}
-        >
-          Schedule Ride
-        </button>
-        {scheduledRide && (
-          <button
-            style={{
-              background: "#888",
-              color: "#fff",
-              border: "none",
-              padding: "0.9em 2em",
-              borderRadius: 6,
-              fontSize: 18,
-              fontWeight: "bold",
-              marginLeft: 8,
-            }}
-            onClick={() => setShowScheduleModal("showScheduled" as any)}
-          >
-            View/Cancel Scheduled Ride
-          </button>
-        )}
       </div>
       {pickupLocation && (
         <div style={{ textAlign: "center", color: "#888" }}>
@@ -796,194 +710,6 @@ export default function CustomerDashboard() {
           Click map to set pickup, then click again to set destination. Type the destination name for clarity.
         </div>
       </div>
-
-      {/* SCHEDULE RIDE MODAL */}
-      {showScheduleModal === true && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-          background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
-        }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 8, minWidth: 340 }}>
-            <h3>Schedule a Ride</h3>
-            {scheduledError && <div style={{ color: "#d32f2f" }}>{scheduledError}</div>}
-            <div style={{ margin: "10px 0" }}>
-              <b>Vehicle Type:</b>
-              <select
-                value={scheduledVehicleType}
-                onChange={e => setScheduledVehicleType(e.target.value)}
-                style={{ marginLeft: 8, padding: 4 }}
-              >
-                <option value="">Select type</option>
-                {vehicleOptions.filter(opt => opt.value !== "").map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ margin: "10px 0" }}>
-              <b>Date:</b>
-              <input
-                type="date"
-                value={scheduledDate}
-                onChange={e => setScheduledDate(e.target.value)}
-                style={{ marginLeft: 8, padding: 4 }}
-              />
-            </div>
-            <div style={{ margin: "10px 0" }}>
-              <b>Time:</b>
-              <input
-                type="time"
-                value={scheduledTime}
-                onChange={e => setScheduledTime(e.target.value)}
-                style={{ marginLeft: 8, padding: 4 }}
-              />
-            </div>
-            <div style={{ margin: "10px 0" }}>
-              <b>Destination:</b>
-              <input
-                type="text"
-                placeholder="e.g. Airport, X Street, Parliament, Hospital"
-                value={scheduledDestName}
-                onChange={e => setScheduledDestName(e.target.value)}
-                style={{ marginLeft: 8, padding: 4, width: 220 }}
-                maxLength={128}
-              />
-            </div>
-            <div style={{ margin: "10px 0" }}>
-              <b>Destination Location:</b>
-              <input
-                type="text"
-                placeholder="Click map before opening modal"
-                value={
-                  scheduledDest
-                    ? `${scheduledDest.lat.toFixed(4)}, ${scheduledDest.lng.toFixed(4)}`
-                    : ""
-                }
-                readOnly
-                style={{ marginLeft: 8, padding: 4, width: 220 }}
-              />
-            </div>
-            <div style={{ margin: "10px 0" }}>
-              <b>Note for Driver:</b>
-              <input
-                type="text"
-                value={scheduledNote}
-                onChange={e => setScheduledNote(e.target.value)}
-                placeholder="e.g. big trunk, help needed"
-                style={{ marginLeft: 8, padding: 4, width: 220 }}
-                maxLength={128}
-              />
-            </div>
-            <div style={{ margin: "12px 0" }}>
-              <button
-                disabled={
-                  scheduledWaiting ||
-                  !pickupLocation ||
-                  !scheduledVehicleType ||
-                  !scheduledDate ||
-                  !scheduledTime ||
-                  !scheduledDestName ||
-                  !scheduledDest
-                }
-                onClick={handleScheduleRide}
-                style={{
-                  background: "#1976D2",
-                  color: "#fff",
-                  border: "none",
-                  padding: "0.7em 2em",
-                  borderRadius: 6,
-                  fontSize: 16,
-                  marginRight: 10,
-                  fontWeight: "bold",
-                  opacity:
-                    scheduledWaiting ||
-                    !pickupLocation ||
-                    !scheduledVehicleType ||
-                    !scheduledDate ||
-                    !scheduledTime ||
-                    !scheduledDestName ||
-                    !scheduledDest
-                      ? 0.7
-                      : 1
-                }}
-              >
-                {scheduledWaiting ? "Scheduling..." : "Schedule"}
-              </button>
-              <button
-                onClick={resetScheduledRide}
-                style={{
-                  background: "#f44336",
-                  color: "#fff",
-                  border: "none",
-                  padding: "0.7em 2em",
-                  borderRadius: 6,
-                  fontSize: 16,
-                  fontWeight: "bold"
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-            <div style={{ fontSize: 13, color: "#888" }}>
-              <b>Tip:</b> Set pickup by clicking map first (main UI), then click again for destination, then open this modal!
-              Destination for scheduled ride is set with a second map click after pickup is set, and you can provide a name for clarity.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW/CANCEL SCHEDULED RIDE MODAL */}
-      {showScheduleModal === "showScheduled" && scheduledRide && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-          background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
-        }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 8, minWidth: 340 }}>
-            <h3>Your Scheduled Ride</h3>
-            <div>
-              <b>Pickup:</b> {scheduledRide.originLat.toFixed(4)}, {scheduledRide.originLng.toFixed(4)}<br />
-              <b>Destination:</b> {scheduledRide.destLat.toFixed(4)}, {scheduledRide.destLng.toFixed(4)}<br />
-              <b>Destination Name:</b> {scheduledRide.destinationName || "N/A"}<br />
-              <b>Vehicle:</b> {scheduledRide.vehicleType}<br />
-              <b>Scheduled At:</b> {new Date(scheduledRide.scheduledAt).toLocaleString()}<br />
-              {scheduledRide.note && (
-                <>
-                  <b>Note:</b> {scheduledRide.note}<br />
-                </>
-              )}
-              <b>Status:</b> {scheduledRide.status}
-            </div>
-            <button
-              onClick={() => handleCancelRide(scheduledRide.id)}
-              style={{
-                background: "#f44336",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 2em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "14px 0 8px 0"
-              }}
-              disabled={waiting}
-            >
-              Cancel Scheduled Ride
-            </button>
-            <button
-              onClick={resetScheduledRide}
-              style={{
-                background: "#1976D2",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 2em",
-                borderRadius: 6,
-                fontSize: 16,
-                marginLeft: 10
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
