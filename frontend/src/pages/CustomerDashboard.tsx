@@ -178,7 +178,6 @@ export default function CustomerDashboard() {
     setRideStatus(null);
     setRideId(null);
     setPickupSet(false);
-    setPickupLocation(userLocation);
     setVehicleType("");
     setDriverInfo(null);
     setShowDoneActions(false);
@@ -191,6 +190,11 @@ export default function CustomerDashboard() {
     setScheduledStatus(null);
     setScheduledError(null);
     setScheduledWaiting(false);
+    setWaiting(false);
+    // Set pickup to user location (restores marker)
+    if (userLocation) {
+      setPickupLocation(userLocation);
+    }
     saveChatSession(null, null);
   }
 
@@ -229,12 +233,19 @@ export default function CustomerDashboard() {
       } catch (e) {
         handleReset();
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }
     if (!rideId && !pickupSet) {
       restoreCurrentRideFromBackend();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rideId, pickupSet]);
+  }, [rideId, pickupSet]); // do NOT depend on userLocation
+
+  // Ensure pickupLocation always set if possible
+  useEffect(() => {
+    if (!pickupLocation && userLocation) {
+      setPickupLocation(userLocation);
+    }
+  }, [pickupLocation, userLocation]);
 
   // --- Persist ride/chat session to localStorage ---
   useEffect(() => {
@@ -537,7 +548,9 @@ export default function CustomerDashboard() {
       <div style={{ margin: "24px 0", textAlign: "center", display: "flex", justifyContent: "center", gap: 20 }}>
         <button
           disabled={waiting || !pickupLocation || !vehicleType}
-          onClick={handleRequestRide}
+          onClick={() => {
+            if (!waiting && pickupLocation && vehicleType) handleRequestRide();
+          }}
           style={{
             background: "#388e3c",
             color: "#fff",
@@ -553,7 +566,9 @@ export default function CustomerDashboard() {
         </button>
         <button
           disabled={waiting || !pickupLocation}
-          onClick={() => setShowScheduleModal(true)}
+          onClick={() => {
+            if (!waiting && pickupLocation) setShowScheduleModal(true);
+          }}
           style={{
             background: "#1976D2",
             color: "#fff",
