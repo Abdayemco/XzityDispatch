@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -16,7 +16,18 @@ import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 
-// ICONS
+const vehicleOptions = [
+  { value: "", label: "Select type", icon: "" },
+  { value: "CAR", label: "Car", icon: carIcon },
+  { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
+  { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
+  { value: "LIMO", label: "Limo", icon: limoIcon },
+  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon },
+  { value: "TRUCK", label: "Truck", icon: truckIcon },
+  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
+  { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon }
+];
+
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -36,26 +47,6 @@ function createEmergencyIcon(url: string) {
   });
 }
 
-const vehicleOptions = [
-  { value: "", label: "Select type", icon: "" },
-  { value: "CAR", label: "Car", icon: carIcon },
-  { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
-  { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
-  { value: "LIMO", label: "Limo", icon: limoIcon },
-  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon },
-  { value: "TRUCK", label: "Truck", icon: truckIcon },
-  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
-  { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon }
-];
-
-function getCustomerIdFromStorage(): number | null {
-  const raw = localStorage.getItem("userId");
-  if (!raw) return null;
-  const parsed = Number(raw);
-  return !isNaN(parsed) && Number.isInteger(parsed) ? parsed : null;
-}
-
-// TYPES
 type RideStatus = "pending" | "accepted" | "in_progress" | "done" | "cancelled" | "scheduled" | "no_show" | null;
 type EmergencyLocation = {
   type: "fire" | "police" | "hospital";
@@ -65,31 +56,7 @@ type EmergencyLocation = {
   phone?: string;
   icon: string;
 };
-type OverpassElement = {
-  id: number;
-  lat: number;
-  lon: number;
-  tags: {
-    name?: string;
-    phone?: string;
-    amenity?: string;
-    emergency?: string;
-  };
-};
 type DriverInfo = { name?: string; vehicleType?: string; };
-
-type ScheduledRide = {
-  id: number;
-  originLat: number;
-  originLng: number;
-  destLat: number;
-  destLng: number;
-  vehicleType: string;
-  destinationName?: string;
-  note?: string;
-  scheduledAt: string;
-  status: RideStatus;
-};
 
 type ActiveRide = {
   id: number;
@@ -105,11 +72,8 @@ type ActiveRide = {
   destinationName?: string;
 };
 
-const API_URL = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
-  : "";
+const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
 
-// RATING COMPONENT
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
@@ -174,115 +138,71 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
 }
 
 export default function CustomerDashboard() {
-  // --- State
+  // State
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [destination, setDestination] = useState<{ lng: number; lat: number } | null>(null);
   const [destinationName, setDestinationName] = useState<string>("");
   const [pickupSet, setPickupSet] = useState(false);
-  const [rideId, setRideId] = useState<number | null>(null);
-  const [vehicleType, setVehicleType] = useState<string>("");
+  const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
+  const [rideStatus, setRideStatus] = useState<RideStatus>(null);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rideStatus, setRideStatus] = useState<RideStatus>(null);
-  const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
-  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
-
-  // Scheduled rides and active rides
-  const [scheduledRide, setScheduledRide] = useState<ScheduledRide | null>(null);
-  const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
-
-  // To detect ride status transition for chat opening
-  const [prevRideStatus, setPrevRideStatus] = useState<RideStatus>(null);
-
-  // For rating UI
   const [showRating, setShowRating] = useState(false);
   const [lastFinishedRideId, setLastFinishedRideId] = useState<number | null>(null);
+  const [vehicleType, setVehicleType] = useState<string>("");
 
-  // --- Reset functions
-  function resetRegularRide() {
-    setRideId(null);
-    setRideStatus(null);
-    setDriverInfo(null);
-    setChatOpen(false);
-    setActiveRide(null);
-    setWaiting(false);
-  }
-  function resetAll() {
-    resetRegularRide();
-    setPickupSet(false);
-    setVehicleType("");
-    if (userLocation) setPickupLocation(userLocation);
-    setDestination(null);
-    setDestinationName("");
-    setError(null);
-  }
+  // Emergency locations
+  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
 
-  // --- Listen for login/logout and update token in all tabs
-  useEffect(() => {
-    const onStorage = () => setToken(localStorage.getItem("token"));
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  // --- Restore active ride from backend on mount or after login
+  // Restore ride on mount (for reconnect)
   useEffect(() => {
     async function restoreRide() {
       const token = localStorage.getItem("token");
       if (!token) return;
       try {
-        const resActive = await fetch(`${API_URL}/api/rides/current`, {
+        const res = await fetch(`${API_URL}/api/rides/current`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
-        const dataActive = resActive.ok ? await resActive.json() : null;
+        const data = res.ok ? await res.json() : null;
         if (
-          dataActive &&
-          dataActive.rideId &&
-          ["accepted", "in_progress", "pending"].includes(dataActive.rideStatus)
+          data &&
+          data.rideId &&
+          ["accepted", "in_progress", "pending"].includes(data.rideStatus)
         ) {
           setActiveRide({
-            id: dataActive.rideId,
-            originLat: dataActive.originLat,
-            originLng: dataActive.originLng,
-            destLat: dataActive.destLat,
-            destLng: dataActive.destLng,
-            vehicleType: dataActive.vehicleType,
-            status: dataActive.rideStatus,
-            driver: dataActive.driver,
-            scheduledAt: dataActive.scheduledAt,
-            note: dataActive.note,
-            destinationName: dataActive.destinationName,
+            id: data.rideId,
+            originLat: data.originLat,
+            originLng: data.originLng,
+            destLat: data.destLat,
+            destLng: data.destLng,
+            vehicleType: data.vehicleType,
+            status: data.rideStatus,
+            driver: data.driver,
+            scheduledAt: data.scheduledAt,
+            note: data.note,
+            destinationName: data.destinationName,
           });
           setPickupSet(true);
-          setDriverInfo(dataActive.driver);
-          setPickupLocation({ lat: dataActive.originLat, lng: dataActive.originLng });
-          setDestination({ lat: dataActive.destLat, lng: dataActive.destLng });
-          setDestinationName(dataActive.destinationName || "");
-          setRideId(dataActive.rideId);
-          setRideStatus(dataActive.rideStatus);
+          setPickupLocation({ lat: data.originLat, lng: data.originLng });
+          setDestination({ lat: data.destLat, lng: data.destLng });
+          setDestinationName(data.destinationName || "");
+          setRideStatus(data.rideStatus);
         } else {
           setActiveRide(null);
-          setRideId(null);
           setRideStatus(null);
         }
       } catch (e) {
         setActiveRide(null);
+        setRideStatus(null);
       }
     }
     restoreRide();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
-  // --- Ensure pickupLocation always set if possible
-  useEffect(() => {
-    if (!pickupLocation && userLocation) {
-      setPickupLocation(userLocation);
-    }
-  }, [pickupLocation, userLocation]);
-
-  // GEOLOCATION
+  // Geolocation
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -298,7 +218,7 @@ export default function CustomerDashboard() {
     );
   }, []);
 
-  // EMERGENCY LOCATIONS
+  // Emergency locations
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -307,8 +227,8 @@ export default function CustomerDashboard() {
       [out:json][timeout:25];
       (
         node["amenity"="hospital"](around:5000,${lat},${lng});
-      node["amenity"="police"](around:5000,${lat},${lng});
-      node["emergency"="fire_station"](around:5000,${lat},${lng});
+        node["amenity"="police"](around:5000,${lat},${lng});
+        node["emergency"="fire_station"](around:5000,${lat},${lng});
       );
       out body;
     `;
@@ -319,7 +239,7 @@ export default function CustomerDashboard() {
       headers: { "Content-Type": "text/plain" }
     })
       .then(res => res.json())
-      .then((data: { elements: OverpassElement[] }) => {
+      .then((data: { elements: any[] }) => {
         const locations: EmergencyLocation[] = [];
         for (const el of data.elements) {
           if (!el.lat || !el.lon) continue;
@@ -351,7 +271,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // POLLING ACTIVE RIDE STATUS (with chat open on accept)
+  // Poll ride status (every 3 seconds)
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
     if (activeRide && ["pending", "accepted", "in_progress"].includes(activeRide.status || "")) {
@@ -359,29 +279,32 @@ export default function CustomerDashboard() {
         try {
           const res = await fetch(`${API_URL}/api/rides/${activeRide.id}/status`);
           const data = await res.json();
-          if (data.status) setRideStatus(data.status);
-
-          // Detect transition from pending to accepted/in_progress
+          if (data.status && data.status !== rideStatus) {
+            setRideStatus(data.status);
+            setActiveRide(r => r ? { ...r, status: data.status } : r);
+          }
+          // Open chat automatically when accepted/in_progress
           if (
-            (activeRide.status === "pending" && (data.status === "accepted" || data.status === "in_progress")) ||
-            (activeRide.status === "accepted" && data.status === "in_progress")
+            activeRide.status === "pending" &&
+            (data.status === "accepted" || data.status === "in_progress")
           ) {
             setChatOpen(true);
           }
-          // Reset chat if ride is done/cancelled
-          if (data.status === "done" || data.status === "cancelled" || data.status === "no_show") {
+          // Reset chat and show rating if ride is done/cancelled
+          if (["done", "cancelled", "no_show"].includes(data.status)) {
             setChatOpen(false);
             setLastFinishedRideId(activeRide.id);
             setShowRating(true);
-            resetRegularRide();
+            setActiveRide(null);
+            setRideStatus(null);
           }
         } catch (err) {}
       }, 3000);
     }
     return () => interval && clearInterval(interval);
-  }, [activeRide]);
+  }, [activeRide, rideStatus]);
 
-  // Also: If page is loaded and ride is already accepted/in_progress, open chat
+  // Open chat on reload if status is accepted/in_progress
   useEffect(() => {
     if (
       activeRide &&
@@ -391,12 +314,7 @@ export default function CustomerDashboard() {
     }
   }, [activeRide?.status]);
 
-  // Save previous status to handle transitions on reloads
-  useEffect(() => {
-    setPrevRideStatus(activeRide?.status ?? null);
-  }, [activeRide?.status]);
-
-  // --- REQUEST RIDE (REGULAR)
+  // Request Ride
   async function handleRequestRide() {
     if (!pickupLocation || !destination || !vehicleType || !destinationName) {
       setError("Pickup, destination, destination name, and vehicle type required.");
@@ -404,8 +322,8 @@ export default function CustomerDashboard() {
       return;
     }
     const token = localStorage.getItem("token");
-    const customerId = getCustomerIdFromStorage();
-    if (!token || customerId === null) {
+    const customerId = Number(localStorage.getItem("userId"));
+    if (!token || !customerId) {
       setError("Not logged in.");
       setWaiting(false);
       return;
@@ -443,54 +361,59 @@ export default function CustomerDashboard() {
         destLng: destination.lng,
         vehicleType,
         status: "pending",
-        destinationName,
+        destinationName
       });
       setPickupSet(true);
-      setRideId(data.rideId || data.id);
-      setRideStatus("pending");
       setWaiting(false);
-      setShowRating(false); // New ride, hide rating
+      setChatOpen(false);
+      setShowRating(false);
       setLastFinishedRideId(null);
     } catch (err: any) {
       setError("Network or server error.");
-    } finally {
       setWaiting(false);
     }
   }
 
-  // --- CANCEL RIDE
+  // Cancel Ride
   async function handleCancelRide(rideIdToCancel: number) {
     setWaiting(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideIdToCancel}/cancel`, {
+      await fetch(`${API_URL}/api/rides/${rideIdToCancel}/cancel`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         }
       });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to cancel ride.");
-        setWaiting(false);
-        return;
-      }
       setChatOpen(false);
       setLastFinishedRideId(rideIdToCancel);
       setShowRating(true);
-      resetRegularRide();
+      setActiveRide(null);
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
-    } finally {
       setWaiting(false);
     }
   }
 
-  // --- UI
+  // Reset to homepage after rating or new ride
+  function resetAll() {
+    setActiveRide(null);
+    setRideStatus(null);
+    setChatOpen(false);
+    setShowRating(false);
+    setLastFinishedRideId(null);
+    setPickupSet(false);
+    setVehicleType("");
+    setError(null);
+    setWaiting(false);
+    setPickupLocation(userLocation);
+    setDestination(null);
+    setDestinationName("");
+  }
 
-  // 1. If active ride (pending/accepted/in_progress)
+  // UI: Active Ride (pending/accepted/in_progress)
   if (activeRide && ["pending", "accepted", "in_progress"].includes(activeRide.status || "")) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -538,7 +461,23 @@ export default function CustomerDashboard() {
               Cancel Ride
             </button>
             {chatOpen && (
-              <RestChatWindow rideId={activeRide.id} userType="customer" />
+              <div
+                style={{
+                  margin: "32px auto 0 auto",
+                  display: "flex",
+                  justifyContent: "center",
+                  height: "250px",
+                  maxHeight: "250px",
+                  minHeight: "120px",
+                  width: "100%",
+                  maxWidth: "500px"
+                }}
+              >
+                <RestChatWindow
+                  rideId={activeRide.id}
+                  userType="customer"
+                />
+              </div>
             )}
           </>
         )}
@@ -546,25 +485,17 @@ export default function CustomerDashboard() {
     );
   }
 
-  // 2. After ride is done/cancelled, show rating and allow new ride request
+  // After ride is done/cancelled, show rating and allow new ride request
   if (showRating && lastFinishedRideId) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <RateDriver
           rideId={lastFinishedRideId}
-          onRated={() => {
-            setShowRating(false);
-            setLastFinishedRideId(null);
-            resetAll();
-          }}
+          onRated={resetAll}
         />
         <button
           style={{ marginTop: 24, background: "#1976D2", color: "#fff", fontWeight: "bold", fontSize: 18, padding: "0.8em 2em", borderRadius: 6, border: "none" }}
-          onClick={() => {
-            setShowRating(false);
-            setLastFinishedRideId(null);
-            resetAll();
-          }}
+          onClick={resetAll}
         >
           Request New Ride
         </button>
@@ -572,7 +503,7 @@ export default function CustomerDashboard() {
     );
   }
 
-  // 3. Main homepage UI
+  // Main homepage UI
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>
