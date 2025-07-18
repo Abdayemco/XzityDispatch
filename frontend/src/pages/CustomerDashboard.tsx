@@ -85,6 +85,7 @@ type ScheduledRide = {
   destLat: number;
   destLng: number;
   vehicleType: string;
+  destinationName?: string;
   note?: string;
   scheduledAt: string;
   status: RideStatus;
@@ -101,6 +102,7 @@ type ActiveRide = {
   driver?: DriverInfo | null;
   scheduledAt?: string;
   note?: string;
+  destinationName?: string;
 };
 
 function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
@@ -123,6 +125,7 @@ export default function CustomerDashboard() {
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [destination, setDestination] = useState<{ lng: number; lat: number } | null>(null);
+  const [destinationName, setDestinationName] = useState<string>("");
   const [pickupSet, setPickupSet] = useState(false);
   const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
@@ -144,8 +147,12 @@ export default function CustomerDashboard() {
   const [scheduledTime, setScheduledTime] = useState<string>("");
   const [scheduledNote, setScheduledNote] = useState<string>("");
   const [scheduledDest, setScheduledDest] = useState<{ lng: number; lat: number } | null>(null);
+  const [scheduledDestName, setScheduledDestName] = useState<string>("");
   const [scheduledWaiting, setScheduledWaiting] = useState(false);
   const [scheduledError, setScheduledError] = useState<string | null>(null);
+
+  // To detect ride status transition for chat opening
+  const [prevRideStatus, setPrevRideStatus] = useState<RideStatus>(null);
 
   // --- Reset functions
   function resetRegularRide() {
@@ -165,6 +172,7 @@ export default function CustomerDashboard() {
     setScheduledTime("");
     setScheduledNote("");
     setScheduledDest(null);
+    setScheduledDestName("");
     setScheduledWaiting(false);
     setScheduledError(null);
   }
@@ -175,6 +183,7 @@ export default function CustomerDashboard() {
     setVehicleType("");
     if (userLocation) setPickupLocation(userLocation);
     setDestination(null);
+    setDestinationName("");
     setError(null);
   }
 
@@ -212,11 +221,13 @@ export default function CustomerDashboard() {
             driver: dataActive.driver,
             scheduledAt: dataActive.scheduledAt,
             note: dataActive.note,
+            destinationName: dataActive.destinationName,
           });
           setPickupSet(true);
           setDriverInfo(dataActive.driver);
           setPickupLocation({ lat: dataActive.originLat, lng: dataActive.originLng });
           setDestination({ lat: dataActive.destLat, lng: dataActive.destLng });
+          setDestinationName(dataActive.destinationName || "");
           setRideId(dataActive.rideId);
           setRideStatus(dataActive.rideStatus);
         } else {
@@ -321,7 +332,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // POLLING ACTIVE RIDE STATUS
+  // POLLING ACTIVE RIDE STATUS (with chat open on accept)
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (activeRide && activeRide.status !== "done" && activeRide.status !== "cancelled") {
@@ -330,16 +341,16 @@ export default function CustomerDashboard() {
           const res = await fetch(`${API_URL}/api/rides/${activeRide.id}/status`);
           const data = await res.json();
           if (data.status) setRideStatus(data.status);
-          if (data.status && activeRide.status !== data.status) {
-            setActiveRide({ ...activeRide, status: data.status });
-            setRideStatus(data.status);
-            if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
-              setDriverInfo({
-                name: data.driver.name || "",
-                vehicleType: data.driver.vehicleType || ""
-              });
-            }
-            if (data.status === "accepted") setChatOpen(true);
+
+          // Detect transition from pending to accepted to open chat
+          if (activeRide.status === "pending" && data.status === "accepted") {
+            setChatOpen(true);
+          }
+          if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
+            setDriverInfo({
+              name: data.driver.name || "",
+              vehicleType: data.driver.vehicleType || ""
+            });
           }
           if (data.status === "done" || data.status === "cancelled") {
             resetRegularRide();
@@ -350,10 +361,22 @@ export default function CustomerDashboard() {
     return () => clearInterval(interval);
   }, [activeRide]);
 
+  // Also, handle chat open on status change for activeRide change
+  useEffect(() => {
+    if (
+      prevRideStatus === "pending" &&
+      activeRide &&
+      activeRide.status === "accepted"
+    ) {
+      setChatOpen(true);
+    }
+    setPrevRideStatus(activeRide?.status ?? null);
+  }, [activeRide?.status]);
+
   // --- REQUEST RIDE (REGULAR)
   async function handleRequestRide() {
-    if (!pickupLocation || !destination || !vehicleType) {
-      setError("Pickup, destination, and vehicle type required.");
+    if (!pickupLocation || !destination || !vehicleType || !destinationName) {
+      setError("Pickup, destination, destination name, and vehicle type required.");
       setWaiting(false);
       return;
     }
@@ -379,6 +402,7 @@ export default function CustomerDashboard() {
           originLng: pickupLocation.lng,
           destLat: destination.lat,
           destLng: destination.lng,
+          destinationName,
           vehicleType,
         }),
       });
@@ -396,6 +420,7 @@ export default function CustomerDashboard() {
         destLng: destination.lng,
         vehicleType,
         status: "pending",
+        destinationName,
       });
       setPickupSet(true);
       setRideId(data.rideId || data.id);
@@ -444,10 +469,11 @@ export default function CustomerDashboard() {
   async function handleScheduleRide() {
     if (
       !pickupLocation ||
-      !scheduledDest ||
       !scheduledVehicleType ||
       !scheduledDate ||
-      !scheduledTime
+      !scheduledTime ||
+      !scheduledDestName ||
+      !scheduledDest
     ) {
       setScheduledError("All fields are required.");
       return;
@@ -480,6 +506,7 @@ export default function CustomerDashboard() {
           originLng: pickupLocation.lng,
           destLat: scheduledDest.lat,
           destLng: scheduledDest.lng,
+          destinationName: scheduledDestName,
           vehicleType: scheduledVehicleType,
           scheduledAt: scheduledAt.toISOString(),
           note: scheduledNote,
@@ -491,7 +518,6 @@ export default function CustomerDashboard() {
         setScheduledWaiting(false);
         return;
       }
-      // Success: close modal, reload scheduled ride
       resetScheduledRide();
       setScheduledRide(data); // Or trigger reload from backend if you want
     } catch (err) {
@@ -699,7 +725,7 @@ export default function CustomerDashboard() {
       </div>
       <div style={{ margin: "24px 0", textAlign: "center", display: "flex", justifyContent: "center", gap: 20 }}>
         <button
-          disabled={waiting || !pickupLocation || !destination || !vehicleType}
+          disabled={waiting || !pickupLocation || !destination || !vehicleType || !destinationName}
           onClick={handleRequestRide}
           style={{
             background: "#388e3c",
@@ -758,6 +784,18 @@ export default function CustomerDashboard() {
           Destination: {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
         </div>
       )}
+      <div style={{ margin: "10px auto", textAlign: "center" }}>
+        <input
+          type="text"
+          value={destinationName}
+          onChange={e => setDestinationName(e.target.value)}
+          placeholder="Type destination (e.g. Airport, Hospital)"
+          style={{ width: 260, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
+        />
+        <div style={{ fontSize: 13, color: "#888" }}>
+          Click map to set pickup, then click again to set destination. Type the destination name for clarity.
+        </div>
+      </div>
 
       {/* SCHEDULE RIDE MODAL */}
       {showScheduleModal === true && (
@@ -803,14 +841,25 @@ export default function CustomerDashboard() {
               <b>Destination:</b>
               <input
                 type="text"
-                placeholder="Click on map to set"
+                placeholder="e.g. Airport, X Street, Parliament, Hospital"
+                value={scheduledDestName}
+                onChange={e => setScheduledDestName(e.target.value)}
+                style={{ marginLeft: 8, padding: 4, width: 220 }}
+                maxLength={128}
+              />
+            </div>
+            <div style={{ margin: "10px 0" }}>
+              <b>Destination Location:</b>
+              <input
+                type="text"
+                placeholder="Click map before opening modal"
                 value={
                   scheduledDest
                     ? `${scheduledDest.lat.toFixed(4)}, ${scheduledDest.lng.toFixed(4)}`
                     : ""
                 }
                 readOnly
-                style={{ marginLeft: 8, padding: 4, width: 180 }}
+                style={{ marginLeft: 8, padding: 4, width: 220 }}
               />
             </div>
             <div style={{ margin: "10px 0" }}>
@@ -820,8 +869,8 @@ export default function CustomerDashboard() {
                 value={scheduledNote}
                 onChange={e => setScheduledNote(e.target.value)}
                 placeholder="e.g. big trunk, help needed"
-                style={{ marginLeft: 8, padding: 4, width: 180 }}
-                maxLength={64}
+                style={{ marginLeft: 8, padding: 4, width: 220 }}
+                maxLength={128}
               />
             </div>
             <div style={{ margin: "12px 0" }}>
@@ -829,10 +878,11 @@ export default function CustomerDashboard() {
                 disabled={
                   scheduledWaiting ||
                   !pickupLocation ||
-                  !scheduledDest ||
                   !scheduledVehicleType ||
                   !scheduledDate ||
-                  !scheduledTime
+                  !scheduledTime ||
+                  !scheduledDestName ||
+                  !scheduledDest
                 }
                 onClick={handleScheduleRide}
                 style={{
@@ -847,10 +897,11 @@ export default function CustomerDashboard() {
                   opacity:
                     scheduledWaiting ||
                     !pickupLocation ||
-                    !scheduledDest ||
                     !scheduledVehicleType ||
                     !scheduledDate ||
-                    !scheduledTime
+                    !scheduledTime ||
+                    !scheduledDestName ||
+                    !scheduledDest
                       ? 0.7
                       : 1
                 }}
@@ -874,7 +925,7 @@ export default function CustomerDashboard() {
             </div>
             <div style={{ fontSize: 13, color: "#888" }}>
               <b>Tip:</b> Set pickup by clicking map first (main UI), then click again for destination, then open this modal!
-              Destination for scheduled ride is set with a second map click after pickup is set.
+              Destination for scheduled ride is set with a second map click after pickup is set, and you can provide a name for clarity.
             </div>
           </div>
         </div>
@@ -891,6 +942,7 @@ export default function CustomerDashboard() {
             <div>
               <b>Pickup:</b> {scheduledRide.originLat.toFixed(4)}, {scheduledRide.originLng.toFixed(4)}<br />
               <b>Destination:</b> {scheduledRide.destLat.toFixed(4)}, {scheduledRide.destLng.toFixed(4)}<br />
+              <b>Destination Name:</b> {scheduledRide.destinationName || "N/A"}<br />
               <b>Vehicle:</b> {scheduledRide.vehicleType}<br />
               <b>Scheduled At:</b> {new Date(scheduledRide.scheduledAt).toLocaleString()}<br />
               {scheduledRide.note && (
