@@ -173,6 +173,27 @@ export default function CustomerDashboard() {
   const [scheduledError, setScheduledError] = useState<string | null>(null);
   const [scheduledWaiting, setScheduledWaiting] = useState(false);
 
+  // --- Reset function for all state ---
+  function handleReset() {
+    setRideStatus(null);
+    setRideId(null);
+    setPickupSet(false);
+    setPickupLocation(userLocation);
+    setVehicleType("");
+    setDriverInfo(null);
+    setShowDoneActions(false);
+    setChatMessages([]);
+    setScheduledAt(null);
+    setScheduledDate("");
+    setScheduledTime("");
+    setScheduledVehicleType("");
+    setScheduledRideId(null);
+    setScheduledStatus(null);
+    setScheduledError(null);
+    setScheduledWaiting(false);
+    saveChatSession(null, null);
+  }
+
   // Listen for login/logout and update token in all tabs
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
@@ -204,22 +225,15 @@ export default function CustomerDashboard() {
           }
         }
         // If not ok or no active ride, unlock UI for new requests
-        setRideId(null);
-        setRideStatus(null);
-        setPickupSet(false);
-        setDriverInfo(null);
-        setScheduledAt(null);
+        handleReset();
       } catch (e) {
-        setRideId(null);
-        setRideStatus(null);
-        setPickupSet(false);
-        setDriverInfo(null);
-        setScheduledAt(null);
+        handleReset();
       }
     }
     if (!rideId && !pickupSet) {
       restoreCurrentRideFromBackend();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, pickupSet]);
 
   // --- Persist ride/chat session to localStorage ---
@@ -385,7 +399,8 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      setRideStatus("cancelled");
+      // Reset dashboard state and show main UI
+      handleReset();
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
@@ -432,8 +447,7 @@ export default function CustomerDashboard() {
   }
 
   // --- The rest of your UI (pending, accepted, in_progress, done, cancelled, default) remains the same ---
-  // Add your other status-based UI blocks here (pending, accepted, in_progress, done, cancelled)
-  // Then, below, your fallback/main UI for requesting/scheduling a ride:
+  // For brevity, only main ride request UI is included here; add your pending/accepted/done/cancelled logic as needed
 
   return (
     <div style={{ padding: 24 }}>
