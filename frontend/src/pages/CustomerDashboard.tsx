@@ -168,12 +168,9 @@ export default function CustomerDashboard() {
   const [scheduledVehicleType, setScheduledVehicleType] = useState<string>("");
   const [scheduledDate, setScheduledDate] = useState<string>("");
   const [scheduledTime, setScheduledTime] = useState<string>("");
-  const [scheduledRideId, setScheduledRideId] = useState<number | null>(null);
-  const [scheduledStatus, setScheduledStatus] = useState<RideStatus>(null);
-  const [scheduledError, setScheduledError] = useState<string | null>(null);
   const [scheduledWaiting, setScheduledWaiting] = useState(false);
+  const [scheduledError, setScheduledError] = useState<string | null>(null);
 
-  // --- Reset function for all state ---
   function handleReset() {
     setRideStatus(null);
     setRideId(null);
@@ -186,12 +183,9 @@ export default function CustomerDashboard() {
     setScheduledDate("");
     setScheduledTime("");
     setScheduledVehicleType("");
-    setScheduledRideId(null);
-    setScheduledStatus(null);
     setScheduledError(null);
     setScheduledWaiting(false);
     setWaiting(false);
-    // Set pickup to user location (restores marker)
     if (userLocation) {
       setPickupLocation(userLocation);
     }
@@ -205,7 +199,7 @@ export default function CustomerDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // --- Restore ride/chat session from backend on mount or after login ---
+  // Restore ride/chat session from backend on mount or after login
   useEffect(() => {
     async function restoreCurrentRideFromBackend() {
       const token = localStorage.getItem("token");
@@ -228,17 +222,16 @@ export default function CustomerDashboard() {
             return;
           }
         }
-        // If not ok or no active ride, unlock UI for new requests
         handleReset();
       } catch (e) {
         handleReset();
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }
     if (!rideId && !pickupSet) {
       restoreCurrentRideFromBackend();
     }
-  }, [rideId, pickupSet]); // do NOT depend on userLocation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rideId, pickupSet]);
 
   // Ensure pickupLocation always set if possible
   useEffect(() => {
@@ -247,12 +240,12 @@ export default function CustomerDashboard() {
     }
   }, [pickupLocation, userLocation]);
 
-  // --- Persist ride/chat session to localStorage ---
+  // Persist ride/chat session to localStorage
   useEffect(() => {
     if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
   }, [rideId, rideStatus]);
 
-  // ------------------- GEOLOCATION -------------------
+  // GEOLOCATION
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -268,7 +261,7 @@ export default function CustomerDashboard() {
     );
   }, []);
 
-  // ------------------- EMERGENCY LOCATIONS -------------------
+  // EMERGENCY LOCATIONS
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -321,7 +314,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // ------------------- POLLING RIDE STATUS -------------------
+  // POLLING RIDE STATUS
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
@@ -342,7 +335,7 @@ export default function CustomerDashboard() {
     return () => clearInterval(interval);
   }, [pickupSet, rideId, rideStatus]);
 
-  // ------------------- REQUEST RIDE -------------------
+  // REQUEST RIDE (REGULAR)
   async function handleRequestRide() {
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
@@ -359,7 +352,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides/request`, {
+      const res = await fetch(`${API_URL}/api/rides/schedule`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -391,7 +384,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // ------------------- CANCEL RIDE -------------------
+  // CANCEL RIDE
   async function handleCancelRide() {
     if (!rideId) return;
     setWaiting(true);
@@ -410,7 +403,6 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      // Reset dashboard state and show main UI
       handleReset();
       setWaiting(false);
     } catch (err) {
@@ -420,7 +412,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- SCHEDULED RIDE UI ---
+  // SCHEDULED RIDE UI
   if (rideStatus === "scheduled" && rideId) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -457,9 +449,7 @@ export default function CustomerDashboard() {
     );
   }
 
-  // --- The rest of your UI (pending, accepted, in_progress, done, cancelled, default) remains the same ---
-  // For brevity, only main ride request UI is included here; add your pending/accepted/done/cancelled logic as needed
-
+  // MAIN UI (Map, Vehicle, Request/Schedule)
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center" }}>
@@ -588,7 +578,157 @@ export default function CustomerDashboard() {
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
-      {/* Place your renderScheduleModal function/component here if needed */}
+
+      {/* SCHEDULE RIDE MODAL */}
+      {showScheduleModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+          background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+        }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 8, minWidth: 300 }}>
+            <h3>Schedule a Ride</h3>
+            {scheduledError && <div style={{ color: "#d32f2f" }}>{scheduledError}</div>}
+            <div style={{ margin: "10px 0" }}>
+              <b>Vehicle Type:</b>
+              <select
+                value={scheduledVehicleType}
+                onChange={e => setScheduledVehicleType(e.target.value)}
+                style={{ marginLeft: 8, padding: 4 }}
+              >
+                <option value="">Select type</option>
+                {vehicleOptions.filter(opt => opt.value !== "").map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ margin: "10px 0" }}>
+              <b>Date:</b>
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={e => setScheduledDate(e.target.value)}
+                style={{ marginLeft: 8, padding: 4 }}
+              />
+            </div>
+            <div style={{ margin: "10px 0" }}>
+              <b>Time:</b>
+              <input
+                type="time"
+                value={scheduledTime}
+                onChange={e => setScheduledTime(e.target.value)}
+                style={{ marginLeft: 8, padding: 4 }}
+              />
+            </div>
+            <div style={{ margin: "12px 0" }}>
+              <button
+                disabled={
+                  scheduledWaiting ||
+                  !pickupLocation ||
+                  !scheduledVehicleType ||
+                  !scheduledDate ||
+                  !scheduledTime
+                }
+                onClick={async () => {
+                  if (
+                    !pickupLocation ||
+                    !scheduledVehicleType ||
+                    !scheduledDate ||
+                    !scheduledTime
+                  ) {
+                    setScheduledError("All fields are required.");
+                    return;
+                  }
+                  setScheduledWaiting(true);
+                  setScheduledError(null);
+                  const token = localStorage.getItem("token");
+                  const customerId = getCustomerIdFromStorage();
+                  if (!token || customerId === null) {
+                    setScheduledError("Not logged in.");
+                    setScheduledWaiting(false);
+                    return;
+                  }
+                  try {
+                    const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`);
+                    if (isNaN(scheduledAt.getTime())) {
+                      setScheduledError("Invalid date/time.");
+                      setScheduledWaiting(false);
+                      return;
+                    }
+                    const res = await fetch(`${API_URL}/api/rides/schedule`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        customerId,
+                        originLat: pickupLocation.lat,
+                        originLng: pickupLocation.lng,
+                        destLat: pickupLocation.lat,
+                        destLng: pickupLocation.lng,
+                        vehicleType: scheduledVehicleType,
+                        scheduledAt: scheduledAt.toISOString()
+                      }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      setScheduledError(data.error || "Failed to schedule ride.");
+                      setScheduledWaiting(false);
+                      return;
+                    }
+                    setShowScheduleModal(false);
+                    setPickupSet(true);
+                    setRideId(data.rideId || data.id);
+                    setRideStatus("scheduled");
+                    setScheduledAt(data.scheduledAt || scheduledAt.toISOString());
+                    setScheduledVehicleType("");
+                    setScheduledDate("");
+                    setScheduledTime("");
+                    setScheduledWaiting(false);
+                  } catch (err) {
+                    setScheduledError("Network or server error.");
+                    setScheduledWaiting(false);
+                  }
+                }}
+                style={{
+                  background: "#1976D2",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.7em 2em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  marginRight: 10,
+                  fontWeight: "bold",
+                  opacity:
+                    scheduledWaiting ||
+                    !pickupLocation ||
+                    !scheduledVehicleType ||
+                    !scheduledDate ||
+                    !scheduledTime
+                      ? 0.7
+                      : 1
+                }}
+              >
+                {scheduledWaiting ? "Scheduling..." : "Schedule"}
+              </button>
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                style={{
+                  background: "#f44336",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.7em 2em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  fontWeight: "bold"
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
