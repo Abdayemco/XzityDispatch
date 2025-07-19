@@ -13,7 +13,18 @@ import wheelchairIcon from "../assets/marker-wheelchair.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
-import RestChatWindow from "../components/RestChatWindow"; // REST polling chat
+import RestChatWindow from "../components/RestChatWindow";
+
+// Colorful vehicle types as in old UI
+const vehicleOptions = [
+  { value: "CAR", label: "Car", icon: carIcon },
+  { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
+  { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
+  { value: "TRUCK", label: "Truck", icon: truckIcon },
+  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
+  { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon },
+  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
+];
 
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
@@ -34,18 +45,6 @@ function createEmergencyIcon(url: string) {
     shadowUrl: undefined,
   });
 }
-
-// --- Updated vehicle types with new options and icons ---
-const vehicleOptions = [
-  { value: "", label: "Select type", icon: "" },
-  { value: "CAR", label: "Car", icon: carIcon },
-  { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
-  { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
-  { value: "TRUCK", label: "Truck", icon: truckIcon },
-  { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
-  { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon },
-  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
-];
 
 function getCustomerIdFromStorage(): number | null {
   const raw = localStorage.getItem("userId");
@@ -80,8 +79,6 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  // Use API_URL for backend
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
@@ -97,7 +94,6 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
     setSubmitting(false);
     onRated();
   }
-
   return (
     <form onSubmit={handleSubmit} style={{ textAlign: "center", marginTop: 30 }}>
       <h3>Rate your driver</h3>
@@ -143,7 +139,6 @@ function getSavedChatSession() {
   return { rideId: rideId || null, rideStatus: rideStatus || null };
 }
 
-// --- API BASE ---
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
@@ -153,6 +148,8 @@ export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
+  const [destination, setDestination] = useState<{ lng: number; lat: number } | null>(null);
+  const [destinationName, setDestinationName] = useState<string>("");
   const [pickupSet, setPickupSet] = useState(false);
   const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
@@ -163,8 +160,9 @@ export default function CustomerDashboard() {
   const [showDoneActions, setShowDoneActions] = useState(false);
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [showRating, setShowRating] = useState(false);
 
-  // Listen for login/logout and update token in all tabs
+  // --- Listen for login/logout and update token in all tabs
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
@@ -190,13 +188,18 @@ export default function CustomerDashboard() {
             if (data.originLat && data.originLng) {
               setPickupLocation({ lat: data.originLat, lng: data.originLng });
             }
+            if (data.destLat && data.destLng) {
+              setDestination({ lat: data.destLat, lng: data.destLng });
+            }
+            if (data.destinationName) {
+              setDestinationName(data.destinationName);
+            }
           }
         }
       } catch (e) {
         // ignore
       }
     }
-    // Always try to restore from backend after login or page mount
     if (!rideId && !pickupSet) {
       restoreCurrentRideFromBackend();
     }
@@ -291,130 +294,16 @@ export default function CustomerDashboard() {
               vehicleType: data.driver.vehicleType || ""
             });
           }
+          // If ride is completed/cancelled, show rating UI
+          if (["done", "cancelled"].includes(data.status)) {
+            setShowDoneActions(true);
+            setShowRating(true);
+          }
         } catch (err) {}
       }, 3000);
     }
     return () => clearInterval(interval);
   }, [pickupSet, rideId, rideStatus]);
-
-  // ------------------- REQUEST RIDE -------------------
-  async function handleRequestRide() {
-    if (!pickupLocation || !vehicleType) {
-      setError("Pickup location and vehicle type required.");
-      setWaiting(false);
-      return;
-    }
-    const token = localStorage.getItem("token");
-    const customerId = getCustomerIdFromStorage();
-    if (!token || customerId === null) {
-      setError("Not logged in.");
-      setWaiting(false);
-      return;
-    }
-    setWaiting(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_URL}/api/rides/request`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          customerId,
-          originLat: pickupLocation.lat,
-          originLng: pickupLocation.lng,
-          destLat: pickupLocation.lat,
-          destLng: pickupLocation.lng,
-          vehicleType,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to create ride.");
-        setWaiting(false);
-        return;
-      }
-      setPickupSet(true);
-      setRideId(data.rideId || data.id);
-      setRideStatus("pending");
-      setWaiting(false);
-    } catch (err: any) {
-      setError("Network or server error.");
-    } finally {
-      setWaiting(false);
-    }
-  }
-
-  // ------------------- CANCEL RIDE -------------------
-  async function handleCancelRide() {
-    if (!rideId) return;
-    setWaiting(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to cancel ride.");
-        setWaiting(false);
-        return;
-      }
-      setRideStatus("cancelled");
-      setWaiting(false);
-    } catch (err) {
-      setError("Network or server error.");
-    } finally {
-      setWaiting(false);
-    }
-  }
-
-  // ------------------- MARK AS DONE -------------------
-  async function handleMarkAsDone() {
-    if (!rideId) return;
-    setWaiting(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to mark ride as done.");
-        setWaiting(false);
-        return;
-      }
-      setRideStatus("done");
-      setShowDoneActions(true);
-      setWaiting(false);
-    } catch (err) {
-      setError("Network or server error.");
-    } finally {
-      setWaiting(false);
-    }
-  }
-
-  // --- Clean up everything (also called after logout) ---
-  function handleReset() {
-    setRideStatus(null);
-    setPickupSet(false);
-    setPickupLocation(userLocation);
-    setVehicleType("");
-    setRideId(null);
-    setDriverInfo(null);
-    setShowDoneActions(false);
-    setChatMessages([]);
-    saveChatSession(null, null);
-  }
 
   // ------------------- CHAT LOGIC: Polling REST -------------------
   useEffect(() => {
@@ -478,7 +367,133 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
-  // ------------------- UI RENDERING (unchanged below) -------------------
+  // ------------------- REQUEST RIDE -------------------
+  async function handleRequestRide() {
+    if (!pickupLocation || !destination || !vehicleType || !destinationName) {
+      setError("Pickup, destination, destination name, and vehicle type required.");
+      setWaiting(false);
+      return;
+    }
+    const token = localStorage.getItem("token");
+    const customerId = getCustomerIdFromStorage();
+    if (!token || customerId === null) {
+      setError("Not logged in.");
+      setWaiting(false);
+      return;
+    }
+    setWaiting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/rides/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customerId,
+          originLat: pickupLocation.lat,
+          originLng: pickupLocation.lng,
+          destLat: destination.lat,
+          destLng: destination.lng,
+          destinationName,
+          vehicleType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create ride.");
+        setWaiting(false);
+        return;
+      }
+      setPickupSet(true);
+      setRideId(data.rideId || data.id);
+      setRideStatus("pending");
+      setWaiting(false);
+    } catch (err: any) {
+      setError("Network or server error.");
+    } finally {
+      setWaiting(false);
+    }
+  }
+
+  // ------------------- CANCEL RIDE -------------------
+  async function handleCancelRide() {
+    if (!rideId) return;
+    setWaiting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to cancel ride.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("cancelled");
+      setShowDoneActions(true);
+      setShowRating(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+    } finally {
+      setWaiting(false);
+    }
+  }
+
+  // ------------------- MARK AS DONE -------------------
+  async function handleMarkAsDone() {
+    if (!rideId) return;
+    setWaiting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to mark ride as done.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("done");
+      setShowDoneActions(true);
+      setShowRating(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+    } finally {
+      setWaiting(false);
+    }
+  }
+
+  // --- Clean up everything (also called after logout or rating) ---
+  function handleReset() {
+    setRideStatus(null);
+    setPickupSet(false);
+    setPickupLocation(userLocation);
+    setDestination(null);
+    setVehicleType("");
+    setRideId(null);
+    setDriverInfo(null);
+    setShowDoneActions(false);
+    setShowRating(false);
+    setChatMessages([]);
+    setDestinationName("");
+    saveChatSession(null, null);
+  }
+
+  // ------------------- UI RENDERING -------------------
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress")
@@ -568,7 +583,7 @@ export default function CustomerDashboard() {
     );
   }
 
-  if (rideStatus === "done" && showDoneActions && rideId) {
+  if (showRating && showDoneActions && rideId) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
@@ -584,7 +599,7 @@ export default function CustomerDashboard() {
     );
   }
 
-  if (rideStatus === "cancelled") {
+  if (rideStatus === "cancelled" && showDoneActions) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ fontWeight: "bold", fontSize: 20, color: "#f44336" }}>
@@ -600,12 +615,11 @@ export default function CustomerDashboard() {
     );
   }
 
-  // --- Icon selector for vehicle type ---
+  // --- Main UI: map, emergency, icons, request ---
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
         Xzity Ride Request
-        {/* Logo removed - now only in App.tsx */}
       </h2>
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
       {userLocation && (
@@ -615,8 +629,12 @@ export default function CustomerDashboard() {
           style={{ height: 320, borderRadius: 8, margin: "0 auto", width: "100%", maxWidth: 640 }}
           whenCreated={map => {
             map.on("click", (e: any) => {
-              setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
-              setPickupSet(true);
+              if (!pickupSet) {
+                setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+                setPickupSet(true);
+              } else {
+                setDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
+              }
             });
           }}
         >
@@ -627,6 +645,14 @@ export default function CustomerDashboard() {
               icon={createLeafletIcon(markerCustomer, 32, 41)}
             >
               <Popup>Pickup Here</Popup>
+            </Marker>
+          )}
+          {destination && (
+            <Marker
+              position={[destination.lat, destination.lng]}
+              icon={createLeafletIcon(markerCustomer, 32, 41)}
+            >
+              <Popup>Destination</Popup>
             </Marker>
           )}
           {emergencyLocations.map((em, idx) => (
@@ -658,7 +684,7 @@ export default function CustomerDashboard() {
           <b>Vehicle Type:</b>
         </label>
         <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 16, marginTop: 10 }}>
-          {vehicleOptions.filter(opt => opt.value !== "").map(opt => (
+          {vehicleOptions.map(opt => (
             <button
               key={opt.value}
               onClick={() => setVehicleType(opt.value)}
@@ -681,8 +707,7 @@ export default function CustomerDashboard() {
                 fontSize: "1.05em"
               }}
             >
-              {/* Size reduced by 25%: 32*0.75=24 */}
-              <img src={opt.icon} alt={opt.label} style={{ width: 24, height: 24, marginBottom: 3 }} />
+              <img src={opt.icon} alt={opt.label} style={{ width: 32, height: 32, marginBottom: 3 }} />
               {opt.label}
             </button>
           ))}
@@ -690,7 +715,7 @@ export default function CustomerDashboard() {
       </div>
       <div style={{ margin: "24px 0", textAlign: "center" }}>
         <button
-          disabled={waiting || !pickupLocation || !vehicleType}
+          disabled={waiting || !pickupLocation || !destination || !vehicleType || !destinationName}
           onClick={handleRequestRide}
           style={{
             background: "#388e3c",
@@ -711,6 +736,23 @@ export default function CustomerDashboard() {
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
+      {destination && (
+        <div style={{ textAlign: "center", color: "#888" }}>
+          Destination: {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
+        </div>
+      )}
+      <div style={{ margin: "10px auto", textAlign: "center" }}>
+        <input
+          type="text"
+          value={destinationName}
+          onChange={e => setDestinationName(e.target.value)}
+          placeholder="Type destination (e.g. Airport, Hospital)"
+          style={{ width: 260, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
+        />
+        <div style={{ fontSize: 13, color: "#888" }}>
+          Click map to set pickup, then click again to set destination. Type the destination name for clarity.
+        </div>
+      </div>
     </div>
   );
 }
