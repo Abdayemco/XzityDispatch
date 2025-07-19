@@ -142,7 +142,6 @@ const API_URL = import.meta.env.VITE_API_URL
   : "";
 
 export default function CustomerDashboard() {
-  // ------------------- STATE -------------------
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
@@ -157,26 +156,24 @@ export default function CustomerDashboard() {
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [showRating, setShowRating] = useState(false);
-  const [scheduledModalOpen, setScheduledModalOpen] = useState(false);
 
-  // --- SCHEDULED RIDE STATE ---
-  const [schedPickup, setSchedPickup] = useState<{ lat: number; lng: number } | null>(null);
-  const [schedDestination, setSchedDestination] = useState<{ lat: number; lng: number } | null>(null);
+  // Scheduled ride modal state
+  const [scheduledModalOpen, setScheduledModalOpen] = useState(false);
   const [schedVehicleType, setSchedVehicleType] = useState<string>("");
   const [schedDestinationName, setSchedDestinationName] = useState<string>("");
   const [schedDatetime, setSchedDatetime] = useState<string>("");
-  const [schedNote, setSchedNote] = useState<string>("");
+  const [schedNote, setSchedNote] = useState<string>(""); // Note for driver
   const [schedError, setSchedError] = useState<string | null>(null);
   const [schedWaiting, setSchedWaiting] = useState(false);
 
-  // --- Listen for login/logout and update token in all tabs
+  // Listen for login/logout and update token in all tabs
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // --- Restore ride/chat session from backend on mount or after login ---
+  // Restore ride/chat session from backend on mount or after login
   useEffect(() => {
     async function restoreCurrentRideFromBackend() {
       const token = localStorage.getItem("token");
@@ -206,12 +203,12 @@ export default function CustomerDashboard() {
     }
   }, [rideId, pickupSet]);
 
-  // --- Persist ride/chat session to localStorage ---
+  // Persist ride/chat session to localStorage
   useEffect(() => {
     if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
   }, [rideId, rideStatus]);
 
-  // ------------------- GEOLOCATION -------------------
+  // GEOLOCATION
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -227,7 +224,7 @@ export default function CustomerDashboard() {
     );
   }, []);
 
-  // ------------------- EMERGENCY LOCATIONS -------------------
+  // EMERGENCY LOCATIONS
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -236,8 +233,8 @@ export default function CustomerDashboard() {
       [out:json][timeout:25];
       (
         node["amenity"="hospital"](around:5000,${lat},${lng});
-      node["amenity"="police"](around:5000,${lat},${lng});
-      node["emergency"="fire_station"](around:5000,${lat},${lng});
+        node["amenity"="police"](around:5000,${lat},${lng});
+        node["emergency"="fire_station"](around:5000,${lat},${lng});
       );
       out body;
     `;
@@ -280,7 +277,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // ------------------- POLLING RIDE STATUS -------------------
+  // POLLING RIDE STATUS
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
@@ -295,7 +292,6 @@ export default function CustomerDashboard() {
               vehicleType: data.driver.vehicleType || ""
             });
           }
-          // If ride is completed/cancelled, show rating UI
           if (["done", "cancelled"].includes(data.status)) {
             setShowDoneActions(true);
             setShowRating(true);
@@ -306,7 +302,7 @@ export default function CustomerDashboard() {
     return () => clearInterval(interval);
   }, [pickupSet, rideId, rideStatus]);
 
-  // ------------------- CHAT LOGIC: Polling REST -------------------
+  // CHAT LOGIC: Polling REST
   useEffect(() => {
     if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
     let polling = true;
@@ -367,7 +363,7 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
-  // ------------------- REQUEST RIDE -------------------
+  // REQUEST RIDE (Regular)
   async function handleRequestRide() {
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
@@ -416,10 +412,8 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- SCHEDULED RIDE LOGIC ---
+  // SCHEDULED RIDE LOGIC: Simple modal
   function openScheduleModal() {
-    setSchedPickup(userLocation ? { ...userLocation } : null);
-    setSchedDestination(null);
     setSchedVehicleType("");
     setSchedDestinationName("");
     setSchedDatetime("");
@@ -427,20 +421,12 @@ export default function CustomerDashboard() {
     setSchedError(null);
     setScheduledModalOpen(true);
   }
-
   function closeScheduleModal() {
     setScheduledModalOpen(false);
     setSchedError(null);
   }
-
   async function handleConfirmScheduledRide() {
-    if (
-      !schedPickup ||
-      !schedDestination ||
-      !schedDatetime ||
-      !schedVehicleType ||
-      !schedDestinationName
-    ) {
+    if (!userLocation || !schedDatetime || !schedDestinationName || !schedVehicleType) {
       setSchedError("All fields are required.");
       return;
     }
@@ -461,10 +447,10 @@ export default function CustomerDashboard() {
         },
         body: JSON.stringify({
           customerId,
-          originLat: schedPickup.lat,
-          originLng: schedPickup.lng,
-          destLat: schedDestination.lat,
-          destLng: schedDestination.lng,
+          originLat: userLocation.lat,
+          originLng: userLocation.lng,
+          destLat: userLocation.lat,
+          destLng: userLocation.lng,
           vehicleType: schedVehicleType,
           destinationName: schedDestinationName,
           scheduledAt: schedDatetime,
@@ -489,7 +475,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Clean up everything (also called after logout or rating) ---
+  // Clean up everything (also called after logout or rating)
   function handleReset() {
     setRideStatus(null);
     setPickupSet(false);
@@ -503,7 +489,7 @@ export default function CustomerDashboard() {
     saveChatSession(null, null);
   }
 
-  // ------------------- UI RENDERING -------------------
+  // --- UI RENDERING ---
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress" || rideStatus === "scheduled")
@@ -512,16 +498,24 @@ export default function CustomerDashboard() {
       <div style={{ padding: 24, textAlign: "center" }}>
         <div>
           {rideStatus === "pending" && (
-            <span style={{ fontWeight: "bold", fontSize: 22 }}>Waiting for a driver to accept your ride...</span>
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>
+              Waiting for a driver to accept your ride...
+            </span>
           )}
           {rideStatus === "scheduled" && (
-            <span style={{ fontWeight: "bold", fontSize: 22 }}>Your ride is scheduled. Please wait for a driver to accept it.</span>
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>
+              Your ride is scheduled. Please wait for a driver to accept it.
+            </span>
           )}
           {rideStatus === "accepted" && (
-            <span style={{ fontWeight: "bold", fontSize: 22 }}>Driver is on the way!</span>
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>
+              Driver is on the way!
+            </span>
           )}
           {rideStatus === "in_progress" && (
-            <span style={{ fontWeight: "bold", fontSize: 22 }}>Enjoy your ride!</span>
+            <span style={{ fontWeight: "bold", fontSize: 22 }}>
+              Enjoy your ride!
+            </span>
           )}
         </div>
         {driverInfo && (rideStatus === "accepted" || rideStatus === "in_progress") && (
@@ -806,37 +800,6 @@ export default function CustomerDashboard() {
               placeholder="Optional note for driver"
               style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
             />
-            <div style={{ marginBottom: 10 }}>
-              <b>Choose Destination on Map:</b>
-            </div>
-            <MapContainer
-              center={schedPickup ? [schedPickup.lat, schedPickup.lng] : [userLocation?.lat || 0, userLocation?.lng || 0]}
-              zoom={13}
-              style={{ height: 220, borderRadius: 8, marginBottom: 16, width: "100%" }}
-              whenCreated={map => {
-                map.on("click", (e: any) => {
-                  setSchedDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
-                });
-              }}
-            >
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {schedPickup && (
-                <Marker
-                  position={[schedPickup.lat, schedPickup.lng]}
-                  icon={createLeafletIcon(markerCustomer, 32, 41)}
-                >
-                  <Popup>Pickup Here</Popup>
-                </Marker>
-              )}
-              {schedDestination && (
-                <Marker
-                  position={[schedDestination.lat, schedDestination.lng]}
-                  icon={createLeafletIcon(markerCustomer, 32, 41)}
-                >
-                  <Popup>Destination</Popup>
-                </Marker>
-              )}
-            </MapContainer>
             <div style={{ textAlign: "center" }}>
               <button
                 disabled={schedWaiting}
