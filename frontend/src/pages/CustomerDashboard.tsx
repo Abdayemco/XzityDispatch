@@ -131,11 +131,6 @@ function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
   localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
   localStorage.setItem("currentRideStatus", rideStatus || "");
 }
-function getSavedChatSession() {
-  const rideId = Number(localStorage.getItem("currentRideId"));
-  const rideStatus = localStorage.getItem("currentRideStatus");
-  return { rideId: rideId || null, rideStatus: rideStatus || null };
-}
 
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
