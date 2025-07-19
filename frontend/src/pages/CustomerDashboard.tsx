@@ -148,8 +148,6 @@ export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
-  const [destination, setDestination] = useState<{ lng: number; lat: number } | null>(null);
-  const [destinationName, setDestinationName] = useState<string>("");
   const [pickupSet, setPickupSet] = useState(false);
   const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
@@ -161,6 +159,7 @@ export default function CustomerDashboard() {
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [showRating, setShowRating] = useState(false);
+  const [scheduledModalOpen, setScheduledModalOpen] = useState(false);
 
   // --- Listen for login/logout and update token in all tabs
   useEffect(() => {
@@ -187,12 +186,6 @@ export default function CustomerDashboard() {
             if (data.driver) setDriverInfo(data.driver);
             if (data.originLat && data.originLng) {
               setPickupLocation({ lat: data.originLat, lng: data.originLng });
-            }
-            if (data.destLat && data.destLng) {
-              setDestination({ lat: data.destLat, lng: data.destLng });
-            }
-            if (data.destinationName) {
-              setDestinationName(data.destinationName);
             }
           }
         }
@@ -369,8 +362,8 @@ export default function CustomerDashboard() {
 
   // ------------------- REQUEST RIDE -------------------
   async function handleRequestRide() {
-    if (!pickupLocation || !destination || !vehicleType || !destinationName) {
-      setError("Pickup, destination, destination name, and vehicle type required.");
+    if (!pickupLocation || !vehicleType) {
+      setError("Pickup location and vehicle type required.");
       setWaiting(false);
       return;
     }
@@ -384,7 +377,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides/schedule`, {
+      const res = await fetch(`${API_URL}/api/rides/request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -394,9 +387,8 @@ export default function CustomerDashboard() {
           customerId,
           originLat: pickupLocation.lat,
           originLng: pickupLocation.lng,
-          destLat: destination.lat,
-          destLng: destination.lng,
-          destinationName,
+          destLat: pickupLocation.lat,
+          destLng: pickupLocation.lng,
           vehicleType,
         }),
       });
@@ -417,64 +409,9 @@ export default function CustomerDashboard() {
     }
   }
 
-  // ------------------- CANCEL RIDE -------------------
-  async function handleCancelRide() {
-    if (!rideId) return;
-    setWaiting(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to cancel ride.");
-        setWaiting(false);
-        return;
-      }
-      setRideStatus("cancelled");
-      setShowDoneActions(true);
-      setShowRating(true);
-      setWaiting(false);
-    } catch (err) {
-      setError("Network or server error.");
-    } finally {
-      setWaiting(false);
-    }
-  }
-
-  // ------------------- MARK AS DONE -------------------
-  async function handleMarkAsDone() {
-    if (!rideId) return;
-    setWaiting(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to mark ride as done.");
-        setWaiting(false);
-        return;
-      }
-      setRideStatus("done");
-      setShowDoneActions(true);
-      setShowRating(true);
-      setWaiting(false);
-    } catch (err) {
-      setError("Network or server error.");
-    } finally {
-      setWaiting(false);
-    }
+  // ------------------- SCHEDULE RIDE -------------------
+  function openScheduleModal() {
+    setScheduledModalOpen(true);
   }
 
   // --- Clean up everything (also called after logout or rating) ---
@@ -482,14 +419,12 @@ export default function CustomerDashboard() {
     setRideStatus(null);
     setPickupSet(false);
     setPickupLocation(userLocation);
-    setDestination(null);
     setVehicleType("");
     setRideId(null);
     setDriverInfo(null);
     setShowDoneActions(false);
     setShowRating(false);
     setChatMessages([]);
-    setDestinationName("");
     saveChatSession(null, null);
   }
 
@@ -550,7 +485,9 @@ export default function CustomerDashboard() {
                 margin: "0 10px",
                 opacity: waiting ? 0.7 : 1
               }}
-              onClick={handleMarkAsDone}
+              onClick={async () => {
+                await handleMarkAsDone();
+              }}
             >
               Mark as Done
             </button>
@@ -629,12 +566,8 @@ export default function CustomerDashboard() {
           style={{ height: 320, borderRadius: 8, margin: "0 auto", width: "100%", maxWidth: 640 }}
           whenCreated={map => {
             map.on("click", (e: any) => {
-              if (!pickupSet) {
-                setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
-                setPickupSet(true);
-              } else {
-                setDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
-              }
+              setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+              setPickupSet(true);
             });
           }}
         >
@@ -645,14 +578,6 @@ export default function CustomerDashboard() {
               icon={createLeafletIcon(markerCustomer, 32, 41)}
             >
               <Popup>Pickup Here</Popup>
-            </Marker>
-          )}
-          {destination && (
-            <Marker
-              position={[destination.lat, destination.lng]}
-              icon={createLeafletIcon(markerCustomer, 32, 41)}
-            >
-              <Popup>Destination</Popup>
             </Marker>
           )}
           {emergencyLocations.map((em, idx) => (
@@ -713,9 +638,9 @@ export default function CustomerDashboard() {
           ))}
         </div>
       </div>
-      <div style={{ margin: "24px 0", textAlign: "center" }}>
+      <div style={{ margin: "24px 0", textAlign: "center", display: "flex", justifyContent: "center", gap: 20 }}>
         <button
-          disabled={waiting || !pickupLocation || !destination || !vehicleType || !destinationName}
+          disabled={waiting || !pickupLocation || !vehicleType}
           onClick={handleRequestRide}
           style={{
             background: "#388e3c",
@@ -730,29 +655,27 @@ export default function CustomerDashboard() {
         >
           Request Ride
         </button>
+        <button
+          style={{
+            background: "#1976D2",
+            color: "#fff",
+            border: "none",
+            padding: "0.9em 2em",
+            borderRadius: 6,
+            fontSize: 18,
+            fontWeight: "bold"
+          }}
+          onClick={openScheduleModal}
+        >
+          Schedule Ride
+        </button>
       </div>
       {pickupLocation && (
         <div style={{ textAlign: "center", color: "#888" }}>
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
-      {destination && (
-        <div style={{ textAlign: "center", color: "#888" }}>
-          Destination: {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
-        </div>
-      )}
-      <div style={{ margin: "10px auto", textAlign: "center" }}>
-        <input
-          type="text"
-          value={destinationName}
-          onChange={e => setDestinationName(e.target.value)}
-          placeholder="Type destination (e.g. Airport, Hospital)"
-          style={{ width: 260, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
-        />
-        <div style={{ fontSize: 13, color: "#888" }}>
-          Click map to set pickup, then click again to set destination. Type the destination name for clarity.
-        </div>
-      </div>
+      {/* Destination field removed (not required at this stage) */}
     </div>
   );
 }
