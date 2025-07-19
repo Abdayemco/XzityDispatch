@@ -363,7 +363,7 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
-  // REQUEST RIDE (Regular)
+  // REQUEST RIDE (Regular) - POST /api/rides
   async function handleRequestRide() {
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
@@ -380,7 +380,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides/request`, {
+      const res = await fetch(`${API_URL}/api/rides`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -439,7 +439,7 @@ export default function CustomerDashboard() {
     setSchedWaiting(true);
     setSchedError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides/schedule`, {
+      const res = await fetch(`${API_URL}/api/rides`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -463,12 +463,30 @@ export default function CustomerDashboard() {
         setSchedWaiting(false);
         return;
       }
-      setScheduledModalOpen(false);
-      setPickupSet(true);
-      setRideId(data.rideId || data.id);
-      setRideStatus("scheduled");
-      setWaiting(false);
-      setSchedWaiting(false);
+
+      // Calculate difference between now and scheduledAt
+      const scheduledTime = new Date(schedDatetime).getTime();
+      const now = Date.now();
+      const diffMinutes = (scheduledTime - now) / 60000;
+
+      if (diffMinutes <= 30) {
+        // Show waiting for driver
+        setScheduledModalOpen(false);
+        setPickupSet(true);
+        setRideId(data.rideId || data.id);
+        setRideStatus("scheduled");
+        setWaiting(false);
+        setSchedWaiting(false);
+      } else {
+        // Just close modal and reset schedule fields, do NOT show waiting UI
+        setScheduledModalOpen(false);
+        setSchedVehicleType("");
+        setSchedDestinationName("");
+        setSchedDatetime("");
+        setSchedNote("");
+        setSchedError(null);
+        setSchedWaiting(false);
+      }
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
