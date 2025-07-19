@@ -17,6 +17,9 @@ const router = Router();
 
 // Create a new ride (regular or scheduled)
 router.post("/schedule", checkUserStatus, requestRide);
+router.post("/request", checkUserStatus, requestRide); // <-- ADD THIS LINE
+// (Optional: Allow POST /api/rides as well)
+// router.post("/", checkUserStatus, requestRide);
 
 // Get available rides for driver (including scheduled)
 router.get("/available", checkUserStatus, getAvailableRides);
