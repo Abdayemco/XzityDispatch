@@ -363,7 +363,7 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
-  // REQUEST RIDE (Regular) - POST /api/rides
+  // REQUEST RIDE (Regular) - POST /api/rides/request
   async function handleRequestRide() {
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
@@ -380,7 +380,7 @@ export default function CustomerDashboard() {
     setWaiting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides`, {
+      const res = await fetch(`${API_URL}/api/rides/request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -412,7 +412,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // SCHEDULED RIDE LOGIC: Simple modal
+  // SCHEDULED RIDE LOGIC: Simple modal - POST /api/rides/schedule
   function openScheduleModal() {
     setSchedVehicleType("");
     setSchedDestinationName("");
@@ -439,7 +439,7 @@ export default function CustomerDashboard() {
     setSchedWaiting(true);
     setSchedError(null);
     try {
-      const res = await fetch(`${API_URL}/api/rides`, {
+      const res = await fetch(`${API_URL}/api/rides/schedule`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
