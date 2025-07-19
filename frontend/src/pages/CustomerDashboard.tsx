@@ -179,7 +179,7 @@ export default function CustomerDashboard() {
         });
         if (res.ok) {
           const data = await res.json();
-          if (data && data.rideId && ["accepted", "in_progress", "pending"].includes(data.rideStatus)) {
+          if (data && data.rideId && ["accepted", "in_progress", "pending", "scheduled"].includes(data.rideStatus)) {
             setRideId(data.rideId);
             setRideStatus(data.rideStatus);
             setPickupSet(true);
@@ -278,18 +278,28 @@ export default function CustomerDashboard() {
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_URL}/api/rides/${rideId}/status`);
-          const data = await res.json();
-          if (data.status) setRideStatus(data.status);
-          if ((data.status === "accepted" || data.status === "in_progress") && data.driver) {
+          // Get ride status and driver info from /api/rides/current (more complete)
+          const token = localStorage.getItem("token");
+          let statusData: any = {};
+          if (token) {
+            const res = await fetch(`${API_URL}/api/rides/current`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+              statusData = await res.json();
+            }
+          }
+          let status = statusData.rideStatus || null;
+          if (status) setRideStatus(status as RideStatus);
+          if ((status === "accepted" || status === "in_progress") && statusData.driver) {
             setDriverInfo({
-              name: data.driver.name || "",
-              vehicleType: data.driver.vehicleType || ""
+              name: statusData.driver.name || "",
+              vehicleType: statusData.driver.vehicleType || ""
             });
           }
-          if (["done", "cancelled"].includes(data.status)) {
+          if (["done", "cancelled"].includes(status)) {
             setShowDoneActions(true);
-            setShowRating(true);
+            setShowRating(status === "done");
           }
         } catch (err) {}
       }, 3000);
@@ -360,6 +370,10 @@ export default function CustomerDashboard() {
 
   // REQUEST RIDE (Regular) - POST /api/rides/request
   async function handleRequestRide() {
+    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
+      setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
+      return;
+    }
     if (!pickupLocation || !vehicleType) {
       setError("Pickup location and vehicle type required.");
       setWaiting(false);
@@ -421,6 +435,10 @@ export default function CustomerDashboard() {
     setSchedError(null);
   }
   async function handleConfirmScheduledRide() {
+    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
+      setSchedError("You already have an active ride. Please cancel or complete it before scheduling a new one.");
+      return;
+    }
     if (!userLocation || !schedDatetime || !schedDestinationName || !schedVehicleType) {
       setSchedError("All fields are required.");
       return;
@@ -705,7 +723,7 @@ export default function CustomerDashboard() {
       </div>
       <div style={{ margin: "24px 0", textAlign: "center", display: "flex", justifyContent: "center", gap: 20 }}>
         <button
-          disabled={waiting || !pickupLocation || !vehicleType}
+          disabled={waiting || !pickupLocation || !vehicleType || !!(rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || ""))}
           onClick={handleRequestRide}
           style={{
             background: "#388e3c",
@@ -731,6 +749,7 @@ export default function CustomerDashboard() {
             fontWeight: "bold"
           }}
           onClick={openScheduleModal}
+          disabled={!!(rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || ""))}
         >
           Schedule Ride
         </button>
