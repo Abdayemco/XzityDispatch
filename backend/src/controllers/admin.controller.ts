@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
 import { RideStatus } from "@prisma/client";
 
-// Helper to get safe sort params (used in multiple endpoints)
+// Helper to get safe sort params
 function getSortParams(query: any, allowedFields: string[], defaultField = "id", defaultOrder = "desc") {
   const sortBy = allowedFields.includes(query.sortBy) ? query.sortBy : defaultField;
   const order = (query.order === "asc" || query.order === "desc") ? query.order : defaultOrder;
@@ -30,7 +30,7 @@ function locationRadiusFilter(query: any) {
   };
 }
 
-// --- Advanced Drivers endpoint ---
+// --- Drivers endpoint ---
 export const getDrivers = async (req: Request, res: Response) => {
   try {
     const allowedFields = [
@@ -154,7 +154,7 @@ export const getMapDrivers = async (req: Request, res: Response) => {
   }
 };
 
-// --- Advanced Customers endpoint ---
+// --- Customers endpoint ---
 export const getCustomers = async (req: Request, res: Response) => {
   try {
     const allowedFields = [
@@ -266,7 +266,7 @@ export const getMapCustomers = async (req: Request, res: Response) => {
   }
 };
 
-// --- Rides endpoint (sortable, paginated) ---
+// --- Rides endpoint (sortable, paginated, scheduled rides show first) ---
 export const getRides = async (req: Request, res: Response) => {
   try {
     const allowedFields = ["id", "requestedAt", "scheduledAt"];
@@ -278,7 +278,10 @@ export const getRides = async (req: Request, res: Response) => {
         customer: { select: { id: true, name: true, phone: true, email: true } },
         driver: { select: { id: true, name: true, phone: true, email: true } },
       },
-      orderBy: { [sortBy]: order },
+      orderBy: [
+        { status: "asc" },           // SCHEDULED (or lowest status alphabetically) first
+        { [sortBy]: order as any }
+      ],
       skip,
       take
     });
