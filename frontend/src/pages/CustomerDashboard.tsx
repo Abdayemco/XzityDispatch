@@ -15,6 +15,7 @@ import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 
+const [showDoneButton, setShowDoneButton] = useState(false);
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -81,6 +82,35 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
+
+async function handleMarkRideDone() {
+  if (!rideId) return;
+  setWaiting(true);
+  setError(null);
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Failed to mark ride as done.");
+      setWaiting(false);
+      return;
+    }
+    setRideStatus("done");
+    setShowDoneActions(true);
+    setShowRating(true);
+    setWaiting(false);
+  } catch (err) {
+    setError("Network or server error.");
+    setWaiting(false);
+  }
+}
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -291,7 +321,8 @@ export default function CustomerDashboard() {
           }
           let status = statusData.rideStatus || null;
           if (status) setRideStatus(status as RideStatus);
-          if ((status === "accepted" || status === "in_progress") && statusData.driver) {
+          setShowDoneButton(status === "in_progress");
+	  if ((status === "accepted" || status === "in_progress") && statusData.driver) {
             setDriverInfo({
               name: statusData.driver.name || "",
               vehicleType: statusData.driver.vehicleType || ""
@@ -605,6 +636,23 @@ export default function CustomerDashboard() {
           >
             Cancel Ride
           </button>
+        {showDoneButton && (
+  <button
+    disabled={waiting}
+    style={{
+      background: "#388e3c",
+      color: "#fff",
+      border: "none",
+      padding: "0.7em 1.4em",
+      borderRadius: 6,
+      fontSize: 16,
+      opacity: waiting ? 0.5 : 1
+    }}
+    onClick={handleMarkRideDone}
+  >
+    Ride is Done
+  </button>
+)}
         </div>
         {(rideStatus === "accepted" || rideStatus === "in_progress") && rideId && (
           <div style={{
