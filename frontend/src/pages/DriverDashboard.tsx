@@ -50,6 +50,7 @@ type Job = {
   status?:
     | "pending"
     | "accepted"
+    | "scheduled" // <-- ensure scheduled is included!
     | "cancelled"
     | "done"
     | "arrived"
@@ -129,7 +130,7 @@ export default function DriverDashboard() {
           if (
             data &&
             data.rideId &&
-            ["accepted", "in_progress", "pending"].includes(data.rideStatus)
+            ["accepted", "in_progress", "pending", "scheduled"].includes(data.rideStatus)
           ) {
             setDriverJobId(String(data.rideId));
             setJobStatus(data.rideStatus);
@@ -159,7 +160,8 @@ export default function DriverDashboard() {
         storedId &&
         (storedStatus === "accepted" ||
           storedStatus === "in_progress" ||
-          storedStatus === "pending")
+          storedStatus === "pending" ||
+          storedStatus === "scheduled")
       ) {
         setDriverJobId(String(storedId));
         setJobStatus(storedStatus);
@@ -226,7 +228,17 @@ export default function DriverDashboard() {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       const data = await res.json();
-      if (res.ok && Array.isArray(data)) setJobs(data);
+      // Optionally map fields for scheduled rides if needed
+      if (res.ok && Array.isArray(data)) {
+        const mapped = data.map((job: any) => ({
+          ...job,
+          pickupLat: job.pickupLat ?? job.originLat,
+          pickupLng: job.pickupLng ?? job.originLng,
+          customerName: job.customerName ?? job.customer?.name ?? "",
+          vehicleType: (job.vehicleType || "").toLowerCase()
+        }));
+        setJobs(mapped);
+      }
       else {
         setErrorMsg(data?.error || "Server returned an error fetching jobs.");
         setJobs([]);
