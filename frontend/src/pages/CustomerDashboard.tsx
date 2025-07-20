@@ -15,7 +15,7 @@ import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 
-const [showDoneButton, setShowDoneButton] = useState(false);
+
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -63,7 +63,7 @@ type EmergencyLocation = {
   icon: string;
 };
 type OverpassElement = {
-  id: number;
+  iexportcfcxcsxd: number;
   lat: number;
   lon: number;
   tags: {
@@ -181,6 +181,7 @@ export default function CustomerDashboard() {
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [showRating, setShowRating] = useState(false);
+  const [showDoneButton, setShowDoneButton] = useState(false);
 
   // Scheduled ride modal state
   const [scheduledModalOpen, setScheduledModalOpen] = useState(false);
