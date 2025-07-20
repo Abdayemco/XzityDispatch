@@ -50,7 +50,7 @@ type Job = {
   status?:
     | "pending"
     | "accepted"
-    | "scheduled" // <-- ensure scheduled is included!
+    | "scheduled"
     | "cancelled"
     | "done"
     | "arrived"
@@ -321,6 +321,9 @@ export default function DriverDashboard() {
       setErrorMsg("Failed to start ride");
     }
   }
+
+  // (continues in Part 2)
+  // ... continuation from Part 1 ...
 
   useEffect(() => {
     if (!driverJobId || cancelled || completed) return;
