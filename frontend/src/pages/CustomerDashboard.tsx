@@ -15,7 +15,6 @@ import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 
-
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -63,7 +62,7 @@ type EmergencyLocation = {
   icon: string;
 };
 type OverpassElement = {
-  iexportcfcxcsxd: number;
+  id: number;
   lat: number;
   lon: number;
   tags: {
@@ -82,35 +81,6 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
-
-async function handleMarkRideDone() {
-  if (!rideId) return;
-  setWaiting(true);
-  setError(null);
-  try {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Failed to mark ride as done.");
-      setWaiting(false);
-      return;
-    }
-    setRideStatus("done");
-    setShowDoneActions(true);
-    setShowRating(true);
-    setWaiting(false);
-  } catch (err) {
-    setError("Network or server error.");
-    setWaiting(false);
-  }
-}
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -309,7 +279,6 @@ export default function CustomerDashboard() {
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
       interval = setInterval(async () => {
         try {
-          // Get ride status and driver info from /api/rides/current (more complete)
           const token = localStorage.getItem("token");
           let statusData: any = {};
           if (token) {
@@ -420,9 +389,38 @@ export default function CustomerDashboard() {
         setWaiting(false);
         return;
       }
-      // Soft-reset: UI will automatically reset on next status poll, but let's reset state immediately
       setRideStatus("cancelled");
       setShowDoneActions(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
+  // --- Mark Ride as Done Handler ---
+  async function handleMarkRideDone() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to mark ride as done.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("done");
+      setShowDoneActions(true);
+      setShowRating(true);
       setWaiting(false);
     } catch (err) {
       setError("Network or server error.");
@@ -637,23 +635,23 @@ export default function CustomerDashboard() {
           >
             Cancel Ride
           </button>
-        {showDoneButton && (
-  <button
-    disabled={waiting}
-    style={{
-      background: "#388e3c",
-      color: "#fff",
-      border: "none",
-      padding: "0.7em 1.4em",
-      borderRadius: 6,
-      fontSize: 16,
-      opacity: waiting ? 0.5 : 1
-    }}
-    onClick={handleMarkRideDone}
-  >
-    Ride is Done
-  </button>
-)}
+          {showDoneButton && (
+            <button
+              disabled={waiting}
+              style={{
+                background: "#388e3c",
+                color: "#fff",
+                border: "none",
+                padding: "0.7em 1.4em",
+                borderRadius: 6,
+                fontSize: 16,
+                opacity: waiting ? 0.5 : 1
+              }}
+              onClick={handleMarkRideDone}
+            >
+              Ride is Done
+            </button>
+          )}
         </div>
         {(rideStatus === "accepted" || rideStatus === "in_progress") && rideId && (
           <div style={{
