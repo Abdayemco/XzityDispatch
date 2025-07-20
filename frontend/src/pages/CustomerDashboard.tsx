@@ -368,6 +368,36 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
+  // --- Cancel Ride Handler (NEW) ---
+  async function handleCancelRide() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to cancel ride.");
+        setWaiting(false);
+        return;
+      }
+      // Soft-reset: UI will automatically reset on next status poll, but let's reset state immediately
+      setRideStatus("cancelled");
+      setShowDoneActions(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
   // REQUEST RIDE (Regular) - POST /api/rides/request
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
@@ -571,7 +601,7 @@ export default function CustomerDashboard() {
               margin: "0 10px",
               opacity: waiting ? 0.5 : 1
             }}
-            onClick={handleReset}
+            onClick={handleCancelRide}
           >
             Cancel Ride
           </button>
