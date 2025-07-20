@@ -15,11 +15,34 @@ import { checkUserStatus } from "../middlewares/checkUserStatus";
 
 const router = Router();
 
+/**
+ * CUSTOMER ROUTES
+ */
+
 // Create a new ride (regular or scheduled)
 router.post("/schedule", checkUserStatus, requestRide);
-router.post("/request", checkUserStatus, requestRide); // <-- ADD THIS LINE
-// (Optional: Allow POST /api/rides as well)
+router.post("/request", checkUserStatus, requestRide);
+// Optionally allow POST /api/rides as well
 // router.post("/", checkUserStatus, requestRide);
+
+// Get the customer's (or driver's) current active ride
+router.get("/current", checkUserStatus, getCurrentRide);
+
+// Get ride status for polling
+router.get("/:rideId/status", checkUserStatus, getRideStatus);
+
+// Customer rates ride
+router.post("/:rideId/rate", checkUserStatus, rateRide);
+
+// Customer marks ride as done (i.e., completed)
+router.put("/:rideId/done", checkUserStatus, markRideAsDone);
+
+// Customer cancels ride
+router.put("/:rideId/cancel", checkUserStatus, cancelRide);
+
+/**
+ * DRIVER ROUTES
+ */
 
 // Get available rides for driver (including scheduled)
 router.get("/available", checkUserStatus, getAvailableRides);
@@ -32,20 +55,5 @@ router.put("/:rideId/start", checkUserStatus, startRide);
 
 // Driver marks scheduled ride as "No Show"
 router.put("/:rideId/no_show", checkUserStatus, markRideNoShow);
-
-// Get ride status for polling
-router.get("/:rideId/status", checkUserStatus, getRideStatus);
-
-// Customer rates ride
-router.post("/:rideId/rate", checkUserStatus, rateRide);
-
-// Get current ride for logged-in customer or driver
-router.get("/current", checkUserStatus, getCurrentRide);
-
-// Mark ride as completed
-router.put("/:rideId/done", checkUserStatus, markRideAsDone);
-
-// Cancel ride
-router.put("/:rideId/cancel", checkUserStatus, cancelRide);
 
 export default router;
