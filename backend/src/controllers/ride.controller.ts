@@ -390,15 +390,20 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
 // --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log("getCurrentRide: req.user", req.user);
     const user = req.user as { id: number; role: string };
     if (!user) return res.status(401).json({ error: "Not authenticated" });
     const role = user.role?.toLowerCase();
     let where: any = {};
     if (role === "customer") {
+      // Only consider scheduled rides as "current" if within 30min of scheduledAt
+      const now = new Date();
+      const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
       where = {
         customerId: user.id,
-        status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS, RideStatus.SCHEDULED] },
+        OR: [
+          { status: { in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.IN_PROGRESS] } },
+          { status: RideStatus.SCHEDULED, scheduledAt: { lte: thirtyMinFromNow } }
+        ],
       };
     } else if (role === "driver") {
       where = {
