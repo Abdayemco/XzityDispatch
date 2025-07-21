@@ -1,5 +1,3 @@
-// PART 1: imports, helpers, state, timezone detection, and scheduled ride logic
-
 import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -171,14 +169,25 @@ export default function CustomerDashboard() {
 
   // Helper: fetch timezone from coordinates using TimeZoneDB
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
-    const apiKey = 2M4RTER6O56C;
+    const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
+    if (!apiKey) {
+      console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
+      return "UTC";
+    }
     try {
       const res = await fetch(
         `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
       );
-      const data = await res.json();
-      if (data.zoneName) return data.zoneName;
-    } catch {}
+      const data = await res.json() as { zoneName?: string; message?: string; status?: string };
+      if (data.zoneName) {
+        console.log("Detected timezone from coords:", data.zoneName); // debug
+        return data.zoneName;
+      } else if (data.status !== "OK" && data.message) {
+        console.error("TimeZoneDB error:", data.message);
+      }
+    } catch (err) {
+      console.error("Timezone fetch error:", err);
+    }
     return "UTC";
   }
 
@@ -244,7 +253,10 @@ export default function CustomerDashboard() {
   useEffect(() => {
     if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
       getTimeZoneFromCoords(pickupLocation.lat, pickupLocation.lng)
-        .then(zone => setPickupTimeZone(zone || "UTC"))
+        .then(zone => {
+          setPickupTimeZone(zone || "UTC");
+          console.log("Detected pickup timezone:", zone);
+        })
         .catch(() => setPickupTimeZone("UTC"));
     }
   }, [pickupLocation]);
@@ -315,9 +327,6 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // POLLING RIDE STATUS, CHAT, etc...
-  // --- Code unchanged below this line, see part 2 ---
-
   // Helper: Convert scheduled local time + detected zone to UTC ISO string
   function getScheduledUTC(datetimeLocal: string, timezone: string): string {
     if (!datetimeLocal || !timezone) return "";
@@ -356,7 +365,7 @@ export default function CustomerDashboard() {
     setSchedWaiting(true);
     setSchedError(null);
 
-    // FIX: Use auto-detected pickupTimeZone
+    // Use auto-detected pickupTimeZone
     const scheduledAtUTC = getScheduledUTC(schedDatetime, pickupTimeZone || "UTC");
 
     try {
@@ -411,11 +420,7 @@ export default function CustomerDashboard() {
       setSchedWaiting(false);
     }
   }
-
-  // ... continue part 2 for rendering and ride/chat logic ...
-// PART 2: Ride/chat logic and UI rendering with local time display
-
-// ... continue inside CustomerDashboard function ...
+  // --- PART 2: Ride/chat logic, UI rendering, and ride actions ---
 
   // POLLING RIDE STATUS
   useEffect(() => {
@@ -436,7 +441,7 @@ export default function CustomerDashboard() {
           let status = statusData.rideStatus || null;
           if (status) setRideStatus(status as RideStatus);
           setShowDoneButton(status === "in_progress");
-	  if ((status === "accepted" || status === "in_progress") && statusData.driver) {
+          if ((status === "accepted" || status === "in_progress") && statusData.driver) {
             setDriverInfo({
               name: statusData.driver.name || "",
               vehicleType: statusData.driver.vehicleType || ""
@@ -513,7 +518,7 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
-  // --- Cancel Ride Handler (NEW) ---
+  // Cancel Ride Handler
   async function handleCancelRide() {
     if (!rideId) return;
     setWaiting(true);
@@ -542,7 +547,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Mark Ride as Done Handler ---
+  // Mark Ride as Done Handler
   async function handleMarkRideDone() {
     if (!rideId) return;
     setWaiting(true);
@@ -572,7 +577,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // REQUEST RIDE (Regular) - POST /api/rides/request
+  // Request Ride (Regular)
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
       setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
@@ -639,7 +644,7 @@ export default function CustomerDashboard() {
     saveChatSession(null, null);
   }
 
-  // --- UI RENDERING ---
+  // --- UI Rendering Section ---
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress" || rideStatus === "scheduled")
@@ -779,7 +784,7 @@ export default function CustomerDashboard() {
       </h2>
       {/* Show current detected time and zone */}
       <div style={{ textAlign: "center", fontWeight: "bold", color: "#1976D2", fontSize: 17, marginBottom: 8 }}>
-  Your current local time at pickup location: {localTime} {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
+        Your current local time at pickup location: {localTime} {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
       </div>
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
       {userLocation && (
@@ -1017,5 +1022,4 @@ export default function CustomerDashboard() {
     </div>
   );
 }
-
-// end of file
+// end of CustomerDashboard.tsx
