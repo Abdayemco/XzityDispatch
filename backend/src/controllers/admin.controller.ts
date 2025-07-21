@@ -40,7 +40,7 @@ async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> 
     const res = await fetch(
       `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
     );
-    const data = await res.json();
+    const data = await res.json() as { zoneName?: string };
     if (data.zoneName) return data.zoneName;
   } catch {}
   return "UTC";
