@@ -171,7 +171,7 @@ export default function CustomerDashboard() {
 
   // Helper: fetch timezone from coordinates using TimeZoneDB
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
-    const apiKey = "REPLACE_WITH_YOUR_TIMEZONEDB_API_KEY";
+    const apiKey = 2M4RTER6O56C;
     try {
       const res = await fetch(
         `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
