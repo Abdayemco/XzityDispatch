@@ -1,6 +1,9 @@
+// PART 1: Imports, helpers, user endpoints, and scheduled ride utilities
+
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
 import { RideStatus } from "@prisma/client";
+import { utcToLocal } from "../utils/timezone";  // <-- Import the utility
 
 // Helper to get safe sort params
 function getSortParams(query: any, allowedFields: string[], defaultField = "id", defaultOrder = "desc") {
@@ -28,6 +31,19 @@ function locationRadiusFilter(query: any) {
     lat: { gte: lat - deltaLat, lte: lat + deltaLat },
     lng: { gte: lng - deltaLng, lte: lng + deltaLng },
   };
+}
+
+// --- Helper: Get timezone from lat/lng using TimeZoneDB (needs apiKey configured) ---
+async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
+  const apiKey = process.env.TIMEZONEDB_API_KEY || "YOUR_TIMEZONEDB_API_KEY";
+  try {
+    const res = await fetch(
+      `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
+    );
+    const data = await res.json();
+    if (data.zoneName) return data.zoneName;
+  } catch {}
+  return "UTC";
 }
 
 // --- Drivers endpoint ---
@@ -207,6 +223,8 @@ export const getCustomers = async (req: Request, res: Response) => {
 };
 
 // --- Enable/Disable Customer endpoints ---
+// (unchanged below)
+
 export const disableCustomer = async (req: Request, res: Response) => {
   try {
     const customerId = Number(req.params.id);
@@ -239,6 +257,9 @@ export const enableCustomer = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to enable customer" });
   }
 };
+// PART 2: Rides endpoints with scheduledAt converted to pickup location time zone
+
+import fetch from "node-fetch"; // Needed for timezone API calls (if not already imported)
 
 // --- MAP CUSTOMERS endpoint for admin live map ---
 export const getMapCustomers = async (req: Request, res: Response) => {
@@ -266,7 +287,7 @@ export const getMapCustomers = async (req: Request, res: Response) => {
   }
 };
 
-// --- Rides endpoint (sortable, paginated, scheduled rides show first) ---
+// --- Rides endpoint (sortable, paginated, scheduled rides show first, with local time zone!) ---
 export const getRides = async (req: Request, res: Response) => {
   try {
     const allowedFields = ["id", "requestedAt", "scheduledAt"];
@@ -285,7 +306,26 @@ export const getRides = async (req: Request, res: Response) => {
       skip,
       take
     });
-    res.json(rides);
+
+    // For each ride, add scheduledAt in pickup local time zone
+    const ridesWithLocalTime = await Promise.all(
+      rides.map(async ride => {
+        let localTimeZone = "UTC";
+        if (ride.originLat && ride.originLng) {
+          localTimeZone = await getTimeZoneFromCoords(ride.originLat, ride.originLng);
+        }
+        const scheduledAtLocal = ride.scheduledAt
+          ? utcToLocal(ride.scheduledAt.toISOString(), localTimeZone)
+          : null;
+        return {
+          ...ride,
+          scheduledAtLocal,
+          pickupTimeZone: localTimeZone,
+        };
+      })
+    );
+
+    res.json(ridesWithLocalTime);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch rides" });
   }
@@ -301,7 +341,14 @@ export const getCustomerScheduledRide = async (req: Request, res: Response, next
       orderBy: { scheduledAt: "asc" }
     });
     if (!scheduledRide) return res.status(404).json({});
-    res.json(scheduledRide);
+    let localTimeZone = "UTC";
+    if (scheduledRide.originLat && scheduledRide.originLng) {
+      localTimeZone = await getTimeZoneFromCoords(scheduledRide.originLat, scheduledRide.originLng);
+    }
+    const scheduledAtLocal = scheduledRide.scheduledAt
+      ? utcToLocal(scheduledRide.scheduledAt.toISOString(), localTimeZone)
+      : null;
+    res.json({ ...scheduledRide, scheduledAtLocal, pickupTimeZone: localTimeZone });
   } catch (error) {
     next(error);
   }
@@ -317,7 +364,14 @@ export const getDriverScheduledRide = async (req: Request, res: Response, next: 
       orderBy: { scheduledAt: "asc" }
     });
     if (!scheduledRide) return res.status(404).json({});
-    res.json(scheduledRide);
+    let localTimeZone = "UTC";
+    if (scheduledRide.originLat && scheduledRide.originLng) {
+      localTimeZone = await getTimeZoneFromCoords(scheduledRide.originLat, scheduledRide.originLng);
+    }
+    const scheduledAtLocal = scheduledRide.scheduledAt
+      ? utcToLocal(scheduledRide.scheduledAt.toISOString(), localTimeZone)
+      : null;
+    res.json({ ...scheduledRide, scheduledAtLocal, pickupTimeZone: localTimeZone });
   } catch (error) {
     next(error);
   }
@@ -359,13 +413,25 @@ export const assignDriverToScheduledRide = async (req: Request, res: Response, n
       return res.status(400).json({ error: "Ride is not scheduled" });
     }
 
+    // Get local pickup time zone for summary
+    let localTimeZone = "UTC";
+    if (ride.originLat && ride.originLng) {
+      localTimeZone = await getTimeZoneFromCoords(ride.originLat, ride.originLng);
+    }
+    const scheduledAtLocal = ride.scheduledAt
+      ? utcToLocal(ride.scheduledAt.toISOString(), localTimeZone)
+      : null;
+
     const updated = await prisma.ride.update({
       where: { id: rideId },
       data: { driverId },
       include: { driver: true, customer: true }
     });
 
-    res.json({ message: "Driver assigned to scheduled ride", ride: updated });
+    res.json({
+      message: "Driver assigned to scheduled ride",
+      ride: { ...updated, scheduledAtLocal, pickupTimeZone: localTimeZone }
+    });
   } catch (error) {
     next(error);
   }

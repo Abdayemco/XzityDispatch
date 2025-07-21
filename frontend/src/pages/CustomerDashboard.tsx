@@ -1,3 +1,5 @@
+// PART 1: imports, helpers, state, timezone detection, and scheduled ride logic
+
 import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -14,6 +16,7 @@ import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
+import { DateTime } from "luxon";
 
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
@@ -162,6 +165,23 @@ export default function CustomerDashboard() {
   const [schedError, setSchedError] = useState<string | null>(null);
   const [schedWaiting, setSchedWaiting] = useState(false);
 
+  // Timezone detection for pickup location
+  const [pickupTimeZone, setPickupTimeZone] = useState<string>("UTC");
+  const [localTime, setLocalTime] = useState<string>(""); // user's current time
+
+  // Helper: fetch timezone from coordinates using TimeZoneDB
+  async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
+    const apiKey = "REPLACE_WITH_YOUR_TIMEZONEDB_API_KEY";
+    try {
+      const res = await fetch(
+        `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
+      );
+      const data = await res.json();
+      if (data.zoneName) return data.zoneName;
+    } catch {}
+    return "UTC";
+  }
+
   // Listen for login/logout and update token in all tabs
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
@@ -220,6 +240,28 @@ export default function CustomerDashboard() {
     );
   }, []);
 
+  // Timezone detection based on pickup location
+  useEffect(() => {
+    if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
+      getTimeZoneFromCoords(pickupLocation.lat, pickupLocation.lng)
+        .then(zone => setPickupTimeZone(zone || "UTC"))
+        .catch(() => setPickupTimeZone("UTC"));
+    }
+  }, [pickupLocation]);
+
+  // Show local time for user based on detected time zone
+  useEffect(() => {
+    // Update every second
+    const timer = setInterval(() => {
+      const nowUtc = DateTime.utc();
+      const local = pickupTimeZone
+        ? nowUtc.setZone(pickupTimeZone).toFormat("yyyy-MM-dd HH:mm:ss")
+        : nowUtc.toFormat("yyyy-MM-dd HH:mm:ss");
+      setLocalTime(local);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pickupTimeZone]);
+
   // EMERGENCY LOCATIONS
   useEffect(() => {
     if (!userLocation) return;
@@ -272,6 +314,108 @@ export default function CustomerDashboard() {
       })
       .catch(() => {});
   }, [userLocation]);
+
+  // POLLING RIDE STATUS, CHAT, etc...
+  // --- Code unchanged below this line, see part 2 ---
+
+  // Helper: Convert scheduled local time + detected zone to UTC ISO string
+  function getScheduledUTC(datetimeLocal: string, timezone: string): string {
+    if (!datetimeLocal || !timezone) return "";
+    const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
+    return dt.toUTC().toISO();
+  }
+
+  // SCHEDULED RIDE LOGIC: Simple modal - POST /api/rides/schedule
+  function openScheduleModal() {
+    setSchedVehicleType("");
+    setSchedDestinationName("");
+    setSchedDatetime("");
+    setSchedNote("");
+    setSchedError(null);
+    setScheduledModalOpen(true);
+  }
+  function closeScheduleModal() {
+    setScheduledModalOpen(false);
+    setSchedError(null);
+  }
+  async function handleConfirmScheduledRide() {
+    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
+      setSchedError("You already have an active ride. Please cancel or complete it before scheduling a new one.");
+      return;
+    }
+    if (!userLocation || !schedDatetime || !schedDestinationName || !schedVehicleType) {
+      setSchedError("All fields are required.");
+      return;
+    }
+    const token = localStorage.getItem("token");
+    const customerId = getCustomerIdFromStorage();
+    if (!token || customerId === null) {
+      setSchedError("Not logged in.");
+      return;
+    }
+    setSchedWaiting(true);
+    setSchedError(null);
+
+    // FIX: Use auto-detected pickupTimeZone
+    const scheduledAtUTC = getScheduledUTC(schedDatetime, pickupTimeZone || "UTC");
+
+    try {
+      const res = await fetch(`${API_URL}/api/rides/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customerId,
+          originLat: userLocation.lat,
+          originLng: userLocation.lng,
+          destLat: userLocation.lat,
+          destLng: userLocation.lng,
+          vehicleType: schedVehicleType,
+          destinationName: schedDestinationName,
+          scheduledAt: scheduledAtUTC,
+          note: schedNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSchedError(data.error || "Failed to schedule ride.");
+        setSchedWaiting(false);
+        return;
+      }
+
+      // Calculate difference between now and scheduledAt
+      const scheduledTime = new Date(scheduledAtUTC).getTime();
+      const now = Date.now();
+      const diffMinutes = (scheduledTime - now) / 60000;
+
+      if (diffMinutes <= 30) {
+        setScheduledModalOpen(false);
+        setPickupSet(true);
+        setRideId(data.rideId || data.id);
+        setRideStatus("scheduled");
+        setWaiting(false);
+        setSchedWaiting(false);
+      } else {
+        setScheduledModalOpen(false);
+        setSchedVehicleType("");
+        setSchedDestinationName("");
+        setSchedDatetime("");
+        setSchedNote("");
+        setSchedError(null);
+        setSchedWaiting(false);
+      }
+    } catch (err: any) {
+      setSchedError("Network or server error.");
+      setSchedWaiting(false);
+    }
+  }
+
+  // ... continue part 2 for rendering and ride/chat logic ...
+// PART 2: Ride/chat logic and UI rendering with local time display
+
+// ... continue inside CustomerDashboard function ...
 
   // POLLING RIDE STATUS
   useEffect(() => {
@@ -481,91 +625,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // SCHEDULED RIDE LOGIC: Simple modal - POST /api/rides/schedule
-  function openScheduleModal() {
-    setSchedVehicleType("");
-    setSchedDestinationName("");
-    setSchedDatetime("");
-    setSchedNote("");
-    setSchedError(null);
-    setScheduledModalOpen(true);
-  }
-  function closeScheduleModal() {
-    setScheduledModalOpen(false);
-    setSchedError(null);
-  }
-  async function handleConfirmScheduledRide() {
-    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
-      setSchedError("You already have an active ride. Please cancel or complete it before scheduling a new one.");
-      return;
-    }
-    if (!userLocation || !schedDatetime || !schedDestinationName || !schedVehicleType) {
-      setSchedError("All fields are required.");
-      return;
-    }
-    const token = localStorage.getItem("token");
-    const customerId = getCustomerIdFromStorage();
-    if (!token || customerId === null) {
-      setSchedError("Not logged in.");
-      return;
-    }
-    setSchedWaiting(true);
-    setSchedError(null);
-    try {
-      const res = await fetch(`${API_URL}/api/rides/schedule`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          customerId,
-          originLat: userLocation.lat,
-          originLng: userLocation.lng,
-          destLat: userLocation.lat,
-          destLng: userLocation.lng,
-          vehicleType: schedVehicleType,
-          destinationName: schedDestinationName,
-          scheduledAt: schedDatetime,
-          note: schedNote,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSchedError(data.error || "Failed to schedule ride.");
-        setSchedWaiting(false);
-        return;
-      }
-
-      // Calculate difference between now and scheduledAt
-      const scheduledTime = new Date(schedDatetime).getTime();
-      const now = Date.now();
-      const diffMinutes = (scheduledTime - now) / 60000;
-
-      if (diffMinutes <= 30) {
-        // Show waiting for driver
-        setScheduledModalOpen(false);
-        setPickupSet(true);
-        setRideId(data.rideId || data.id);
-        setRideStatus("scheduled");
-        setWaiting(false);
-        setSchedWaiting(false);
-      } else {
-        // Just close modal and reset schedule fields, do NOT show waiting UI
-        setScheduledModalOpen(false);
-        setSchedVehicleType("");
-        setSchedDestinationName("");
-        setSchedDatetime("");
-        setSchedNote("");
-        setSchedError(null);
-        setSchedWaiting(false);
-      }
-    } catch (err: any) {
-      setSchedError("Network or server error.");
-      setSchedWaiting(false);
-    }
-  }
-
   // Clean up everything (also called after logout or rating)
   function handleReset() {
     setRideStatus(null);
@@ -718,6 +777,10 @@ export default function CustomerDashboard() {
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
         Xzity Ride Request
       </h2>
+      {/* Show current detected time and zone */}
+      <div style={{ textAlign: "center", fontWeight: "bold", color: "#1976D2", fontSize: 17, marginBottom: 8 }}>
+        Your current local time at pickup location: {localTime} ({pickupTimeZone})
+      </div>
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
       {userLocation && (
         <MapContainer
@@ -864,6 +927,9 @@ export default function CustomerDashboard() {
               onChange={e => setSchedDatetime(e.target.value)}
               style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
             />
+            <div style={{ marginBottom: 10, color: "#1976D2", fontWeight: "bold" }}>
+              Detected pickup time zone: {pickupTimeZone || "Loading..."}
+            </div>
             <div style={{ marginBottom: 8, fontWeight: "bold" }}>Vehicle Type:</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
               {vehicleOptions.map(opt => (
@@ -951,3 +1017,5 @@ export default function CustomerDashboard() {
     </div>
   );
 }
+
+// end of file
