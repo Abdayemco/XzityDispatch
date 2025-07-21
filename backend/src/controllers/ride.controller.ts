@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
 import { VehicleType, RideStatus } from "@prisma/client";
+import { DateTime } from "luxon";
+
+const LOCAL_TZ = "Africa/Cairo"; // Set your local timezone here
 
 // Helper to normalize and validate vehicleType input (case-insensitive)
 function normalizeVehicleType(input: any): VehicleType | undefined {
@@ -10,6 +13,22 @@ function normalizeVehicleType(input: any): VehicleType | undefined {
     return upper as VehicleType;
   }
   return undefined;
+}
+
+// Helper to convert UTC date (or null) to ISO string in local timezone
+function toLocalISOString(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
+    .setZone(LOCAL_TZ)
+    .toISO({ suppressMilliseconds: true });
+}
+
+// Helper to format time for display (e.g., "yyyy-MM-dd HH:mm")
+function toLocalDisplay(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
+    .setZone(LOCAL_TZ)
+    .toFormat("yyyy-MM-dd HH:mm");
 }
 
 // Helper to check if a driver is busy with a ride (ACCEPTED/IN_PROGRESS) that started less than 15 min ago
@@ -51,10 +70,10 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       originLng,
       destLat,
       destLng,
-      destinationName, // new
-      note,            // new
+      destinationName,
+      note,
       vehicleType,
-      scheduledAt, // optional, ISO string for scheduled ride
+      scheduledAt, // optional, ISO string for scheduled ride (should be in local time!)
     } = req.body;
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
@@ -73,6 +92,15 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing or invalid required fields" });
     }
 
+    // Convert scheduledAt (if provided) from local time to UTC for DB storage
+    let scheduledAtUTC: Date | undefined = undefined;
+    if (scheduledAt) {
+      const dt = DateTime.fromISO(scheduledAt, { zone: LOCAL_TZ });
+      if (dt.isValid) {
+        scheduledAtUTC = new Date(dt.toUTC().toString());
+      }
+    }
+
     // If scheduledAt supplied, create as SCHEDULED ride
     const ride = await prisma.ride.create({
       data: {
@@ -85,14 +113,15 @@ export const requestRide = async (req: Request, res: Response, next: NextFunctio
         destinationName: typeof destinationName === "string" && destinationName.trim() ? destinationName.trim() : null,
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+        scheduledAt: scheduledAtUTC,
       },
     });
 
     res.json({
       rideId: ride.id,
       status: ride.status,
-      scheduledAt: ride.scheduledAt,
+      scheduledAt: toLocalISOString(ride.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationName: ride.destinationName,
       note: ride.note,
     });
@@ -164,8 +193,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         status: true,
         destLat: true,
         destLng: true,
-        destinationName: true, // new
-        note: true,            // new
+        destinationName: true,
+        note: true,
       },
       orderBy: { scheduledAt: "asc" }
     });
@@ -176,7 +205,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
-      scheduledAt: ride.scheduledAt,
+      scheduledAt: toLocalISOString(ride.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationLat: ride.destLat,
       destinationLng: ride.destLng,
       destinationName: ride.destinationName,
@@ -228,7 +258,19 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
       include: { customer: true, driver: true }
     });
 
-    res.json(updatedRide);
+    if (!updatedRide) return res.status(404).json({ error: "Ride not found" });
+
+    // Convert ride times for response
+    res.json({
+      ...updatedRide,
+      scheduledAt: toLocalISOString(updatedRide.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(updatedRide.scheduledAt),
+      acceptedAt: toLocalISOString(updatedRide.acceptedAt),
+      startedAt: toLocalISOString(updatedRide.startedAt),
+      completedAt: toLocalISOString(updatedRide.completedAt),
+      cancelledAt: toLocalISOString(updatedRide.cancelledAt),
+      noShowReportedAt: toLocalISOString(updatedRide.noShowReportedAt),
+    });
   } catch (error) {
     console.error("Error accepting ride:", error);
     next(error);
@@ -265,7 +307,12 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
 
     res.json({
       status: "in_progress",
-      ride: updated,
+      ride: {
+        ...updated,
+        scheduledAt: toLocalISOString(updated.scheduledAt),
+        scheduledAtDisplay: toLocalDisplay(updated.scheduledAt),
+        startedAt: toLocalISOString(updated.startedAt),
+      },
     });
   } catch (error) {
     console.error("Error starting ride:", error);
@@ -300,7 +347,15 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       data: { status: RideStatus.NO_SHOW, noShowReportedAt: new Date() },
     });
 
-    res.json({ message: "Ride marked as No Show", ride: updated });
+    res.json({ 
+      message: "Ride marked as No Show", 
+      ride: {
+        ...updated,
+        scheduledAt: toLocalISOString(updated.scheduledAt),
+        scheduledAtDisplay: toLocalDisplay(updated.scheduledAt),
+        noShowReportedAt: toLocalISOString(updated.noShowReportedAt),
+      }
+    });
   } catch (error) {
     console.error("Error marking ride as No Show:", error);
     next(error);
@@ -316,7 +371,7 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
     }
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
-      select: { status: true }
+      select: { status: true, scheduledAt: true }
     });
     if (!ride) {
       return res.status(404).json({ error: "Ride not found" });
@@ -347,7 +402,11 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
       default:
         statusForFrontend = String(ride.status || "unknown").toLowerCase();
     }
-    return res.json({ status: statusForFrontend });
+    return res.json({ 
+      status: statusForFrontend,
+      scheduledAt: toLocalISOString(ride.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
+    });
   } catch (error) {
     console.error("Error fetching ride status:", error);
     next(error);
@@ -455,7 +514,8 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
             name: ride.customer.name,
           }
         : undefined,
-      scheduledAt: ride.scheduledAt,
+      scheduledAt: toLocalISOString(ride.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destLat: ride.destLat,
       destLng: ride.destLng,
       destinationName: ride.destinationName ?? undefined,
@@ -486,7 +546,8 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
       message: "Ride marked as completed",
       rideId: ride.id,
       status: ride.status,
-      completedAt: ride.completedAt,
+      completedAt: toLocalISOString(ride.completedAt),
+      completedAtDisplay: toLocalDisplay(ride.completedAt),
       customer: ride.customer ? { id: ride.customer.id, name: ride.customer.name } : undefined,
       driver: ride.driver ? { id: ride.driver.id, name: ride.driver.name } : undefined,
     });
@@ -515,7 +576,8 @@ export const cancelRide = async (req: Request, res: Response, next: NextFunction
       message: "Ride cancelled",
       rideId: ride.id,
       status: ride.status,
-      cancelledAt: ride.cancelledAt,
+      cancelledAt: toLocalISOString(ride.cancelledAt),
+      cancelledAtDisplay: toLocalDisplay(ride.cancelledAt),
       customer: ride.customer ? { id: ride.customer.id, name: ride.customer.name } : undefined,
       driver: ride.driver ? { id: ride.driver.id, name: ride.driver.name } : undefined,
     });
