@@ -779,7 +779,7 @@ export default function CustomerDashboard() {
       </h2>
       {/* Show current detected time and zone */}
       <div style={{ textAlign: "center", fontWeight: "bold", color: "#1976D2", fontSize: 17, marginBottom: 8 }}>
-        Your current local time at pickup location: {localTime} ({pickupTimeZone})
+  Your current local time at pickup location: {localTime} {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
       </div>
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
       {userLocation && (
