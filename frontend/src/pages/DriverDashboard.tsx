@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import AppMap from "../components/AppMap";
 import RestChatWindow from "../components/RestChatWindow";
-import markerLimo from "../assets/marker-limo.png"; // <-- limo icon
+import markerLimo from "../assets/marker-limo.png";
 
 // Extended vehicle types
 const VEHICLE_TYPE_LABELS = {
@@ -28,7 +28,7 @@ const VEHICLE_TYPE_LABELS = {
         alt="Limo"
         style={{
           height: 24,
-          width: 48, // wider for limo
+          width: 48,
           objectFit: "contain",
           verticalAlign: "middle"
         }}
@@ -54,12 +54,15 @@ type Job = {
     | "cancelled"
     | "done"
     | "arrived"
-    | "in_progress";
+    | "in_progress"
+    | "no_show";
   assignedDriverId?: string | number;
+  scheduledAt?: string | null;
 };
 
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
 const ACCEPTED_TIMEOUT_MINUTES = 15;
+const NOSHOW_GRACE_MINUTES = 10;
 
 function saveChatSession(rideId: number | null, jobStatus: string | null) {
   localStorage.setItem("currentDriverRideId", rideId ? String(rideId) : "");
@@ -106,6 +109,9 @@ export default function DriverDashboard() {
     return saved ? Number(saved) : null;
   });
 
+  const [noShowEligible, setNoShowEligible] = useState(false);
+  const [noShowMsg, setNoShowMsg] = useState<string | null>(null);
+
   const driverId = localStorage.getItem("driverId") || "";
   let driverVehicleType =
     (localStorage.getItem("vehicleType") || "car").toLowerCase();
@@ -140,7 +146,8 @@ export default function DriverDashboard() {
               pickupLng: data.originLng,
               customerName: data.customer?.name || "",
               vehicleType: (data.vehicleType || "").toLowerCase(),
-              status: data.rideStatus
+              status: data.rideStatus,
+              scheduledAt: data.scheduledAt || null,
             });
           }
         }
@@ -228,14 +235,14 @@ export default function DriverDashboard() {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       const data = await res.json();
-      // Optionally map fields for scheduled rides if needed
       if (res.ok && Array.isArray(data)) {
         const mapped = data.map((job: any) => ({
           ...job,
           pickupLat: job.pickupLat ?? job.originLat,
           pickupLng: job.pickupLng ?? job.originLng,
           customerName: job.customerName ?? job.customer?.name ?? "",
-          vehicleType: (job.vehicleType || "").toLowerCase()
+          vehicleType: (job.vehicleType || "").toLowerCase(),
+          scheduledAt: job.scheduledAt || null,
         }));
         setJobs(mapped);
       }
@@ -275,8 +282,13 @@ export default function DriverDashboard() {
         );
         const data = await res.json();
         if (res.ok) {
+          const foundJob = jobs.find((j) => String(j.id) === String(jobId));
           setDriverJobId(jobId);
-          setAcceptedJob(jobs.find((j) => String(j.id) === String(jobId)) || null);
+          setAcceptedJob({
+            ...foundJob,
+            status: data.status || foundJob?.status,
+            scheduledAt: data.scheduledAt || foundJob?.scheduledAt || null
+          });
           setStatusMsg(`You have accepted job ${jobId}`);
           setCancelled(false);
           setCompleted(false);
@@ -322,8 +334,75 @@ export default function DriverDashboard() {
     }
   }
 
-  // (continues in Part 2)
-  // ... continuation from Part 1 ...
+  // --- No Show Button Logic ---
+  useEffect(() => {
+    if (
+      acceptedJob &&
+      acceptedJob.status === "scheduled" &&
+      acceptedJob.scheduledAt
+    ) {
+      const schedTime = new Date(acceptedJob.scheduledAt).getTime();
+      const now = Date.now();
+      const eligible =
+        now > schedTime + NOSHOW_GRACE_MINUTES * 60 * 1000;
+      setNoShowEligible(eligible);
+      if (!eligible) {
+        setNoShowMsg(
+          `You can mark as "No Show" after ${
+            NOSHOW_GRACE_MINUTES
+          } minutes past the scheduled pickup time.`
+        );
+      } else {
+        setNoShowMsg(null);
+      }
+    } else {
+      setNoShowEligible(false);
+      setNoShowMsg(null);
+    }
+  }, [acceptedJob]);
+
+  async function handleNoShow() {
+    if (!acceptedJob || !driverJobId) return;
+    setStatusMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/rides/${driverJobId}/no-show?driverId=${driverId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          }
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data?.error || "Failed to mark ride as No Show");
+      } else {
+        setStatusMsg("Ride marked as No Show.");
+        setAcceptedJob(null);
+        setDriverJobId(null);
+        setJobStatus(null);
+        setNoShowEligible(false);
+        setNoShowMsg(null);
+        setCompleted(false);
+        setCancelled(false);
+        setCountdown(0);
+        setRideStartedAt(null);
+        setRideAcceptedAt(null);
+        localStorage.removeItem("rideStartedAt");
+        localStorage.removeItem("rideAcceptedAt");
+        saveChatSession(null, null);
+        if (autoReleaseTimer) {
+          clearInterval(autoReleaseTimer);
+          setAutoReleaseTimer(null);
+        }
+      }
+    } catch {
+      setErrorMsg("Failed to mark ride as No Show");
+    }
+  }
 
   useEffect(() => {
     if (!driverJobId || cancelled || completed) return;
@@ -357,7 +436,7 @@ export default function DriverDashboard() {
           }
         }
 
-        if ((status === "done" || status === "arrived") && isMounted) {
+        if ((status === "done" || status === "arrived" || status === "no_show") && isMounted) {
           setCompleted(true);
           setAcceptedJob(null);
           setDriverJobId(null);
@@ -706,6 +785,34 @@ export default function DriverDashboard() {
             <div style={{ marginTop: 8, color: "#888" }}>
               Press "Start Ride" when you pick up the customer.
             </div>
+          </div>
+        )}
+
+      {/* --- No Show Button --- */}
+      {driverJobId &&
+        acceptedJob &&
+        acceptedJob.status === "scheduled" && (
+          <div style={{ textAlign: "center", marginTop: 18 }}>
+            <button
+              onClick={handleNoShow}
+              disabled={!noShowEligible}
+              style={{
+                background: noShowEligible ? "#f44336" : "#aaa",
+                color: "#fff",
+                border: "none",
+                padding: "0.7em 1.4em",
+                borderRadius: 6,
+                fontSize: 16,
+                margin: "0 10px",
+                opacity: noShowEligible ? 1 : 0.6,
+                cursor: noShowEligible ? "pointer" : "not-allowed"
+              }}
+            >
+              Mark as No Show
+            </button>
+            {noShowMsg && (
+              <div style={{ color: "#d32f2f", marginTop: 6 }}>{noShowMsg}</div>
+            )}
           </div>
         )}
 
