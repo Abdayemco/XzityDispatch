@@ -1,5 +1,3 @@
-// --- FULL CustomerDashboard.tsx with scheduled ride edit/cancel/done logic ---
-
 import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -158,18 +156,16 @@ export default function CustomerDashboard() {
 
   // Scheduled ride modal state
   const [scheduledModalOpen, setScheduledModalOpen] = useState(false);
-  const [editScheduledMode, setEditScheduledMode] = useState(false);
-  const [editingRideId, setEditingRideId] = useState<number | null>(null);
   const [schedVehicleType, setSchedVehicleType] = useState<string>("");
   const [schedDestinationName, setSchedDestinationName] = useState<string>("");
   const [schedDatetime, setSchedDatetime] = useState<string>("");
-  const [schedNote, setSchedNote] = useState<string>("");
+  const [schedNote, setSchedNote] = useState<string>(""); // Note for driver
   const [schedError, setSchedError] = useState<string | null>(null);
   const [schedWaiting, setSchedWaiting] = useState(false);
 
   // Timezone detection for pickup location
   const [pickupTimeZone, setPickupTimeZone] = useState<string>("UTC");
-  const [localTime, setLocalTime] = useState<string>("");
+  const [localTime, setLocalTime] = useState<string>(""); // user's current time
 
   // Helper: fetch timezone from coordinates using TimeZoneDB
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
@@ -195,12 +191,14 @@ export default function CustomerDashboard() {
     return "UTC";
   }
 
+  // Listen for login/logout and update token in all tabs
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Restore ride/chat session from backend on mount or after login
   useEffect(() => {
     async function restoreCurrentRideFromBackend() {
       const token = localStorage.getItem("token");
@@ -219,15 +217,6 @@ export default function CustomerDashboard() {
             if (data.originLat && data.originLng) {
               setPickupLocation({ lat: data.originLat, lng: data.originLng });
             }
-            if (data.rideStatus === "scheduled") {
-              setSchedVehicleType(data.vehicleType || "");
-              setSchedDestinationName(data.destinationName || "");
-              setSchedNote(data.note || "");
-              if (data.scheduledAt && data.timeZone) {
-                const localDT = DateTime.fromISO(data.scheduledAt, { zone: "utc" }).setZone(data.timeZone);
-                setSchedDatetime(localDT.toFormat("yyyy-MM-dd'T'HH:mm"));
-              }
-            }
           }
         }
       } catch (e) {
@@ -239,10 +228,12 @@ export default function CustomerDashboard() {
     }
   }, [rideId, pickupSet]);
 
+  // Persist ride/chat session to localStorage
   useEffect(() => {
     if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
   }, [rideId, rideStatus]);
 
+  // GEOLOCATION
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -258,6 +249,7 @@ export default function CustomerDashboard() {
     );
   }, []);
 
+  // Timezone detection based on pickup location
   useEffect(() => {
     if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
       getTimeZoneFromCoords(pickupLocation.lat, pickupLocation.lng)
@@ -269,7 +261,9 @@ export default function CustomerDashboard() {
     }
   }, [pickupLocation]);
 
+  // Show local time for user based on detected time zone
   useEffect(() => {
+    // Update every second
     const timer = setInterval(() => {
       const nowUtc = DateTime.utc();
       const local = pickupTimeZone
@@ -280,6 +274,7 @@ export default function CustomerDashboard() {
     return () => clearInterval(timer);
   }, [pickupTimeZone]);
 
+  // EMERGENCY LOCATIONS
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -332,14 +327,15 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
+  // Helper: Convert scheduled local time + detected zone to UTC ISO string
   function getScheduledUTC(datetimeLocal: string, timezone: string): string {
     if (!datetimeLocal || !timezone) return "";
     const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
     return dt.toUTC().toISO();
   }
 
+  // SCHEDULED RIDE LOGIC: Simple modal - POST /api/rides/schedule
   function openScheduleModal() {
-    setEditScheduledMode(false);
     setSchedVehicleType("");
     setSchedDestinationName("");
     setSchedDatetime("");
@@ -347,33 +343,16 @@ export default function CustomerDashboard() {
     setSchedError(null);
     setScheduledModalOpen(true);
   }
-
-  function openEditScheduledModal() {
-    setEditScheduledMode(true);
-    setEditingRideId(rideId);
-    setSchedVehicleType(schedVehicleType || vehicleType || "");
-    setSchedDestinationName(schedDestinationName || "");
-    setSchedNote(schedNote || "");
-    setSchedDatetime(schedDatetime || "");
-    setSchedError(null);
-    setScheduledModalOpen(true);
-  }
-
   function closeScheduleModal() {
     setScheduledModalOpen(false);
     setSchedError(null);
-    setEditScheduledMode(false);
-    setEditingRideId(null);
   }
-
   async function handleConfirmScheduledRide() {
-    const isEditing = editScheduledMode && editingRideId;
-    if (
-      !userLocation ||
-      !schedDatetime ||
-      !schedDestinationName ||
-      !schedVehicleType
-    ) {
+    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
+      setSchedError("You already have an active ride. Please cancel or complete it before scheduling a new one.");
+      return;
+    }
+    if (!userLocation || !schedDatetime || !schedDestinationName || !schedVehicleType) {
       setSchedError("All fields are required.");
       return;
     }
@@ -386,70 +365,64 @@ export default function CustomerDashboard() {
     setSchedWaiting(true);
     setSchedError(null);
 
+    // Use auto-detected pickupTimeZone
     const scheduledAtUTC = getScheduledUTC(schedDatetime, pickupTimeZone || "UTC");
-    const body = {
-      customerId,
-      originLat: userLocation.lat,
-      originLng: userLocation.lng,
-      destLat: userLocation.lat,
-      destLng: userLocation.lng,
-      vehicleType: schedVehicleType,
-      destinationName: schedDestinationName,
-      scheduledAt: scheduledAtUTC,
-      note: schedNote,
-      timeZone: pickupTimeZone || "UTC"
-    };
 
     try {
-      let res, data;
-      if (isEditing) {
-        res = await fetch(
-          `${API_URL}/api/rides/schedule/${editingRideId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(body),
-          }
-        );
-      } else {
-        res = await fetch(`${API_URL}/api/rides/schedule`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-      }
-      data = await res.json();
+      const res = await fetch(`${API_URL}/api/rides/schedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customerId,
+          originLat: userLocation.lat,
+          originLng: userLocation.lng,
+          destLat: userLocation.lat,
+          destLng: userLocation.lng,
+          vehicleType: schedVehicleType,
+          destinationName: schedDestinationName,
+          scheduledAt: scheduledAtUTC,
+          note: schedNote,
+        }),
+      });
+      const data = await res.json();
       if (!res.ok) {
         setSchedError(data.error || "Failed to schedule ride.");
         setSchedWaiting(false);
         return;
       }
-      setScheduledModalOpen(false);
-      setPickupSet(true);
-      setRideId(data.rideId || data.id);
-      setRideStatus("scheduled");
-      setWaiting(false);
-      setSchedWaiting(false);
 
-      setEditScheduledMode(false);
-      setEditingRideId(null);
-      setSchedVehicleType("");
-      setSchedDestinationName("");
-      setSchedDatetime("");
-      setSchedNote("");
-      setSchedError(null);
+      // Calculate difference between now and scheduledAt
+      const scheduledTime = new Date(scheduledAtUTC).getTime();
+      const now = Date.now();
+      const diffMinutes = (scheduledTime - now) / 60000;
+
+      if (diffMinutes <= 30) {
+        setScheduledModalOpen(false);
+        setPickupSet(true);
+        setRideId(data.rideId || data.id);
+        setRideStatus("scheduled");
+        setWaiting(false);
+        setSchedWaiting(false);
+      } else {
+        setScheduledModalOpen(false);
+        setSchedVehicleType("");
+        setSchedDestinationName("");
+        setSchedDatetime("");
+        setSchedNote("");
+        setSchedError(null);
+        setSchedWaiting(false);
+      }
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
     }
   }
+  // --- PART 2: Ride/chat logic, UI rendering, and ride actions ---
 
+  // POLLING RIDE STATUS
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pickupSet && rideId && rideStatus !== "done" && rideStatus !== "cancelled") {
@@ -484,6 +457,7 @@ export default function CustomerDashboard() {
     return () => clearInterval(interval);
   }, [pickupSet, rideId, rideStatus]);
 
+  // CHAT LOGIC: Polling REST
   useEffect(() => {
     if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
     let polling = true;
@@ -544,20 +518,19 @@ export default function CustomerDashboard() {
     // message will appear on next poll
   };
 
+  // Cancel Ride Handler
   async function handleCancelRide() {
     if (!rideId) return;
     setWaiting(true);
     setError(null);
     try {
       const token = localStorage.getItem("token");
-      const customerId = getCustomerIdFromStorage();
       const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ customerId })
+        }
       });
       const data = await res.json();
       if (!res.ok) {
@@ -574,20 +547,19 @@ export default function CustomerDashboard() {
     }
   }
 
+  // Mark Ride as Done Handler
   async function handleMarkRideDone() {
     if (!rideId) return;
     setWaiting(true);
     setError(null);
     try {
       const token = localStorage.getItem("token");
-      const customerId = getCustomerIdFromStorage();
       const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ customerId })
+        }
       });
       const data = await res.json();
       if (!res.ok) {
@@ -605,6 +577,7 @@ export default function CustomerDashboard() {
     }
   }
 
+  // Request Ride (Regular)
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
       setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
@@ -657,6 +630,7 @@ export default function CustomerDashboard() {
     }
   }
 
+  // Clean up everything (also called after logout or rating)
   function handleReset() {
     setRideStatus(null);
     setPickupSet(false);
@@ -670,6 +644,7 @@ export default function CustomerDashboard() {
     saveChatSession(null, null);
   }
 
+  // --- UI Rendering Section ---
   if (
     (rideStatus === "pending" && pickupSet && rideId) ||
     (rideStatus === "accepted" || rideStatus === "in_progress" || rideStatus === "scheduled")
@@ -707,41 +682,26 @@ export default function CustomerDashboard() {
             </span>
           </div>
         )}
-        {rideStatus === "scheduled" && (
-          <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 18 }}>
+          <button
+            disabled={waiting}
+            style={{
+              background: "#f44336",
+              color: "#fff",
+              border: "none",
+              padding: "0.7em 1.4em",
+              borderRadius: 6,
+              fontSize: 16,
+              margin: "0 10px",
+              opacity: waiting ? 0.5 : 1
+            }}
+            onClick={handleCancelRide}
+          >
+            Cancel Ride
+          </button>
+          {showDoneButton && (
             <button
-              style={{
-                background: "#f44336",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "0 10px",
-                opacity: waiting ? 0.5 : 1
-              }}
               disabled={waiting}
-              onClick={handleCancelRide}
-            >
-              Cancel Scheduled Ride
-            </button>
-            <button
-              style={{
-                background: "#1976D2",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "0 10px",
-                opacity: waiting ? 0.5 : 1
-              }}
-              disabled={waiting}
-              onClick={openEditScheduledModal}
-            >
-              Edit Scheduled Ride
-            </button>
-            <button
               style={{
                 background: "#388e3c",
                 color: "#fff",
@@ -749,53 +709,14 @@ export default function CustomerDashboard() {
                 padding: "0.7em 1.4em",
                 borderRadius: 6,
                 fontSize: 16,
-                margin: "0 10px",
                 opacity: waiting ? 0.5 : 1
               }}
-              disabled={waiting}
               onClick={handleMarkRideDone}
             >
               Ride is Done
             </button>
-          </div>
-        )}
-        {(rideStatus === "pending" || rideStatus === "accepted" || rideStatus === "in_progress") && (
-          <div style={{ marginTop: 18 }}>
-            <button
-              disabled={waiting}
-              style={{
-                background: "#f44336",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "0 10px",
-                opacity: waiting ? 0.5 : 1
-              }}
-              onClick={handleCancelRide}
-            >
-              Cancel Ride
-            </button>
-            {showDoneButton && (
-              <button
-                disabled={waiting}
-                style={{
-                  background: "#388e3c",
-                  color: "#fff",
-                  border: "none",
-                  padding: "0.7em 1.4em",
-                  borderRadius: 6,
-                  fontSize: 16,
-                  opacity: waiting ? 0.5 : 1
-                }}
-                onClick={handleMarkRideDone}
-              >
-                Ride is Done
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
         {(rideStatus === "accepted" || rideStatus === "in_progress") && rideId && (
           <div style={{
             margin: "32px auto",
@@ -819,122 +740,6 @@ export default function CustomerDashboard() {
           </div>
         )}
         {error && <div style={{ color: "red", marginTop: 10 }}>{error}</div>}
-        {scheduledModalOpen && (
-          <div style={{
-            position: "fixed",
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(0,0,0,0.3)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }}>
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 10,
-                padding: 24,
-                minWidth: 350,
-                boxShadow: "0 3px 18px #0002"
-              }}
-            >
-              <h3 style={{ marginBottom: 16 }}>
-                {editScheduledMode ? "Edit Scheduled Ride" : "Schedule a Ride"}
-              </h3>
-              <div style={{ marginBottom: 8, fontWeight: "bold" }}>Pickup Date & Time:</div>
-              <input
-                type="datetime-local"
-                value={schedDatetime}
-                onChange={e => setSchedDatetime(e.target.value)}
-                style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
-              />
-              <div style={{ marginBottom: 10, color: "#1976D2", fontWeight: "bold" }}>
-                Detected pickup time zone: {pickupTimeZone || "Loading..."}
-              </div>
-              <div style={{ marginBottom: 8, fontWeight: "bold" }}>Vehicle Type:</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
-                {vehicleOptions.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setSchedVehicleType(opt.value)}
-                    type="button"
-                    style={{
-                      border: schedVehicleType === opt.value ? "2px solid #1976D2" : "2px solid #ccc",
-                      background: schedVehicleType === opt.value ? "#e6f0ff" : "#fff",
-                      borderRadius: 8,
-                      padding: "12px 16px",
-                      minWidth: 80,
-                      minHeight: 60,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      cursor: "pointer",
-                      outline: "none",
-                      boxShadow: schedVehicleType === opt.value ? "0 0 8px #1976D2" : "0 1px 3px #eee",
-                      fontWeight: schedVehicleType === opt.value ? "bold" : "normal",
-                      fontSize: "1.05em"
-                    }}
-                  >
-                    <img src={opt.icon} alt={opt.label} style={{ width: 28, height: 28, marginBottom: 2 }} />
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ marginBottom: 8, fontWeight: "bold" }}>Destination:</div>
-              <input
-                type="text"
-                value={schedDestinationName}
-                onChange={e => setSchedDestinationName(e.target.value)}
-                placeholder="Type destination (e.g. Airport, Hospital)"
-                style={{ width: "100%", marginBottom: 10, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
-              />
-              <div style={{ marginBottom: 8, fontWeight: "bold" }}>Note for Driver:</div>
-              <input
-                type="text"
-                value={schedNote}
-                onChange={e => setSchedNote(e.target.value)}
-                placeholder="Optional note for driver"
-                style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
-              />
-              <div style={{ textAlign: "center" }}>
-                <button
-                  disabled={schedWaiting}
-                  style={{
-                    background: "#388e3c",
-                    color: "#fff",
-                    border: "none",
-                    padding: "0.8em 2em",
-                    borderRadius: 6,
-                    fontSize: 16,
-                    fontWeight: "bold",
-                    margin: "0 8px"
-                  }}
-                  onClick={handleConfirmScheduledRide}
-                >
-                  {editScheduledMode ? "Save Changes" : "Confirm Scheduled Ride"}
-                </button>
-                <button
-                  style={{
-                    background: "#d32f2f",
-                    color: "#fff",
-                    border: "none",
-                    padding: "0.8em 2em",
-                    borderRadius: 6,
-                    fontSize: 16,
-                    fontWeight: "bold",
-                    margin: "0 8px"
-                  }}
-                  onClick={closeScheduleModal}
-                >
-                  Cancel
-                </button>
-              </div>
-              {schedError && (
-                <div style={{ color: "#d32f2f", marginTop: 10 }}>{schedError}</div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -971,11 +776,13 @@ export default function CustomerDashboard() {
     );
   }
 
+  // --- Main UI: map, emergency, icons, request ---
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
         Xzity Ride Request
       </h2>
+      {/* Show current detected time and zone */}
       <div style={{ textAlign: "center", fontWeight: "bold", color: "#1976D2", fontSize: 17, marginBottom: 8 }}>
         Your current local time at pickup location: {localTime} {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
       </div>
@@ -1097,7 +904,122 @@ export default function CustomerDashboard() {
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
+      {/* SCHEDULE MODAL */}
+      {scheduledModalOpen && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.3)",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}>
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 10,
+              padding: 24,
+              minWidth: 350,
+              boxShadow: "0 3px 18px #0002"
+            }}
+          >
+            <h3 style={{ marginBottom: 16 }}>Schedule a Ride</h3>
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>Pickup Date & Time:</div>
+            <input
+              type="datetime-local"
+              value={schedDatetime}
+              onChange={e => setSchedDatetime(e.target.value)}
+              style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
+            />
+            <div style={{ marginBottom: 10, color: "#1976D2", fontWeight: "bold" }}>
+              Detected pickup time zone: {pickupTimeZone || "Loading..."}
+            </div>
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>Vehicle Type:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+              {vehicleOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSchedVehicleType(opt.value)}
+                  type="button"
+                  style={{
+                    border: schedVehicleType === opt.value ? "2px solid #1976D2" : "2px solid #ccc",
+                    background: schedVehicleType === opt.value ? "#e6f0ff" : "#fff",
+                    borderRadius: 8,
+                    padding: "12px 16px",
+                    minWidth: 80,
+                    minHeight: 60,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    outline: "none",
+                    boxShadow: schedVehicleType === opt.value ? "0 0 8px #1976D2" : "0 1px 3px #eee",
+                    fontWeight: schedVehicleType === opt.value ? "bold" : "normal",
+                    fontSize: "1.05em"
+                  }}
+                >
+                  <img src={opt.icon} alt={opt.label} style={{ width: 28, height: 28, marginBottom: 2 }} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>Destination:</div>
+            <input
+              type="text"
+              value={schedDestinationName}
+              onChange={e => setSchedDestinationName(e.target.value)}
+              placeholder="Type destination (e.g. Airport, Hospital)"
+              style={{ width: "100%", marginBottom: 10, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
+            />
+            <div style={{ marginBottom: 8, fontWeight: "bold" }}>Note for Driver:</div>
+            <input
+              type="text"
+              value={schedNote}
+              onChange={e => setSchedNote(e.target.value)}
+              placeholder="Optional note for driver"
+              style={{ width: "100%", marginBottom: 14, padding: 6, borderRadius: 5, border: "1px solid #ccc" }}
+            />
+            <div style={{ textAlign: "center" }}>
+              <button
+                disabled={schedWaiting}
+                style={{
+                  background: "#388e3c",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.8em 2em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  fontWeight: "bold",
+                  margin: "0 8px"
+                }}
+                onClick={handleConfirmScheduledRide}
+              >
+                Confirm Scheduled Ride
+              </button>
+              <button
+                style={{
+                  background: "#d32f2f",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.8em 2em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  fontWeight: "bold",
+                  margin: "0 8px"
+                }}
+                onClick={closeScheduleModal}
+              >
+                Cancel
+              </button>
+            </div>
+            {schedError && (
+              <div style={{ color: "#d32f2f", marginTop: 10 }}>{schedError}</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-// ---- END CustomerDashboard.tsx ----
+// end of CustomerDashboard.tsx
