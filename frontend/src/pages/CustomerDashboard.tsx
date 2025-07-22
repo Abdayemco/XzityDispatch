@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -87,7 +87,6 @@ type Ride = {
   rated?: boolean;
 };
 
-// ----------- RateDriver stays as before
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
@@ -154,7 +153,7 @@ export default function CustomerDashboard() {
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // For scheduled/active/done rides
+  // Rides State: all customer rides
   const [rides, setRides] = useState<Ride[]>([]);
   // For modal
   const [modalState, setModalState] = useState<{open: boolean, edit: boolean, ride?: Ride}>({open: false, edit: false});
@@ -293,7 +292,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // --- Per-ride chat polling ---
+  // Per-ride chat polling
   useEffect(() => {
     const intervals: {[rideId: number]: NodeJS.Timeout} = {};
     rides.forEach(ride => {
