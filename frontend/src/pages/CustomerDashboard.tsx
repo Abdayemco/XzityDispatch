@@ -149,6 +149,7 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
+// FIX: getTimeZoneFromCoords must be inside the component to access env vars
 export default function CustomerDashboard() {
   // --- STATE ---
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -185,6 +186,29 @@ export default function CustomerDashboard() {
   // Ride list state
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
+
+  // FIX: getTimeZoneFromCoords must be inside the component
+  async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
+    const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
+    if (!apiKey) {
+      console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
+      return "UTC";
+    }
+    try {
+      const res = await fetch(
+        `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
+      );
+      const data = await res.json() as { zoneName?: string; message?: string; status?: string };
+      if (data.zoneName) {
+        return data.zoneName;
+      } else if (data.status !== "OK" && data.message) {
+        console.error("TimeZoneDB error:", data.message);
+      }
+    } catch (err) {
+      console.error("Timezone fetch error:", err);
+    }
+    return "UTC";
+  }
 
   // Handler functions must be inside the component!
   function openScheduleModal() {
