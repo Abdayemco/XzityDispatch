@@ -149,18 +149,6 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-// ADD THIS FUNCTION TO FIX THE ERROR
-function openScheduleModal() {
-  setSchedEditMode(false);
-  setSchedRideId(null);
-  setSchedVehicleType("");
-  setSchedDestinationName("");
-  setSchedDatetime("");
-  setSchedNote("");
-  setSchedError(null);
-  setScheduledModalOpen(true);
-}
-
 export default function CustomerDashboard() {
   // --- STATE ---
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -198,27 +186,27 @@ export default function CustomerDashboard() {
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // Helper: fetch timezone from coordinates using TimeZoneDB
-  async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
-    const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
-    if (!apiKey) {
-      console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
-      return "UTC";
-    }
-    try {
-      const res = await fetch(
-        `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
-      );
-      const data = await res.json() as { zoneName?: string; message?: string; status?: string };
-      if (data.zoneName) {
-        return data.zoneName;
-      } else if (data.status !== "OK" && data.message) {
-        console.error("TimeZoneDB error:", data.message);
-      }
-    } catch (err) {
-      console.error("Timezone fetch error:", err);
-    }
-    return "UTC";
+  // Handler functions must be inside the component!
+  function openScheduleModal() {
+    setSchedEditMode(false);
+    setSchedRideId(null);
+    setSchedVehicleType("");
+    setSchedDestinationName("");
+    setSchedDatetime("");
+    setSchedNote("");
+    setSchedError(null);
+    setScheduledModalOpen(true);
+  }
+  function closeScheduleModal() {
+    setScheduledModalOpen(false);
+    setSchedError(null);
+    setSchedEditMode(false);
+    setSchedRideId(null);
+  }
+  function getScheduledUTC(datetimeLocal: string, timezone: string): string {
+    if (!datetimeLocal || !timezone) return "";
+    const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
+    return dt.toUTC().toISO();
   }
 
   // --- EFFECTS ---
@@ -228,7 +216,132 @@ export default function CustomerDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Get the list of active/scheduled rides for this customer
+  useEffect(() => {
+    async function restoreCurrentRideFromBackend() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/api/rides/current`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.rideId && ["accepted", "in_progress", "pending", "scheduled"].includes(data.rideStatus)) {
+            setRideId(data.rideId);
+            setRideStatus(data.rideStatus);
+            setPickupSet(true);
+            if (data.driver) setDriverInfo(data.driver);
+            if (data.originLat && data.originLng) {
+              setPickupLocation({ lat: data.originLat, lng: data.originLng });
+            }
+            setShowDoneButton(data.rideStatus === "in_progress");
+            // Pre-fill scheduled edit modal
+            if (data.rideStatus === "scheduled") {
+              setSchedVehicleType(data.vehicleType || "");
+              setSchedDestinationName(data.destinationName || "");
+              setSchedDatetime(data.scheduledAt ? DateTime.fromISO(data.scheduledAt).toFormat("yyyy-MM-dd'T'HH:mm") : "");
+              setSchedNote(data.note || "");
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    if (!rideId && !pickupSet) {
+      restoreCurrentRideFromBackend();
+    }
+  }, [rideId, pickupSet]);
+
+  useEffect(() => {
+    if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
+  }, [rideId, rideStatus]);
+
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const loc = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+        setUserLocation(loc);
+        setPickupLocation(loc);
+      },
+      () => {
+        const loc = { lng: 31.2357, lat: 30.0444 };
+        setUserLocation(loc);
+        setPickupLocation(loc);
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
+      getTimeZoneFromCoords(pickupLocation.lat, pickupLocation.lng)
+        .then(zone => setPickupTimeZone(zone || "UTC"))
+        .catch(() => setPickupTimeZone("UTC"));
+    }
+  }, [pickupLocation]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nowUtc = DateTime.utc();
+      const local = pickupTimeZone
+        ? nowUtc.setZone(pickupTimeZone).toFormat("yyyy-MM-dd HH:mm:ss")
+        : nowUtc.toFormat("yyyy-MM-dd HH:mm:ss");
+      setLocalTime(local);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pickupTimeZone]);
+
+  useEffect(() => {
+    if (!userLocation) return;
+    const lat = userLocation.lat;
+    const lng = userLocation.lng;
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"](around:5000,${lat},${lng});
+        node["amenity"="police"](around:5000,${lat},${lng});
+        node["emergency"="fire_station"](around:5000,${lat},${lng});
+      );
+      out body;
+    `;
+    const url = "https://overpass-api.de/api/interpreter";
+    fetch(url, {
+      method: "POST",
+      body: query,
+      headers: { "Content-Type": "text/plain" }
+    })
+      .then(res => res.json())
+      .then((data: { elements: OverpassElement[] }) => {
+        const locations: EmergencyLocation[] = [];
+        for (const el of data.elements) {
+          if (!el.lat || !el.lon) continue;
+          let type: EmergencyLocation["type"] | undefined;
+          let icon: string | undefined;
+          if (el.tags.amenity === "hospital") {
+            type = "hospital";
+            icon = hospitalIcon;
+          } else if (el.tags.amenity === "police") {
+            type = "police";
+            icon = policeIcon;
+          } else if (el.tags.emergency === "fire_station") {
+            type = "fire";
+            icon = fireIcon;
+          }
+          if (type && icon) {
+            locations.push({
+              type,
+              name: el.tags.name || (type.charAt(0).toUpperCase() + type.slice(1)),
+              lat: el.lat,
+              lng: el.lon,
+              phone: el.tags.phone,
+              icon
+            });
+          }
+        }
+        setEmergencyLocations(locations);
+      })
+      .catch(() => {});
+  }, [userLocation]);
+
+  // --- Ride List ---
   useEffect(() => {
     async function fetchRides() {
       const customerId = getCustomerIdFromStorage();
@@ -255,7 +368,7 @@ export default function CustomerDashboard() {
     fetchRides();
   }, [token, showDoneActions, schedWaiting, schedEditMode, scheduledModalOpen, rideStatus]);
 
-  // --- Handle Request Ride ---
+  // --- Request Ride ---
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
       setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
@@ -308,7 +421,267 @@ export default function CustomerDashboard() {
     }
   }
 
-  // ... all other handlers and effects remain unchanged ...
+  // --- Schedule Ride Confirm/Edit ---
+  async function handleConfirmScheduledRide() {
+    if (
+      !userLocation ||
+      !schedDatetime ||
+      !schedDestinationName ||
+      !schedVehicleType
+    ) {
+      setSchedError("All fields are required.");
+      return;
+    }
+    const token = localStorage.getItem("token");
+    const customerId = getCustomerIdFromStorage();
+    if (!token || customerId === null) {
+      setSchedError("Not logged in.");
+      return;
+    }
+    setSchedWaiting(true);
+    setSchedError(null);
+
+    const scheduledAtUTC = getScheduledUTC(schedDatetime, pickupTimeZone || "UTC");
+
+    try {
+      let res, data;
+      if (schedEditMode && schedRideId) {
+        res = await fetch(`${API_URL}/api/rides/schedule/${schedRideId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customerId,
+            originLat: userLocation.lat,
+            originLng: userLocation.lng,
+            destLat: userLocation.lat,
+            destLng: userLocation.lng,
+            vehicleType: schedVehicleType,
+            destinationName: schedDestinationName,
+            scheduledAt: scheduledAtUTC,
+            note: schedNote,
+          }),
+        });
+      } else {
+        res = await fetch(`${API_URL}/api/rides/schedule`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customerId,
+            originLat: userLocation.lat,
+            originLng: userLocation.lng,
+            destLat: userLocation.lat,
+            destLng: userLocation.lng,
+            vehicleType: schedVehicleType,
+            destinationName: schedDestinationName,
+            scheduledAt: scheduledAtUTC,
+            note: schedNote,
+          }),
+        });
+      }
+      data = await res.json();
+      if (!res.ok) {
+        setSchedError(data.error || "Failed to schedule ride.");
+        setSchedWaiting(false);
+        return;
+      }
+      setScheduledModalOpen(false);
+      setPickupSet(true);
+      setRideId(data.rideId || data.id);
+      setRideStatus("scheduled");
+      setWaiting(false);
+      setSchedWaiting(false);
+      setSchedEditMode(false);
+      setSchedRideId(null);
+      setSchedVehicleType("");
+      setSchedDestinationName("");
+      setSchedDatetime("");
+      setSchedNote("");
+      setSchedError(null);
+    } catch (err: any) {
+      setSchedError("Network or server error.");
+      setSchedWaiting(false);
+    }
+  }
+
+  // --- Cancel Ride ---
+  async function handleCancelRide() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to cancel ride.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("cancelled");
+      setShowDoneActions(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
+  // --- Mark Ride Done ---
+  async function handleMarkRideDone() {
+    if (!rideId) return;
+    setWaiting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to mark ride as done.");
+        setWaiting(false);
+        return;
+      }
+      setRideStatus("done");
+      setShowDoneActions(true);
+      setShowRating(true);
+      setWaiting(false);
+    } catch (err) {
+      setError("Network or server error.");
+      setWaiting(false);
+    }
+  }
+
+  // --- Chat ---
+  useEffect(() => {
+    if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
+    let polling = true;
+    async function fetchMessages() {
+      if (!polling) return;
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
+          headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const msgs = await res.json();
+          setChatMessages(
+            Array.isArray(msgs)
+              ? msgs.filter(Boolean).map((m, idx) => ({
+                  ...m,
+                  id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                  sender: m?.sender ?? {
+                    id: m?.senderId ?? "unknown",
+                    name: m?.senderName ?? "",
+                    role: m?.senderRole ?? "",
+                    avatar: m?.senderAvatar ?? "",
+                  },
+                }))
+              : []
+          );
+        } else {
+          setChatMessages([]);
+        }
+      } catch {
+        setChatMessages([]);
+      }
+    }
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+    return () => {
+      polling = false;
+      clearInterval(interval);
+    };
+  }, [rideId, rideStatus]);
+
+  const handleSendMessage = async (text: string) => {
+    const customerId = getCustomerIdFromStorage();
+    if (!rideId || !customerId) return;
+    await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: {
+          id: customerId,
+          name: "Customer",
+          role: "customer",
+          avatar: "",
+        },
+        content: text,
+      }),
+    });
+  };
+
+  // --- UI Rendering Section ---
+  if (showRating && showDoneActions && rideId) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
+          Ride is complete. Thank you!
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginTop: 18 }}>
+          <RateDriver
+            rideId={rideId}
+            onRated={() => {
+              setRideStatus(null);
+              setPickupSet(false);
+              setPickupLocation(userLocation);
+              setVehicleType("");
+              setRideId(null);
+              setDriverInfo(null);
+              setShowDoneActions(false);
+              setShowRating(false);
+              setChatMessages([]);
+              saveChatSession(null, null);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (rideStatus === "cancelled" && showDoneActions) {
+    return (
+      <div style={{ padding: 24, textAlign: "center" }}>
+        <div style={{ fontWeight: "bold", fontSize: 20, color: "#f44336" }}>
+          Ride was cancelled.
+        </div>
+        <button
+          style={{ background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
+          onClick={() => {
+            setRideStatus(null);
+            setPickupSet(false);
+            setPickupLocation(userLocation);
+            setVehicleType("");
+            setRideId(null);
+            setDriverInfo(null);
+            setShowDoneActions(false);
+            setShowRating(false);
+            setChatMessages([]);
+            saveChatSession(null, null);
+          }}
+        >
+          Request New Ride
+        </button>
+      </div>
+    );
+  }
 
   // --- Main UI ---
   return (
@@ -437,7 +810,6 @@ export default function CustomerDashboard() {
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
-
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
         <h3 style={{ marginBottom: 8 }}>Your Rides</h3>
@@ -449,6 +821,7 @@ export default function CustomerDashboard() {
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {rideList
               .sort((a, b) => {
+                // Sort by scheduledAt (if present), then by id (recent first)
                 if (a.scheduledAt && b.scheduledAt)
                   return DateTime.fromISO(a.scheduledAt).toMillis() - DateTime.fromISO(b.scheduledAt).toMillis();
                 if (a.scheduledAt) return -1;
