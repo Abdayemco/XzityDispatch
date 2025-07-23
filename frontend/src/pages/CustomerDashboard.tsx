@@ -6,6 +6,7 @@ import markerCustomer from "../assets/marker-customer.png";
 import carIcon from "../assets/marker-car.png";
 import deliveryIcon from "../assets/marker-delivery.png";
 import tuktukIcon from "../assets/marker-toktok.png";
+import limoIcon from "../assets/marker-limo.png";
 import truckIcon from "../assets/marker-truck.png";
 import waterTruckIcon from "../assets/marker-watertruck.png";
 import towTruckIcon from "../assets/marker-towtruck.png";
@@ -21,6 +22,7 @@ const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
   { value: "TUKTUK", label: "Tuktuk", icon: tuktukIcon },
+  { value: "LIMO", label: "Limo", icon: limoIcon },
   { value: "TRUCK", label: "Truck", icon: truckIcon },
   { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
   { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon },
