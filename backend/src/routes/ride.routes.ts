@@ -11,7 +11,7 @@ import {
   markRideAsDone,
   cancelRide,
   editScheduledRide,
-  getAllCustomerRides, // <-- Make sure this is defined in your controller!
+  getAllCustomerRides,
 } from "../controllers/ride.controller";
 import { checkUserStatus } from "../middlewares/checkUserStatus";
 
@@ -28,7 +28,7 @@ router.post("/request", checkUserStatus, requestRide);
 // Edit scheduled ride
 router.put("/schedule/:rideId", checkUserStatus, editScheduledRide);
 
-// Get all rides for a customer
+// Get all rides for a customer (scheduled, active, done, except cancelled)
 router.get("/all", checkUserStatus, getAllCustomerRides);
 
 // Get the customer's (or driver's) current active ride
