@@ -238,44 +238,6 @@ export default function CustomerDashboard() {
   }, []);
 
   useEffect(() => {
-    async function restoreCurrentRideFromBackend() {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      try {
-        const res = await fetch(`${API_URL}/api/rides/current`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.rideId && ["accepted", "in_progress", "pending", "scheduled"].includes(data.rideStatus)) {
-            setRideId(data.rideId);
-            setRideStatus(data.rideStatus);
-            setPickupSet(true);
-            if (data.driver) setDriverInfo(data.driver);
-            if (data.originLat && data.originLng) {
-              setPickupLocation({ lat: data.originLat, lng: data.originLng });
-            }
-            setShowDoneButton(data.rideStatus === "in_progress");
-            if (data.rideStatus === "scheduled") {
-              setSchedVehicleType(data.vehicleType || "");
-              setSchedDestinationName(data.destinationName || "");
-              setSchedDatetime(data.scheduledAt ? DateTime.fromISO(data.scheduledAt).toFormat("yyyy-MM-dd'T'HH:mm") : "");
-              setSchedNote(data.note || "");
-            }
-          }
-        }
-      } catch (e) {}
-    }
-    if (!rideId && !pickupSet) {
-      restoreCurrentRideFromBackend();
-    }
-  }, [rideId, pickupSet]);
-
-  useEffect(() => {
-    if (rideId && rideStatus) saveChatSession(rideId, rideStatus);
-  }, [rideId, rideStatus]);
-
-  useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const loc = { lng: pos.coords.longitude, lat: pos.coords.latitude };
@@ -372,8 +334,9 @@ export default function CustomerDashboard() {
         });
         if (res.ok) {
           const rides: RideListItem[] = await res.json();
+          // Only show active rides: pending, accepted, in_progress, scheduled
           const filtered = rides.filter(
-            r => r.status !== "cancelled" && r.status !== "done"
+            r => ["pending", "accepted", "in_progress", "scheduled"].includes(r.status || "")
           );
           setRideList(filtered);
         }
@@ -385,6 +348,68 @@ export default function CustomerDashboard() {
     }
     fetchRides();
   }, [token, showDoneActions, schedWaiting, schedEditMode, scheduledModalOpen, rideStatus]);
+
+  // --- Chat polling for all rides with accepted/in_progress status ---
+  useEffect(() => {
+    let timers: { [rideId: string]: NodeJS.Timeout } = {};
+    rideList.forEach(ride => {
+      if (ride.status === "accepted" || ride.status === "in_progress") {
+        const rideIdStr = String(ride.id);
+        // Start polling for that rideId
+        const poll = async () => {
+          try {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${API_URL}/api/rides/${rideIdStr}/chat/messages`, {
+              headers: token ? { "Authorization": `Bearer ${token}` } : {},
+            });
+            if (res.ok) {
+              const msgs = await res.json();
+              setChatMessagesByRideId(prev => ({
+                ...prev,
+                [rideIdStr]: Array.isArray(msgs)
+                  ? msgs.filter(Boolean).map((m, idx) => ({
+                      ...m,
+                      id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                      sender: m?.sender ?? {
+                        id: m?.senderId ?? "unknown",
+                        name: m?.senderName ?? "",
+                        role: m?.senderRole ?? "",
+                        avatar: m?.senderAvatar ?? "",
+                      },
+                    }))
+                  : []
+              }));
+            }
+          } catch {
+            setChatMessagesByRideId(prev => ({ ...prev, [rideIdStr]: [] }));
+          }
+        };
+        poll();
+        timers[rideIdStr] = setInterval(poll, 3000);
+      }
+    });
+    return () => {
+      Object.values(timers).forEach(clearInterval);
+    };
+  }, [rideList]);
+
+  const handleSendMessage = async (text: string, rideIdForChat: number) => {
+    const customerId = getCustomerIdFromStorage();
+    if (!rideIdForChat || !customerId) return;
+    await fetch(`${API_URL}/api/rides/${rideIdForChat}/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: {
+          id: customerId,
+          name: "Customer",
+          role: "customer",
+          avatar: "",
+        },
+        content: text,
+      }),
+    });
+  };
 
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
@@ -525,13 +550,12 @@ export default function CustomerDashboard() {
     }
   }
 
-  async function handleCancelRide() {
-    if (!rideId) return;
+  async function handleCancelRide(rideIdToCancel: number) {
     setWaiting(true);
     setError(null);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/cancel`, {
+      const res = await fetch(`${API_URL}/api/rides/${rideIdToCancel}/cancel`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -547,19 +571,20 @@ export default function CustomerDashboard() {
       setRideStatus("cancelled");
       setShowDoneActions(true);
       setWaiting(false);
+      // Remove cancelled ride from list
+      setRideList(prev => prev.filter(r => r.id !== rideIdToCancel));
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
     }
   }
 
-  async function handleMarkRideDone() {
-    if (!rideId) return;
+  async function handleMarkRideDone(rideIdToMark: number) {
     setWaiting(true);
     setError(null);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/rides/${rideId}/done`, {
+      const res = await fetch(`${API_URL}/api/rides/${rideIdToMark}/done`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -576,128 +601,15 @@ export default function CustomerDashboard() {
       setShowDoneActions(true);
       setShowRating(true);
       setWaiting(false);
+      // Remove done ride from list
+      setRideList(prev => prev.filter(r => r.id !== rideIdToMark));
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
     }
   }
 
-  // --- Chat polling for all rides with accepted/in_progress status ---
-  useEffect(() => {
-    let timers: { [rideId: string]: NodeJS.Timeout } = {};
-    rideList.forEach(ride => {
-      if (ride.status === "accepted" || ride.status === "in_progress") {
-        const rideIdStr = String(ride.id);
-        // Start polling for that rideId
-        const poll = async () => {
-          try {
-            const token = localStorage.getItem("token");
-            const res = await fetch(`${API_URL}/api/rides/${rideIdStr}/chat/messages`, {
-              headers: token ? { "Authorization": `Bearer ${token}` } : {},
-            });
-            if (res.ok) {
-              const msgs = await res.json();
-              setChatMessagesByRideId(prev => ({
-                ...prev,
-                [rideIdStr]: Array.isArray(msgs)
-                  ? msgs.filter(Boolean).map((m, idx) => ({
-                      ...m,
-                      id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
-                      sender: m?.sender ?? {
-                        id: m?.senderId ?? "unknown",
-                        name: m?.senderName ?? "",
-                        role: m?.senderRole ?? "",
-                        avatar: m?.senderAvatar ?? "",
-                      },
-                    }))
-                  : []
-              }));
-            }
-          } catch {
-            setChatMessagesByRideId(prev => ({ ...prev, [rideIdStr]: [] }));
-          }
-        };
-        poll();
-        timers[rideIdStr] = setInterval(poll, 3000);
-      }
-    });
-    return () => {
-      Object.values(timers).forEach(clearInterval);
-    };
-  }, [rideList]);
-
-  const handleSendMessage = async (text: string, rideIdForChat: number) => {
-    const customerId = getCustomerIdFromStorage();
-    if (!rideIdForChat || !customerId) return;
-    await fetch(`${API_URL}/api/rides/${rideIdForChat}/chat/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sender: {
-          id: customerId,
-          name: "Customer",
-          role: "customer",
-          avatar: "",
-        },
-        content: text,
-      }),
-    });
-  };
-
-  if (showRating && showDoneActions && rideId) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <div style={{ fontWeight: "bold", fontSize: 20, color: "#388e3c" }}>
-          Ride is complete. Thank you!
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginTop: 18 }}>
-          <RateDriver
-            rideId={rideId}
-            onRated={() => {
-              setRideStatus(null);
-              setPickupSet(false);
-              setPickupLocation(userLocation);
-              setVehicleType("");
-              setRideId(null);
-              setDriverInfo(null);
-              setShowDoneActions(false);
-              setShowRating(false);
-              setChatMessagesByRideId({});
-              saveChatSession(null, null);
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (rideStatus === "cancelled" && showDoneActions) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <div style={{ fontWeight: "bold", fontSize: 20, color: "#f44336" }}>
-          Ride was cancelled.
-        </div>
-        <button
-          style={{ background: "#1976D2", color: "#fff", border: "none", padding: "0.7em 1.4em", borderRadius: 6, fontSize: 16 }}
-          onClick={() => {
-            setRideStatus(null);
-            setPickupSet(false);
-            setPickupLocation(userLocation);
-            setVehicleType("");
-            setRideId(null);
-            setDriverInfo(null);
-            setShowDoneActions(false);
-            setShowRating(false);
-            setChatMessagesByRideId({});
-            saveChatSession(null, null);
-          }}
-        >
-          Request New Ride
-        </button>
-      </div>
-    );
-  }
-
+  // --- UI Rendering Section ---
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
@@ -915,11 +827,7 @@ export default function CustomerDashboard() {
                             marginBottom: 2,
                             fontWeight: "bold"
                           }}
-                          onClick={() => {
-                            setRideId(ride.id);
-                            setRideStatus(ride.status);
-                            handleCancelRide();
-                          }}
+                          onClick={() => handleCancelRide(ride.id)}
                         >
                           Cancel
                         </button>
@@ -961,11 +869,7 @@ export default function CustomerDashboard() {
                           fontSize: 15,
                           fontWeight: "bold"
                         }}
-                        onClick={() => {
-                          setRideId(ride.id);
-                          setRideStatus(ride.status);
-                          handleMarkRideDone();
-                        }}
+                        onClick={() => handleMarkRideDone(ride.id)}
                       >
                         Done
                       </button>
