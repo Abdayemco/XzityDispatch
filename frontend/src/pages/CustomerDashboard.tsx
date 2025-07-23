@@ -149,6 +149,18 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
+// ADD THIS FUNCTION TO FIX THE ERROR
+function openScheduleModal() {
+  setSchedEditMode(false);
+  setSchedRideId(null);
+  setSchedVehicleType("");
+  setSchedDestinationName("");
+  setSchedDatetime("");
+  setSchedNote("");
+  setSchedError(null);
+  setScheduledModalOpen(true);
+}
+
 export default function CustomerDashboard() {
   // --- STATE ---
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -296,7 +308,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  // ... rest of your effects and handlers remain unchanged ...
+  // ... all other handlers and effects remain unchanged ...
 
   // --- Main UI ---
   return (
@@ -437,7 +449,6 @@ export default function CustomerDashboard() {
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {rideList
               .sort((a, b) => {
-                // Sort by scheduledAt (if present), then by id (recent first)
                 if (a.scheduledAt && b.scheduledAt)
                   return DateTime.fromISO(a.scheduledAt).toMillis() - DateTime.fromISO(b.scheduledAt).toMillis();
                 if (a.scheduledAt) return -1;
