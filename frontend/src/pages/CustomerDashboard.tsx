@@ -243,6 +243,59 @@ export default function CustomerDashboard() {
     fetchRides();
   }, [token, showDoneActions, schedWaiting, schedEditMode, scheduledModalOpen, rideStatus]);
 
+  // --- Handle Request Ride ---
+  async function handleRequestRide() {
+    if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
+      setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
+      return;
+    }
+    if (!pickupLocation || !vehicleType) {
+      setError("Pickup location and vehicle type required.");
+      setWaiting(false);
+      return;
+    }
+    const token = localStorage.getItem("token");
+    const customerId = getCustomerIdFromStorage();
+    if (!token || customerId === null) {
+      setError("Not logged in.");
+      setWaiting(false);
+      return;
+    }
+    setWaiting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/rides/request`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customerId,
+          originLat: pickupLocation.lat,
+          originLng: pickupLocation.lng,
+          destLat: pickupLocation.lat,
+          destLng: pickupLocation.lng,
+          vehicleType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create ride.");
+        setWaiting(false);
+        return;
+      }
+      setPickupSet(true);
+      setRideId(data.rideId || data.id);
+      setRideStatus("pending");
+      setWaiting(false);
+    } catch (err: any) {
+      setError("Network or server error.");
+    } finally {
+      setWaiting(false);
+    }
+  }
+
   // ... rest of your effects and handlers remain unchanged ...
 
   // --- Main UI ---
@@ -372,7 +425,7 @@ export default function CustomerDashboard() {
           Pickup Location: {pickupLocation.lat.toFixed(4)}, {pickupLocation.lng.toFixed(4)}
         </div>
       )}
-      
+
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
         <h3 style={{ marginBottom: 8 }}>Your Rides</h3>
