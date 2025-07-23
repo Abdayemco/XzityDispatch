@@ -75,7 +75,6 @@ type OverpassElement = {
   };
 };
 type DriverInfo = { name?: string; vehicleType?: string; };
-
 type Ride = {
   id: number;
   scheduledAt: string;
@@ -94,7 +93,6 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   const API_URL = import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
     : "";
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
