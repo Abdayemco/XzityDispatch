@@ -149,7 +149,6 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-// FIX: getTimeZoneFromCoords must be inside the component to access env vars
 export default function CustomerDashboard() {
   // --- STATE ---
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -164,7 +163,7 @@ export default function CustomerDashboard() {
   const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
   const [showDoneActions, setShowDoneActions] = useState(false);
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{[rideId: string]: any[]}>({});
   const [showRating, setShowRating] = useState(false);
   const [showDoneButton, setShowDoneButton] = useState(false);
 
@@ -187,7 +186,7 @@ export default function CustomerDashboard() {
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // FIX: getTimeZoneFromCoords must be inside the component
+  // Helper: fetch timezone from coordinates using TimeZoneDB
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
     const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
     if (!apiKey) {
@@ -210,7 +209,6 @@ export default function CustomerDashboard() {
     return "UTC";
   }
 
-  // Handler functions must be inside the component!
   function openScheduleModal() {
     setSchedEditMode(false);
     setSchedRideId(null);
@@ -233,7 +231,6 @@ export default function CustomerDashboard() {
     return dt.toUTC().toISO();
   }
 
-  // --- EFFECTS ---
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
@@ -259,7 +256,6 @@ export default function CustomerDashboard() {
               setPickupLocation({ lat: data.originLat, lng: data.originLng });
             }
             setShowDoneButton(data.rideStatus === "in_progress");
-            // Pre-fill scheduled edit modal
             if (data.rideStatus === "scheduled") {
               setSchedVehicleType(data.vehicleType || "");
               setSchedDestinationName(data.destinationName || "");
@@ -365,7 +361,6 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // --- Ride List ---
   useEffect(() => {
     async function fetchRides() {
       const customerId = getCustomerIdFromStorage();
@@ -377,7 +372,6 @@ export default function CustomerDashboard() {
         });
         if (res.ok) {
           const rides: RideListItem[] = await res.json();
-          // Filter out cancelled and done rides
           const filtered = rides.filter(
             r => r.status !== "cancelled" && r.status !== "done"
           );
@@ -392,7 +386,6 @@ export default function CustomerDashboard() {
     fetchRides();
   }, [token, showDoneActions, schedWaiting, schedEditMode, scheduledModalOpen, rideStatus]);
 
-  // --- Request Ride ---
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
       setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
@@ -445,7 +438,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Schedule Ride Confirm/Edit ---
   async function handleConfirmScheduledRide() {
     if (
       !userLocation ||
@@ -533,7 +525,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Cancel Ride ---
   async function handleCancelRide() {
     if (!rideId) return;
     setWaiting(true);
@@ -562,7 +553,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Mark Ride Done ---
   async function handleMarkRideDone() {
     if (!rideId) return;
     setWaiting(true);
@@ -592,52 +582,54 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- Chat ---
+  // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
-    if (!rideId || !(rideStatus === "accepted" || rideStatus === "in_progress")) return;
-    let polling = true;
-    async function fetchMessages() {
-      if (!polling) return;
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
-          headers: token ? { "Authorization": `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const msgs = await res.json();
-          setChatMessages(
-            Array.isArray(msgs)
-              ? msgs.filter(Boolean).map((m, idx) => ({
-                  ...m,
-                  id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
-                  sender: m?.sender ?? {
-                    id: m?.senderId ?? "unknown",
-                    name: m?.senderName ?? "",
-                    role: m?.senderRole ?? "",
-                    avatar: m?.senderAvatar ?? "",
-                  },
-                }))
-              : []
-          );
-        } else {
-          setChatMessages([]);
-        }
-      } catch {
-        setChatMessages([]);
+    let timers: { [rideId: string]: NodeJS.Timeout } = {};
+    rideList.forEach(ride => {
+      if (ride.status === "accepted" || ride.status === "in_progress") {
+        const rideIdStr = String(ride.id);
+        // Start polling for that rideId
+        const poll = async () => {
+          try {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${API_URL}/api/rides/${rideIdStr}/chat/messages`, {
+              headers: token ? { "Authorization": `Bearer ${token}` } : {},
+            });
+            if (res.ok) {
+              const msgs = await res.json();
+              setChatMessagesByRideId(prev => ({
+                ...prev,
+                [rideIdStr]: Array.isArray(msgs)
+                  ? msgs.filter(Boolean).map((m, idx) => ({
+                      ...m,
+                      id: m?.id || m?._id || m?.timestamp || `${Date.now()}_${idx}`,
+                      sender: m?.sender ?? {
+                        id: m?.senderId ?? "unknown",
+                        name: m?.senderName ?? "",
+                        role: m?.senderRole ?? "",
+                        avatar: m?.senderAvatar ?? "",
+                      },
+                    }))
+                  : []
+              }));
+            }
+          } catch {
+            setChatMessagesByRideId(prev => ({ ...prev, [rideIdStr]: [] }));
+          }
+        };
+        poll();
+        timers[rideIdStr] = setInterval(poll, 3000);
       }
-    }
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 3000);
+    });
     return () => {
-      polling = false;
-      clearInterval(interval);
+      Object.values(timers).forEach(clearInterval);
     };
-  }, [rideId, rideStatus]);
+  }, [rideList]);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, rideIdForChat: number) => {
     const customerId = getCustomerIdFromStorage();
-    if (!rideId || !customerId) return;
-    await fetch(`${API_URL}/api/rides/${rideId}/chat/messages`, {
+    if (!rideIdForChat || !customerId) return;
+    await fetch(`${API_URL}/api/rides/${rideIdForChat}/chat/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -652,7 +644,6 @@ export default function CustomerDashboard() {
     });
   };
 
-  // --- UI Rendering Section ---
   if (showRating && showDoneActions && rideId) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -671,7 +662,7 @@ export default function CustomerDashboard() {
               setDriverInfo(null);
               setShowDoneActions(false);
               setShowRating(false);
-              setChatMessages([]);
+              setChatMessagesByRideId({});
               saveChatSession(null, null);
             }}
           />
@@ -697,7 +688,7 @@ export default function CustomerDashboard() {
             setDriverInfo(null);
             setShowDoneActions(false);
             setShowRating(false);
-            setChatMessages([]);
+            setChatMessagesByRideId({});
             saveChatSession(null, null);
           }}
         >
@@ -707,7 +698,6 @@ export default function CustomerDashboard() {
     );
   }
 
-  // --- Main UI ---
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
@@ -845,7 +835,6 @@ export default function CustomerDashboard() {
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {rideList
               .sort((a, b) => {
-                // Sort by scheduledAt (if present), then by id (recent first)
                 if (a.scheduledAt && b.scheduledAt)
                   return DateTime.fromISO(a.scheduledAt).toMillis() - DateTime.fromISO(b.scheduledAt).toMillis();
                 if (a.scheduledAt) return -1;
@@ -985,8 +974,8 @@ export default function CustomerDashboard() {
                       <RestChatWindow
                         rideId={String(ride.id)}
                         sender={{ id: getCustomerIdFromStorage(), name: "Customer", role: "customer", avatar: "" }}
-                        messages={chatMessages}
-                        onSend={handleSendMessage}
+                        messages={chatMessagesByRideId[String(ride.id)] || []}
+                        onSend={text => handleSendMessage(text, ride.id)}
                         style={{ width: 180, minHeight: 60, maxHeight: 220 }}
                       />
                     )}
@@ -997,7 +986,6 @@ export default function CustomerDashboard() {
         )}
       </div>
 
-      {/* SCHEDULE MODAL */}
       {scheduledModalOpen && (
         <div style={{
           position: "fixed",
