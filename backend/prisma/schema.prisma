@@ -86,8 +86,8 @@ model Ride {
   originLng         Float
   destLat           Float
   destLng           Float
-  destinationName   String?     // <-- ADDED: e.g. "Airport", "Mall", "Home"
-  note              String?     // <-- ADDED: customer instructions
+  destinationName   String?     // e.g. "Airport", "Mall", "Home"
+  note              String?     // customer instructions
   requestedAt       DateTime    @default(now())
   acceptedAt        DateTime?
   startedAt         DateTime?
@@ -98,8 +98,13 @@ model Ride {
   rating            Int?
   feedback          String?
   chat              Chat?
-  scheduledAt       DateTime?   // --- For scheduled rides
-  noShowReportedAt  DateTime?   // --- When "No Show" is marked
+  scheduledAt       DateTime?   // For scheduled rides
+  noShowReportedAt  DateTime?   // When "No Show" is marked
+
+  @@index([customerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([scheduledAt])
 }
 
 model TrustedDevice {
@@ -122,6 +127,9 @@ model Chat {
   messages    Message[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([driverId])
 }
 
 model Message {
