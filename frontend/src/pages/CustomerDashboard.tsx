@@ -190,8 +190,8 @@ export default function CustomerDashboard() {
     );
   }, []);
 
+  // Fetch all rides for customer: scheduled + active + done
   useEffect(() => {
-    // Fetch all rides for customer: scheduled + active + done
     async function fetchAllRides() {
       const customerId = getCustomerIdFromStorage();
       if (!customerId) return;
