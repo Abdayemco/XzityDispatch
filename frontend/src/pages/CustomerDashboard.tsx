@@ -17,6 +17,7 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
+// VEHICLE OPTIONS
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -28,6 +29,7 @@ const vehicleOptions = [
   { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
 ];
 
+// ICONS
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -37,7 +39,6 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
     shadowUrl: undefined,
   });
 }
-
 function createEmergencyIcon(url: string) {
   return L.icon({
     iconUrl: url,
@@ -47,7 +48,6 @@ function createEmergencyIcon(url: string) {
     shadowUrl: undefined,
   });
 }
-
 function getCustomerIdFromStorage(): number | null {
   const raw = localStorage.getItem("userId");
   if (!raw) return null;
@@ -92,7 +92,6 @@ type RideListItem = {
   note?: string;
   driver?: DriverInfo;
 };
-
 function RateDriver({
   rideId,
   onRated,
@@ -158,7 +157,29 @@ function RateDriver({
   );
 }
 
-// Save chat session info
+// ------ Restore this helper! ------
+async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
+  const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
+  if (!apiKey) {
+    console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
+    return "UTC";
+  }
+  try {
+    const res = await fetch(
+      `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
+    );
+    const data = await res.json();
+    if (data.zoneName) {
+      return data.zoneName;
+    } else if (data.status !== "OK" && data.message) {
+      console.error("TimeZoneDB error:", data.message);
+    }
+  } catch (err) {
+    console.error("Timezone fetch error:", err);
+  }
+  return "UTC";
+}
+
 function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
   localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
   localStorage.setItem("currentRideStatus", rideStatus || "");
@@ -169,18 +190,15 @@ const API_URL = import.meta.env.VITE_API_URL
   : "";
 
 export default function CustomerDashboard() {
-  // --- STATE ---
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token")
   );
-  const [userLocation, setUserLocation] = useState<{
-    lng: number;
-    lat: number;
-  } | null>(null);
-  const [pickupLocation, setPickupLocation] = useState<{
-    lng: number;
-    lat: number;
-  } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(
+    null
+  );
+  const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(
+    null
+  );
   const [pickupSet, setPickupSet] = useState(false);
   const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
@@ -189,16 +207,10 @@ export default function CustomerDashboard() {
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
   const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
   const [showDoneActions, setShowDoneActions] = useState(false);
-  const [emergencyLocations, setEmergencyLocations] = useState<
-    EmergencyLocation[]
-  >([]);
-  const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{
-    [rideId: string]: any[];
-  }>({});
+  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
+  const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{ [rideId: string]: any[] }>({});
   const [showRating, setShowRating] = useState(false);
   const [showDoneButton, setShowDoneButton] = useState(false);
-
-  // For "rate after done"
   const [ratingRideId, setRatingRideId] = useState<number | null>(null);
 
   // Scheduled ride modal state
@@ -212,19 +224,16 @@ export default function CustomerDashboard() {
   const [schedError, setSchedError] = useState<string | null>(null);
   const [schedWaiting, setSchedWaiting] = useState(false);
 
-  // Timezone detection for pickup location
   const [pickupTimeZone, setPickupTimeZone] = useState<string>("UTC");
   const [localTime, setLocalTime] = useState<string>("");
 
-  // Ride list state
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // --- SMART POLLING: only poll if any ride status changes ---
+  // SMART POLLING: only poll if any ride status changes
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Helper: fetch rides and check if any status changed
   const fetchRidesSmart = async () => {
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
@@ -250,7 +259,6 @@ export default function CustomerDashboard() {
             break;
           }
         }
-        // If changed, update rideList and lastStatusesRef, and restart polling
         if (changed) {
           setRideList(filtered);
           const nextStatuses: { [id: number]: string } = {};
@@ -258,19 +266,14 @@ export default function CustomerDashboard() {
             nextStatuses[r.id] = r.status || "";
           }
           lastStatusesRef.current = nextStatuses;
-          startPolling(); // restart polling because a change happened!
-        }
-        // If not changed, do not update rideList and stop polling
-        else {
+          startPolling();
+        } else {
           stopPolling();
         }
       }
-    } catch (err) {
-      // Optionally handle error
-    }
+    } catch (err) {}
   };
 
-  // Polling functions
   const startPolling = () => {
     stopPolling();
     pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
@@ -279,8 +282,6 @@ export default function CustomerDashboard() {
     if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     pollingTimerRef.current = null;
   };
-
-  // On mount: load rides and start polling
   useEffect(() => {
     const initial = async () => {
       const customerId = getCustomerIdFromStorage();
@@ -326,7 +327,6 @@ export default function CustomerDashboard() {
     rideStatus,
   ]);
 
-  // When requesting a new ride, always restart polling
   useEffect(() => {
     if (
       rideStatus === "pending" ||
@@ -338,8 +338,6 @@ export default function CustomerDashboard() {
     }
     // eslint-disable-next-line
   }, [rideStatus]);
-
-  // All your other logic for geolocation, timezone, emergency, chat polling, ride actions, etc, stay the same as in your code.
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -501,7 +499,6 @@ export default function CustomerDashboard() {
       }),
     });
   };
-
   async function handleRequestRide() {
     if (
       rideId &&
@@ -733,7 +730,6 @@ export default function CustomerDashboard() {
     setSchedEditMode(false);
     setSchedRideId(null);
   }
-
   return (
     <div style={{ padding: 24 }}>
       <h2
@@ -1164,7 +1160,6 @@ export default function CustomerDashboard() {
           </div>
         )}
       </div>
-
       {scheduledModalOpen && (
         <div
           style={{
