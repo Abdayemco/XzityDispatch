@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -196,8 +196,6 @@ export default function CustomerDashboard() {
   }>({});
   const [showRating, setShowRating] = useState(false);
   const [showDoneButton, setShowDoneButton] = useState(false);
-
-  // new: for "rate after done"
   const [ratingRideId, setRatingRideId] = useState<number | null>(null);
 
   // Scheduled ride modal state
@@ -362,33 +360,35 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  useEffect(() => {
-    async function fetchRides() {
-      const customerId = getCustomerIdFromStorage();
-      if (!customerId) return;
-      setRideListLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/api/rides/all?customerId=${customerId}`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
-        );
-        if (res.ok) {
-          const rides: RideListItem[] = await res.json();
-          const filtered = rides.filter((r) =>
-            ["pending", "accepted", "in_progress", "scheduled"].includes(
-              (r.status || "").toLowerCase().trim()
-            )
-          );
-          setRideList(filtered);
+  // ---- POLLING: fetchRides function and effect ----
+  const fetchRides = useCallback(async () => {
+    const customerId = getCustomerIdFromStorage();
+    if (!customerId) return;
+    setRideListLoading(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/rides/all?customerId=${customerId}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
-      } catch (err) {
-        setRideList([]);
-      } finally {
-        setRideListLoading(false);
+      );
+      if (res.ok) {
+        const rides: RideListItem[] = await res.json();
+        const filtered = rides.filter((r) =>
+          ["pending", "accepted", "in_progress", "scheduled"].includes(
+            (r.status || "").toLowerCase().trim()
+          )
+        );
+        setRideList(filtered);
       }
+    } catch (err) {
+      setRideList([]);
+    } finally {
+      setRideListLoading(false);
     }
+  }, [token]);
+  // Initial load & dependencies
+  useEffect(() => {
     fetchRides();
   }, [
     token,
@@ -397,8 +397,15 @@ export default function CustomerDashboard() {
     schedEditMode,
     scheduledModalOpen,
     rideStatus,
+    fetchRides,
   ]);
+  // Polling every 4 seconds
+  useEffect(() => {
+    const interval = setInterval(fetchRides, 4000);
+    return () => clearInterval(interval);
+  }, [fetchRides]);
 
+  // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
     let timers: { [rideId: string]: NodeJS.Timeout } = {};
     rideList.forEach((ride) => {
@@ -651,7 +658,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // PATCH: Show rating UI after Done, and only remove after rating submitted
   async function handleMarkRideDone(rideIdToMark: number) {
     setWaiting(true);
     setError(null);
