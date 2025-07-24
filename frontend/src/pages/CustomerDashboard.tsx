@@ -17,7 +17,9 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
-// VEHICLE OPTIONS
+/**
+ * List of available vehicle types for ride requests
+ */
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -29,6 +31,9 @@ const vehicleOptions = [
   { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
 ];
 
+/**
+ * Utility to create a custom Leaflet map icon
+ */
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -39,6 +44,9 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
   });
 }
 
+/**
+ * Utility to create an emergency location icon for the map
+ */
 function createEmergencyIcon(url: string) {
   return L.icon({
     iconUrl: url,
@@ -49,6 +57,9 @@ function createEmergencyIcon(url: string) {
   });
 }
 
+/**
+ * Gets the customer ID from localStorage
+ */
 function getCustomerIdFromStorage(): number | null {
   const raw = localStorage.getItem("userId");
   if (!raw) return null;
@@ -87,6 +98,9 @@ type RideListItem = {
   driver?: DriverInfo;
 };
 
+/**
+ * Renders the rating form after a ride is completed
+ */
 function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }) {
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
@@ -140,6 +154,9 @@ function RateDriver({ rideId, onRated }: { rideId: number, onRated: () => void }
   );
 }
 
+/**
+ * Save chat session info to localStorage
+ */
 function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
   localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
   localStorage.setItem("currentRideStatus", rideStatus || "");
@@ -151,20 +168,36 @@ const API_URL = import.meta.env.VITE_API_URL
 
 export default function CustomerDashboard() {
   // --- STATE ---
+
+  // Authentication token
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
+  // User's detected location
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
+  // Pickup location for ride
   const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(null);
+  // Whether pickup location is set
   const [pickupSet, setPickupSet] = useState(false);
+  // Current ride id
   const [rideId, setRideId] = useState<number | null>(null);
+  // Chosen vehicle type
   const [vehicleType, setVehicleType] = useState<string>("");
+  // UI waiting flag (for requests)
   const [waiting, setWaiting] = useState(false);
+  // UI error message
   const [error, setError] = useState<string | null>(null);
+  // Current ride status
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
+  // Info about the assigned driver
   const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
+  // Flag for showing done/cancel actions
   const [showDoneActions, setShowDoneActions] = useState(false);
+  // Emergency locations (police/hospital/fire)
   const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
+  // Chat messages per rideId
   const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{[rideId: string]: any[]}>({});
+  // Rating UI flag
   const [showRating, setShowRating] = useState(false);
+  // "Done" button UI flag
   const [showDoneButton, setShowDoneButton] = useState(false);
 
   // Scheduled ride modal state
@@ -182,11 +215,13 @@ export default function CustomerDashboard() {
   const [pickupTimeZone, setPickupTimeZone] = useState<string>("UTC");
   const [localTime, setLocalTime] = useState<string>("");
 
-  // Ride list state
+  // List of rides for the customer
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // Helper: fetch timezone from coordinates using TimeZoneDB
+  /**
+   * Fetch timezone from coordinates using TimeZoneDB API
+   */
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
     const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
     if (!apiKey) {
@@ -209,6 +244,9 @@ export default function CustomerDashboard() {
     return "UTC";
   }
 
+  /**
+   * Open schedule ride modal (new ride)
+   */
   function openScheduleModal() {
     setSchedEditMode(false);
     setSchedRideId(null);
@@ -219,24 +257,36 @@ export default function CustomerDashboard() {
     setSchedError(null);
     setScheduledModalOpen(true);
   }
+  /**
+   * Close schedule ride modal
+   */
   function closeScheduleModal() {
     setScheduledModalOpen(false);
     setSchedError(null);
     setSchedEditMode(false);
     setSchedRideId(null);
   }
+  /**
+   * Convert local scheduled datetime to UTC ISO string
+   */
   function getScheduledUTC(datetimeLocal: string, timezone: string): string {
     if (!datetimeLocal || !timezone) return "";
     const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
     return dt.toUTC().toISO();
   }
 
+  /**
+   * Listen for token changes in localStorage (user log in/out)
+   */
   useEffect(() => {
     const onStorage = () => setToken(localStorage.getItem("token"));
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  /**
+   * Get initial user location from browser geolocation
+   */
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -252,6 +302,9 @@ export default function CustomerDashboard() {
     );
   }, []);
 
+  /**
+   * Get pickup location timezone when location changes
+   */
   useEffect(() => {
     if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
       getTimeZoneFromCoords(pickupLocation.lat, pickupLocation.lng)
@@ -260,6 +313,9 @@ export default function CustomerDashboard() {
     }
   }, [pickupLocation]);
 
+  /**
+   * Update local time every second (for pickup location timezone)
+   */
   useEffect(() => {
     const timer = setInterval(() => {
       const nowUtc = DateTime.utc();
@@ -271,6 +327,9 @@ export default function CustomerDashboard() {
     return () => clearInterval(timer);
   }, [pickupTimeZone]);
 
+  /**
+   * Fetch nearby emergency facilities (police/hospital/fire) from OpenStreetMap (Overpass API)
+   */
   useEffect(() => {
     if (!userLocation) return;
     const lat = userLocation.lat;
@@ -323,6 +382,9 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
+  /**
+   * Fetch rides for the customer, filter to only active rides (pending, accepted, in_progress, scheduled)
+   */
   useEffect(() => {
     async function fetchRides() {
       const customerId = getCustomerIdFromStorage();
@@ -334,9 +396,12 @@ export default function CustomerDashboard() {
         });
         if (res.ok) {
           const rides: RideListItem[] = await res.json();
-          // Only show active rides: pending, accepted, in_progress, scheduled
+          console.log("Fetched rides:", rides.map(r => r.status)); // Debug: see statuses returned
+          // Normalize to lowercase for robust filtering
           const filtered = rides.filter(
-            r => ["pending", "accepted", "in_progress", "scheduled"].includes(r.status || "")
+            r => ["pending", "accepted", "in_progress", "scheduled"].includes(
+              (r.status || "").toLowerCase()
+            )
           );
           setRideList(filtered);
         }
@@ -349,11 +414,16 @@ export default function CustomerDashboard() {
     fetchRides();
   }, [token, showDoneActions, schedWaiting, schedEditMode, scheduledModalOpen, rideStatus]);
 
-  // --- Chat polling for all rides with accepted/in_progress status ---
+  /**
+   * Poll chat messages for all rides with accepted/in_progress status
+   */
   useEffect(() => {
     let timers: { [rideId: string]: NodeJS.Timeout } = {};
     rideList.forEach(ride => {
-      if (ride.status === "accepted" || ride.status === "in_progress") {
+      if (
+        ride.status &&
+        ["accepted", "in_progress"].includes((ride.status || "").toLowerCase())
+      ) {
         const rideIdStr = String(ride.id);
         // Start polling for that rideId
         const poll = async () => {
@@ -393,6 +463,9 @@ export default function CustomerDashboard() {
     };
   }, [rideList]);
 
+  /**
+   * Send a chat message for a specific ride
+   */
   const handleSendMessage = async (text: string, rideIdForChat: number) => {
     const customerId = getCustomerIdFromStorage();
     if (!rideIdForChat || !customerId) return;
@@ -411,6 +484,9 @@ export default function CustomerDashboard() {
     });
   };
 
+  /**
+   * Request a new immediate ride
+   */
   async function handleRequestRide() {
     if (rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || "")) {
       setError("You already have an active ride. Please cancel or complete it before requesting a new one.");
@@ -463,6 +539,9 @@ export default function CustomerDashboard() {
     }
   }
 
+  /**
+   * Confirm or edit a scheduled ride (modal)
+   */
   async function handleConfirmScheduledRide() {
     if (
       !userLocation ||
@@ -550,6 +629,9 @@ export default function CustomerDashboard() {
     }
   }
 
+  /**
+   * Cancel an active ride
+   */
   async function handleCancelRide(rideIdToCancel: number) {
     setWaiting(true);
     setError(null);
@@ -579,6 +661,9 @@ export default function CustomerDashboard() {
     }
   }
 
+  /**
+   * Mark a ride as completed ("Done")
+   */
   async function handleMarkRideDone(rideIdToMark: number) {
     setWaiting(true);
     setError(null);
@@ -609,16 +694,21 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- UI Rendering Section ---
+  /**
+   * Main UI rendering block
+   */
   return (
     <div style={{ padding: 24 }}>
+      {/* Title and local time info */}
       <h2 style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
         Xzity Ride Request
       </h2>
       <div style={{ textAlign: "center", fontWeight: "bold", color: "#1976D2", fontSize: 17, marginBottom: 8 }}>
         Your current local time at pickup location: {localTime} {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
       </div>
+      {/* Show error messages */}
       {error && <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>}
+      {/* Map UI for choosing pickup location */}
       {userLocation && (
         <MapContainer
           center={[userLocation.lat, userLocation.lng]}
@@ -664,6 +754,7 @@ export default function CustomerDashboard() {
           ))}
         </MapContainer>
       )}
+      {/* Vehicle type selection */}
       <div style={{ margin: "24px 0", textAlign: "center" }}>
         <label>
           <b>Vehicle Type:</b>
@@ -698,6 +789,7 @@ export default function CustomerDashboard() {
           ))}
         </div>
       </div>
+      {/* Request/Schedule ride buttons */}
       <div style={{ margin: "24px 0", textAlign: "center", display: "flex", justifyContent: "center", gap: 20 }}>
         <button
           disabled={waiting || !pickupLocation || !vehicleType || !!(rideId && ["pending", "accepted", "in_progress", "scheduled"].includes(rideStatus || ""))}
@@ -816,6 +908,7 @@ export default function CustomerDashboard() {
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                     {(ride.status === "scheduled" || ride.status === "pending") && (
                       <>
+                        {/* Cancel button for pending/scheduled rides */}
                         <button
                           style={{
                             background: "#f44336",
@@ -831,6 +924,7 @@ export default function CustomerDashboard() {
                         >
                           Cancel
                         </button>
+                        {/* Edit button for scheduled rides */}
                         {ride.status === "scheduled" && (
                           <button
                             style={{
@@ -858,6 +952,7 @@ export default function CustomerDashboard() {
                         )}
                       </>
                     )}
+                    {/* Done button for in_progress rides */}
                     {ride.status === "in_progress" && (
                       <button
                         style={{
@@ -874,6 +969,7 @@ export default function CustomerDashboard() {
                         Done
                       </button>
                     )}
+                    {/* Chat window for accepted/in_progress rides */}
                     {(ride.status === "accepted" || ride.status === "in_progress") && (
                       <RestChatWindow
                         rideId={String(ride.id)}
@@ -890,6 +986,7 @@ export default function CustomerDashboard() {
         )}
       </div>
 
+      {/* Schedule/Reschedule Ride Modal */}
       {scheduledModalOpen && (
         <div style={{
           position: "fixed",
