@@ -221,10 +221,6 @@ export default function CustomerDashboard() {
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- NEW: Button logic state ---
-  const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
-  const [scheduledRideLimitError, setScheduledRideLimitError] = useState<string | null>(null);
-
   // --- Button logic: count rides ---
   const activeRidesCount = rideList.filter(
     r => ["pending", "accepted", "in_progress"].includes((r.status || "").toLowerCase().trim())
@@ -232,6 +228,10 @@ export default function CustomerDashboard() {
   const scheduledRidesCount = rideList.filter(
     r => (r.status || "").toLowerCase().trim() === "scheduled"
   ).length;
+
+  // --- Button error states ---
+  const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
+  const [scheduledRideLimitError, setScheduledRideLimitError] = useState<string | null>(null);
 
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
     const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
@@ -488,18 +488,9 @@ export default function CustomerDashboard() {
     };
   }, [rideList]);
 
-  // --- BUTTON LOGIC: handle errors and disables ---
   useEffect(() => {
-    if (activeRidesCount >= 3) {
-      setActiveRideLimitError("Only 3 active rides are allowed. Please cancel rides below to request a new one.");
-    } else {
-      setActiveRideLimitError(null);
-    }
-    if (scheduledRidesCount >= 5) {
-      setScheduledRideLimitError("Only 5 scheduled rides are allowed. Please cancel rides below to request a new one.");
-    } else {
-      setScheduledRideLimitError(null);
-    }
+    if (activeRidesCount < 3) setActiveRideLimitError(null);
+    if (scheduledRidesCount < 5) setScheduledRideLimitError(null);
   }, [activeRidesCount, scheduledRidesCount]);
 
   const handleSendMessage = async (text: string, rideIdForChat: number) => {
@@ -521,21 +512,8 @@ export default function CustomerDashboard() {
   };
 
   async function handleRequestRide() {
-    if (
-      activeRidesCount >= 3
-    ) {
+    if (activeRidesCount >= 3) {
       setActiveRideLimitError("Only 3 active rides are allowed. Please cancel rides below to request a new one.");
-      return;
-    }
-    if (
-      rideId &&
-      ["pending", "accepted", "in_progress", "scheduled"].includes(
-        rideStatus || ""
-      )
-    ) {
-      setError(
-        "You already have an active ride. Please cancel or complete it before requesting a new one."
-      );
       return;
     }
     if (!pickupLocation || !vehicleType) {
@@ -578,6 +556,7 @@ export default function CustomerDashboard() {
       setRideId(data.rideId || data.id);
       setRideStatus("pending");
       setWaiting(false);
+      setActiveRideLimitError(null);
     } catch (err: any) {
       setError("Network or server error.");
     } finally {
@@ -586,9 +565,7 @@ export default function CustomerDashboard() {
   }
 
   async function handleConfirmScheduledRide() {
-    if (
-      scheduledRidesCount >= 5
-    ) {
+    if (scheduledRidesCount >= 5) {
       setScheduledRideLimitError("Only 5 scheduled rides are allowed. Please cancel rides below to request a new one.");
       return;
     }
@@ -675,6 +652,7 @@ export default function CustomerDashboard() {
       setSchedDatetime("");
       setSchedNote("");
       setSchedError(null);
+      setScheduledRideLimitError(null);
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
@@ -706,6 +684,8 @@ export default function CustomerDashboard() {
       setShowDoneActions(true);
       setWaiting(false);
       setRideList((prev) => prev.filter((r) => r.id !== rideIdToCancel));
+      setActiveRideLimitError(null);
+      setScheduledRideLimitError(null);
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
@@ -735,6 +715,8 @@ export default function CustomerDashboard() {
       }
       setWaiting(false);
       setRatingRideId(rideIdToMark); // show rating UI for this ride
+      setActiveRideLimitError(null);
+      setScheduledRideLimitError(null);
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
@@ -895,14 +877,7 @@ export default function CustomerDashboard() {
           disabled={
             waiting ||
             !pickupLocation ||
-            !vehicleType ||
-            activeRidesCount >= 3 ||
-            !!(
-              rideId &&
-              ["pending", "accepted", "in_progress", "scheduled"].includes(
-                rideStatus || ""
-              )
-            )
+            !vehicleType
           }
           onClick={handleRequestRide}
           style={{
@@ -935,14 +910,7 @@ export default function CustomerDashboard() {
           }}
           onClick={openScheduleModal}
           disabled={
-            waiting ||
-            scheduledRidesCount >= 5 ||
-            !!(
-              rideId &&
-              ["pending", "accepted", "in_progress", "scheduled"].includes(
-                rideStatus || ""
-              )
-            )
+            waiting
           }
         >
           Schedule Ride
@@ -1327,7 +1295,7 @@ export default function CustomerDashboard() {
             />
             <div style={{ textAlign: "center" }}>
               <button
-                disabled={schedWaiting || scheduledRidesCount >= 5}
+                disabled={schedWaiting}
                 style={{
                   background: "#388e3c",
                   color: "#fff",
