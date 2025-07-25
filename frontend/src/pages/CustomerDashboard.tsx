@@ -378,7 +378,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // SMART POLLING: always fetch all rides for this customer
+  // SMART POLLING: only refresh ride list if status changes
   const fetchRidesSmart = useCallback(async () => {
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
@@ -392,12 +392,26 @@ export default function CustomerDashboard() {
       );
       if (res.ok) {
         const rides: RideListItem[] = await res.json();
-        setRideList(rides);
-        const nextStatuses: { [id: number]: string } = {};
-        for (const r of rides) {
-          nextStatuses[r.id] = r.status || "";
+        // Only update rideList if something changed
+        let changed = false;
+        if (rides.length !== Object.keys(lastStatusesRef.current).length) {
+          changed = true;
+        } else {
+          for (const r of rides) {
+            if (lastStatusesRef.current[r.id] !== (r.status || "")) {
+              changed = true;
+              break;
+            }
+          }
         }
-        lastStatusesRef.current = nextStatuses;
+        if (changed) {
+          setRideList(rides);
+          const nextStatuses: { [id: number]: string } = {};
+          for (const r of rides) {
+            nextStatuses[r.id] = r.status || "";
+          }
+          lastStatusesRef.current = nextStatuses;
+        }
       }
     } catch (err) {
       setRideList([]);
@@ -406,9 +420,9 @@ export default function CustomerDashboard() {
     }
   }, [token]);
 
-  // --- FIXED POLLING: only poll when there are active rides ---
+  // --- FIXED POLLING LOGIC ---
   useEffect(() => {
-    // Clear any previous interval
+    // Clear previous interval
     if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
     // Only poll if there are active rides
@@ -1204,7 +1218,7 @@ export default function CustomerDashboard() {
               {pickupTimeZone || "Loading..."}
             </div>
             <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-              Pick Your Vehicle Type:
+              Vehicle Type:
             </div>
             <div
               style={{
