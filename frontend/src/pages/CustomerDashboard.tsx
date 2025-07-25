@@ -909,7 +909,7 @@ export default function CustomerDashboard() {
       )}
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
-        <h3 style={{ marginBottom: 8 }}>Your Rides</h3>
+        <h3 style={{ marginBottom: 8 }}>See Your Rides, to cancel or edit, please refresh your page if you want to request a new ride</h3>
         {rideListLoading ? (
           <div>Loading...</div>
         ) : rideList.length === 0 ? (
