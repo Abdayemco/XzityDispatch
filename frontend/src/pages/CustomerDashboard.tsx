@@ -221,6 +221,18 @@ export default function CustomerDashboard() {
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- NEW: Button logic state ---
+  const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
+  const [scheduledRideLimitError, setScheduledRideLimitError] = useState<string | null>(null);
+
+  // --- Button logic: count rides ---
+  const activeRidesCount = rideList.filter(
+    r => ["pending", "accepted", "in_progress"].includes((r.status || "").toLowerCase().trim())
+  ).length;
+  const scheduledRidesCount = rideList.filter(
+    r => (r.status || "").toLowerCase().trim() === "scheduled"
+  ).length;
+
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
     const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
     if (!apiKey) {
@@ -476,6 +488,20 @@ export default function CustomerDashboard() {
     };
   }, [rideList]);
 
+  // --- BUTTON LOGIC: handle errors and disables ---
+  useEffect(() => {
+    if (activeRidesCount >= 3) {
+      setActiveRideLimitError("Only 3 active rides are allowed. Please cancel rides below to request a new one.");
+    } else {
+      setActiveRideLimitError(null);
+    }
+    if (scheduledRidesCount >= 5) {
+      setScheduledRideLimitError("Only 5 scheduled rides are allowed. Please cancel rides below to request a new one.");
+    } else {
+      setScheduledRideLimitError(null);
+    }
+  }, [activeRidesCount, scheduledRidesCount]);
+
   const handleSendMessage = async (text: string, rideIdForChat: number) => {
     const customerId = getCustomerIdFromStorage();
     if (!rideIdForChat || !customerId) return;
@@ -495,6 +521,12 @@ export default function CustomerDashboard() {
   };
 
   async function handleRequestRide() {
+    if (
+      activeRidesCount >= 3
+    ) {
+      setActiveRideLimitError("Only 3 active rides are allowed. Please cancel rides below to request a new one.");
+      return;
+    }
     if (
       rideId &&
       ["pending", "accepted", "in_progress", "scheduled"].includes(
@@ -554,6 +586,12 @@ export default function CustomerDashboard() {
   }
 
   async function handleConfirmScheduledRide() {
+    if (
+      scheduledRidesCount >= 5
+    ) {
+      setScheduledRideLimitError("Only 5 scheduled rides are allowed. Please cancel rides below to request a new one.");
+      return;
+    }
     if (
       !userLocation ||
       !schedDatetime ||
@@ -847,8 +885,10 @@ export default function CustomerDashboard() {
           margin: "24px 0",
           textAlign: "center",
           display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
           justifyContent: "center",
-          gap: 20,
+          gap: 10,
         }}
       >
         <button
@@ -856,6 +896,7 @@ export default function CustomerDashboard() {
             waiting ||
             !pickupLocation ||
             !vehicleType ||
+            activeRidesCount >= 3 ||
             !!(
               rideId &&
               ["pending", "accepted", "in_progress", "scheduled"].includes(
@@ -877,6 +918,11 @@ export default function CustomerDashboard() {
         >
           Request Ride
         </button>
+        {activeRideLimitError && (
+          <div style={{ color: "#d32f2f", marginTop: 6 }}>
+            {activeRideLimitError}
+          </div>
+        )}
         <button
           style={{
             background: "#1976D2",
@@ -890,6 +936,7 @@ export default function CustomerDashboard() {
           onClick={openScheduleModal}
           disabled={
             waiting ||
+            scheduledRidesCount >= 5 ||
             !!(
               rideId &&
               ["pending", "accepted", "in_progress", "scheduled"].includes(
@@ -900,6 +947,11 @@ export default function CustomerDashboard() {
         >
           Schedule Ride
         </button>
+        {scheduledRideLimitError && (
+          <div style={{ color: "#d32f2f", marginTop: 6 }}>
+            {scheduledRideLimitError}
+          </div>
+        )}
       </div>
       {pickupLocation && (
         <div style={{ textAlign: "center", color: "#888" }}>
@@ -1275,7 +1327,7 @@ export default function CustomerDashboard() {
             />
             <div style={{ textAlign: "center" }}>
               <button
-                disabled={schedWaiting}
+                disabled={schedWaiting || scheduledRidesCount >= 5}
                 style={{
                   background: "#388e3c",
                   color: "#fff",
@@ -1311,6 +1363,11 @@ export default function CustomerDashboard() {
             {schedError && (
               <div style={{ color: "#d32f2f", marginTop: 10 }}>
                 {schedError}
+              </div>
+            )}
+            {scheduledRideLimitError && (
+              <div style={{ color: "#d32f2f", marginTop: 10 }}>
+                {scheduledRideLimitError}
               </div>
             )}
           </div>
