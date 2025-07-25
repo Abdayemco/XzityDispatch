@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -17,7 +17,6 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
-// VEHICLE OPTIONS
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -29,7 +28,6 @@ const vehicleOptions = [
   { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
 ];
 
-// ICONS
 function createLeafletIcon(url: string, w = 32, h = 41) {
   return L.icon({
     iconUrl: url,
@@ -39,6 +37,7 @@ function createLeafletIcon(url: string, w = 32, h = 41) {
     shadowUrl: undefined,
   });
 }
+
 function createEmergencyIcon(url: string) {
   return L.icon({
     iconUrl: url,
@@ -48,6 +47,7 @@ function createEmergencyIcon(url: string) {
     shadowUrl: undefined,
   });
 }
+
 function getCustomerIdFromStorage(): number | null {
   const raw = localStorage.getItem("userId");
   if (!raw) return null;
@@ -92,6 +92,7 @@ type RideListItem = {
   note?: string;
   driver?: DriverInfo;
 };
+
 function RateDriver({
   rideId,
   onRated,
@@ -111,7 +112,10 @@ function RateDriver({
     setSubmitting(true);
     await fetch(`${API_URL}/api/rides/${rideId}/rate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("token")}`,
+      },
       body: JSON.stringify({ rating, feedback }),
     });
     setSubmitting(false);
@@ -157,29 +161,6 @@ function RateDriver({
   );
 }
 
-// ------ Restore this helper! ------
-async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
-  const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
-  if (!apiKey) {
-    console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
-    return "UTC";
-  }
-  try {
-    const res = await fetch(
-      `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
-    );
-    const data = await res.json();
-    if (data.zoneName) {
-      return data.zoneName;
-    } else if (data.status !== "OK" && data.message) {
-      console.error("TimeZoneDB error:", data.message);
-    }
-  } catch (err) {
-    console.error("Timezone fetch error:", err);
-  }
-  return "UTC";
-}
-
 function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
   localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
   localStorage.setItem("currentRideStatus", rideStatus || "");
@@ -193,12 +174,14 @@ export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token")
   );
-  const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(
-    null
-  );
-  const [pickupLocation, setPickupLocation] = useState<{ lng: number; lat: number } | null>(
-    null
-  );
+  const [userLocation, setUserLocation] = useState<{
+    lng: number;
+    lat: number;
+  } | null>(null);
+  const [pickupLocation, setPickupLocation] = useState<{
+    lng: number;
+    lat: number;
+  } | null>(null);
   const [pickupSet, setPickupSet] = useState(false);
   const [rideId, setRideId] = useState<number | null>(null);
   const [vehicleType, setVehicleType] = useState<string>("");
@@ -207,8 +190,12 @@ export default function CustomerDashboard() {
   const [rideStatus, setRideStatus] = useState<RideStatus>(null);
   const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
   const [showDoneActions, setShowDoneActions] = useState(false);
-  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
-  const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{ [rideId: string]: any[] }>({});
+  const [emergencyLocations, setEmergencyLocations] = useState<
+    EmergencyLocation[]
+  >([]);
+  const [chatMessagesByRideId, setChatMessagesByRideId] = useState<{
+    [rideId: string]: any[];
+  }>({});
   const [showRating, setShowRating] = useState(false);
   const [showDoneButton, setShowDoneButton] = useState(false);
   const [ratingRideId, setRatingRideId] = useState<number | null>(null);
@@ -230,114 +217,63 @@ export default function CustomerDashboard() {
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // SMART POLLING: only poll if any ride status changes
+  // --- POLLING CONTROL ---
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchRidesSmart = async () => {
-    const customerId = getCustomerIdFromStorage();
-    if (!customerId) return;
+  async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
+    const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
+    if (!apiKey) {
+      console.error("Missing VITE_TIMEZONEDB_API_KEY env variable!");
+      return "UTC";
+    }
     try {
       const res = await fetch(
-        `${API_URL}/api/rides/all?customerId=${customerId}`,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
+        `https://api.timezonedb.com/v2.1/get-time-zone?key=${apiKey}&format=json&by=position&lat=${lat}&lng=${lng}`
       );
-      if (res.ok) {
-        const rides: RideListItem[] = await res.json();
-        const filtered = rides.filter((r) =>
-          ["pending", "accepted", "in_progress", "scheduled"].includes(
-            (r.status || "").toLowerCase().trim()
-          )
-        );
-        // Check if any status has changed compared to lastStatusesRef
-        let changed = false;
-        for (const r of filtered) {
-          if (lastStatusesRef.current[r.id] !== (r.status || "")) {
-            changed = true;
-            break;
-          }
-        }
-        if (changed) {
-          setRideList(filtered);
-          const nextStatuses: { [id: number]: string } = {};
-          for (const r of filtered) {
-            nextStatuses[r.id] = r.status || "";
-          }
-          lastStatusesRef.current = nextStatuses;
-          startPolling();
-        } else {
-          stopPolling();
-        }
+      const data = (await res.json()) as {
+        zoneName?: string;
+        message?: string;
+        status?: string;
+      };
+      if (data.zoneName) {
+        return data.zoneName;
+      } else if (data.status !== "OK" && data.message) {
+        console.error("TimeZoneDB error:", data.message);
       }
-    } catch (err) {}
-  };
-
-  const startPolling = () => {
-    stopPolling();
-    pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
-  };
-  const stopPolling = () => {
-    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-    pollingTimerRef.current = null;
-  };
-  useEffect(() => {
-    const initial = async () => {
-      const customerId = getCustomerIdFromStorage();
-      if (!customerId) return;
-      setRideListLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/api/rides/all?customerId=${customerId}`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
-        );
-        if (res.ok) {
-          const rides: RideListItem[] = await res.json();
-          const filtered = rides.filter((r) =>
-            ["pending", "accepted", "in_progress", "scheduled"].includes(
-              (r.status || "").toLowerCase().trim()
-            )
-          );
-          setRideList(filtered);
-          const statuses: { [id: number]: string } = {};
-          for (const r of filtered) {
-            statuses[r.id] = r.status || "";
-          }
-          lastStatusesRef.current = statuses;
-        }
-      } catch (err) {
-        setRideList([]);
-      } finally {
-        setRideListLoading(false);
-        startPolling();
-      }
-    };
-    initial();
-    return () => stopPolling();
-    // eslint-disable-next-line
-  }, [
-    token,
-    showDoneActions,
-    schedWaiting,
-    schedEditMode,
-    scheduledModalOpen,
-    rideStatus,
-  ]);
-
-  useEffect(() => {
-    if (
-      rideStatus === "pending" ||
-      rideStatus === "scheduled" ||
-      rideStatus === "accepted" ||
-      rideStatus === "in_progress"
-    ) {
-      startPolling();
+    } catch (err) {
+      console.error("Timezone fetch error:", err);
     }
-    // eslint-disable-next-line
-  }, [rideStatus]);
+    return "UTC";
+  }
+
+  function openScheduleModal() {
+    setSchedEditMode(false);
+    setSchedRideId(null);
+    setSchedVehicleType("");
+    setSchedDestinationName("");
+    setSchedDatetime("");
+    setSchedNote("");
+    setSchedError(null);
+    setScheduledModalOpen(true);
+  }
+  function closeScheduleModal() {
+    setScheduledModalOpen(false);
+    setSchedError(null);
+    setSchedEditMode(false);
+    setSchedRideId(null);
+  }
+  function getScheduledUTC(datetimeLocal: string, timezone: string): string {
+    if (!datetimeLocal || !timezone) return "";
+    const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
+    return dt.toUTC().toISO();
+  }
+
+  useEffect(() => {
+    const onStorage = () => setToken(localStorage.getItem("token"));
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -428,6 +364,64 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
+  // SMART POLLING: only refresh when status changes
+  const fetchRidesSmart = useCallback(async () => {
+    const customerId = getCustomerIdFromStorage();
+    if (!customerId) return;
+    try {
+      const res = await fetch(
+        `${API_URL}/api/rides/all?customerId=${customerId}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      if (res.ok) {
+        const rides: RideListItem[] = await res.json();
+        const filtered = rides.filter((r) =>
+          ["pending", "accepted", "in_progress", "scheduled"].includes(
+            (r.status || "").toLowerCase().trim()
+          )
+        );
+        // Check if statuses have changed
+        let changed = false;
+        for (const r of filtered) {
+          if (lastStatusesRef.current[r.id] !== (r.status || "")) {
+            changed = true;
+            break;
+          }
+        }
+        if (changed) {
+          setRideList(filtered);
+          const nextStatuses: { [id: number]: string } = {};
+          for (const r of filtered) {
+            nextStatuses[r.id] = r.status || "";
+          }
+          lastStatusesRef.current = nextStatuses;
+        }
+      }
+    } catch (err) {}
+  }, [token]);
+
+  useEffect(() => {
+    fetchRidesSmart();
+    // Set up polling every 4 seconds, but only for active rides
+    if (
+      rideList.some((r) =>
+        ["pending", "scheduled", "accepted", "in_progress"].includes(
+          (r.status || "").toLowerCase().trim()
+        )
+      )
+    ) {
+      pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
+    } else {
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    }
+    return () => {
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    };
+  }, [fetchRidesSmart, rideList]);
+
+  // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
     let timers: { [rideId: string]: NodeJS.Timeout } = {};
     rideList.forEach((ride) => {
@@ -499,6 +493,7 @@ export default function CustomerDashboard() {
       }),
     });
   };
+
   async function handleRequestRide() {
     if (
       rideId &&
@@ -708,28 +703,7 @@ export default function CustomerDashboard() {
     }
   }
 
-  function getScheduledUTC(datetimeLocal: string, timezone: string): string {
-    if (!datetimeLocal || !timezone) return "";
-    const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
-    return dt.toUTC().toISO();
-  }
-
-  function openScheduleModal() {
-    setSchedEditMode(false);
-    setSchedRideId(null);
-    setSchedVehicleType("");
-    setSchedDestinationName("");
-    setSchedDatetime("");
-    setSchedNote("");
-    setSchedError(null);
-    setScheduledModalOpen(true);
-  }
-  function closeScheduleModal() {
-    setScheduledModalOpen(false);
-    setSchedError(null);
-    setSchedEditMode(false);
-    setSchedRideId(null);
-  }
+  // --- UI Rendering Section ---
   return (
     <div style={{ padding: 24 }}>
       <h2
@@ -1160,6 +1134,7 @@ export default function CustomerDashboard() {
           </div>
         )}
       </div>
+
       {scheduledModalOpen && (
         <div
           style={{
