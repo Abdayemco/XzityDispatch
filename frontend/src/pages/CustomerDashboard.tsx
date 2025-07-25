@@ -406,13 +406,27 @@ export default function CustomerDashboard() {
     }
   }, [token]);
 
+  // --- FIXED POLLING: only poll when there are active rides ---
   useEffect(() => {
+    // Clear any previous interval
+    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+
+    // Only poll if there are active rides
+    const hasActiveRides = rideList.some(ride =>
+      ["pending", "accepted", "in_progress", "scheduled"].includes((ride.status || "").toLowerCase().trim())
+    );
+
+    if (hasActiveRides) {
+      pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
+    }
+
+    // Always fetch immediately on mount/change
     fetchRidesSmart();
-    pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
+
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
-  }, [fetchRidesSmart]);
+  }, [rideList, fetchRidesSmart]);
 
   // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
