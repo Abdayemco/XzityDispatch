@@ -713,6 +713,44 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
 };
 
 /**
+ * NEW: CUSTOMER LOCATION UPDATE ENDPOINT
+ * Records or updates the customer's current location.
+ * You can store this in a separate table (e.g., CustomerLocation) or in the user's profile.
+ * Below is a simple upsert to the user record. Adjust as needed!
+ */
+export const updateCustomerLocation = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { customerId, lat, lng, timestamp } = req.body;
+    const numericCustomerId = Number(customerId);
+    if (
+      !numericCustomerId ||
+      typeof numericCustomerId !== "number" ||
+      isNaN(numericCustomerId) ||
+      typeof lat !== "number" ||
+      typeof lng !== "number"
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Missing or invalid required fields" });
+    }
+    // You can use a separate location table or update user profile.
+    // This example just updates the user record with last known location.
+    await prisma.user.update({
+      where: { id: numericCustomerId },
+      data: {
+        lastKnownLat: lat,
+        lastKnownLng: lng,
+        lastLocationAt: timestamp ? new Date(timestamp) : new Date(),
+      },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating customer location:", error);
+    next(error);
+  }
+};
+
+/**
  * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
  * Should be imported and started in index.ts
  */
