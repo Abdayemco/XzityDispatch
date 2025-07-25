@@ -170,26 +170,6 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
-// --- The FIX: utility to check for active rides ---
-// Only block if there's a ride not cancelled or done
-function hasActiveRide(rideList: RideListItem[]) {
-  return rideList.some(
-    (r) =>
-      ["pending", "accepted", "in_progress", "scheduled"].includes(
-        (r.status || "").toLowerCase().trim()
-      )
-  );
-}
-
-function noBlockActiveRide(rideList: RideListItem[]) {
-  // Only block if there is a ride that is not cancelled or done
-  return rideList.some(
-    (r) =>
-      !["done", "cancelled"].includes((r.status || "").toLowerCase().trim())
-      && ["pending", "accepted", "in_progress", "scheduled"].includes((r.status || "").toLowerCase().trim())
-  );
-}
-
 export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token")
@@ -237,6 +217,21 @@ export default function CustomerDashboard() {
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
+  // --- Limit logic ---
+  const maxActiveRides = 3;
+  const maxScheduledRides = 5;
+
+  // Get counts
+  const activeRegularRidesCount = rideList.filter(
+    r =>
+      !["scheduled", "done", "cancelled"].includes((r.status || "").toLowerCase().trim())
+      && ["pending", "accepted", "in_progress"].includes((r.status || "").toLowerCase().trim())
+  ).length;
+  const activeScheduledRidesCount = rideList.filter(
+    r => (r.status || "").toLowerCase().trim() === "scheduled"
+  ).length;
+
+  // --- POLLING CONTROL ---
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -383,11 +378,12 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // SMART POLLING: only refresh when status changes
+  // SMART POLLING: always fetch all rides for this customer
   const fetchRidesSmart = useCallback(async () => {
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
     try {
+      setRideListLoading(true);
       const res = await fetch(
         `${API_URL}/api/rides/all?customerId=${customerId}`,
         {
@@ -396,14 +392,18 @@ export default function CustomerDashboard() {
       );
       if (res.ok) {
         const rides: RideListItem[] = await res.json();
-        setRideList(rides); // <-- FIX: set all rides, not just active
+        setRideList(rides);
         const nextStatuses: { [id: number]: string } = {};
         for (const r of rides) {
           nextStatuses[r.id] = r.status || "";
         }
         lastStatusesRef.current = nextStatuses;
       }
-    } catch (err) {}
+    } catch (err) {
+      setRideList([]);
+    } finally {
+      setRideListLoading(false);
+    }
   }, [token]);
 
   useEffect(() => {
@@ -488,18 +488,9 @@ export default function CustomerDashboard() {
   };
 
   async function handleRequestRide() {
-    if (
-      rideList.some(
-        (r) =>
-          !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
-          ["pending", "accepted", "in_progress", "scheduled"].includes(
-            (r.status || "").toLowerCase().trim()
-          )
-      )
-    ) {
-      setError(
-        "You already have an active ride. Please cancel or complete it before requesting a new one."
-      );
+    // --- LIMIT CHECK ---
+    if (activeRegularRidesCount >= maxActiveRides) {
+      setError("Not more than 3 active rides are allowed. Please cancel rides to request new ones.");
       return;
     }
     if (!pickupLocation || !vehicleType) {
@@ -551,6 +542,11 @@ export default function CustomerDashboard() {
   }
 
   async function handleConfirmScheduledRide() {
+    // --- LIMIT CHECK ---
+    if (activeScheduledRidesCount >= maxScheduledRides) {
+      setSchedError("Not more than 5 scheduled rides are allowed. Please cancel rides to request new ones.");
+      return;
+    }
     if (
       !userLocation ||
       !schedDatetime ||
@@ -728,8 +724,20 @@ export default function CustomerDashboard() {
         Your current local time at pickup location: {localTime}{" "}
         {pickupTimeZone !== "UTC" ? `(${pickupTimeZone})` : ""}
       </div>
-      {error && (
-        <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>
+      {(error || schedError) && (
+        <div style={{ color: "#d32f2f", textAlign: "center" }}>
+          {error || schedError}
+        </div>
+      )}
+      {(activeRegularRidesCount >= maxActiveRides) && (
+        <div style={{ color: "#d32f2f", textAlign: "center", marginBottom: 8 }}>
+          Not more than 3 active rides are allowed. Please cancel rides to request new ones.
+        </div>
+      )}
+      {(activeScheduledRidesCount >= maxScheduledRides) && (
+        <div style={{ color: "#d32f2f", textAlign: "center", marginBottom: 8 }}>
+          Not more than 5 scheduled rides are allowed. Please cancel rides to request new ones.
+        </div>
       )}
       {userLocation && (
         <MapContainer
@@ -855,13 +863,7 @@ export default function CustomerDashboard() {
             waiting ||
             !pickupLocation ||
             !vehicleType ||
-            rideList.some(
-              (r) =>
-                !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
-                ["pending", "accepted", "in_progress", "scheduled"].includes(
-                  (r.status || "").toLowerCase().trim()
-                )
-            )
+            activeRegularRidesCount >= maxActiveRides
           }
           onClick={handleRequestRide}
           style={{
@@ -890,13 +892,7 @@ export default function CustomerDashboard() {
           onClick={openScheduleModal}
           disabled={
             waiting ||
-            rideList.some(
-              (r) =>
-                !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
-                ["pending", "accepted", "in_progress", "scheduled"].includes(
-                  (r.status || "").toLowerCase().trim()
-                )
-            )
+            activeScheduledRidesCount >= maxScheduledRides
           }
         >
           Schedule Ride
@@ -1281,7 +1277,7 @@ export default function CustomerDashboard() {
             />
             <div style={{ textAlign: "center" }}>
               <button
-                disabled={schedWaiting}
+                disabled={schedWaiting || activeScheduledRidesCount >= maxScheduledRides}
                 style={{
                   background: "#388e3c",
                   color: "#fff",
