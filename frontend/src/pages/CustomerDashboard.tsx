@@ -1204,7 +1204,7 @@ export default function CustomerDashboard() {
               {pickupTimeZone || "Loading..."}
             </div>
             <div style={{ marginBottom: 8, fontWeight: "bold" }}>
-              Vehicle Type:
+              Pick Your Vehicle Type:
             </div>
             <div
               style={{
