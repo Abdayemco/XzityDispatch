@@ -170,6 +170,15 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
+function hasActiveRide(rideList: RideListItem[]) {
+  return rideList.some(
+    (r) =>
+      ["pending", "accepted", "in_progress", "scheduled"].includes(
+        (r.status || "").toLowerCase().trim()
+      )
+  );
+}
+
 export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token")
@@ -390,7 +399,7 @@ export default function CustomerDashboard() {
             break;
           }
         }
-        if (changed) {
+        if (changed || filtered.length !== Object.keys(lastStatusesRef.current).length) {
           setRideList(filtered);
           const nextStatuses: { [id: number]: string } = {};
           for (const r of filtered) {
@@ -404,7 +413,6 @@ export default function CustomerDashboard() {
 
   useEffect(() => {
     fetchRidesSmart();
-    // Set up polling every 4 seconds, but only for active rides
     if (
       rideList.some((r) =>
         ["pending", "scheduled", "accepted", "in_progress"].includes(
@@ -495,12 +503,7 @@ export default function CustomerDashboard() {
   };
 
   async function handleRequestRide() {
-    if (
-      rideId &&
-      ["pending", "accepted", "in_progress", "scheduled"].includes(
-        rideStatus || ""
-      )
-    ) {
+    if (hasActiveRide(rideList)) {
       setError(
         "You already have an active ride. Please cancel or complete it before requesting a new one."
       );
@@ -546,6 +549,7 @@ export default function CustomerDashboard() {
       setRideId(data.rideId || data.id);
       setRideStatus("pending");
       setWaiting(false);
+      await fetchRidesSmart();
     } catch (err: any) {
       setError("Network or server error.");
     } finally {
@@ -637,6 +641,7 @@ export default function CustomerDashboard() {
       setSchedDatetime("");
       setSchedNote("");
       setSchedError(null);
+      await fetchRidesSmart();
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
@@ -703,7 +708,6 @@ export default function CustomerDashboard() {
     }
   }
 
-  // --- UI Rendering Section ---
   return (
     <div style={{ padding: 24 }}>
       <h2
@@ -856,12 +860,7 @@ export default function CustomerDashboard() {
             waiting ||
             !pickupLocation ||
             !vehicleType ||
-            !!(
-              rideId &&
-              ["pending", "accepted", "in_progress", "scheduled"].includes(
-                rideStatus || ""
-              )
-            )
+            hasActiveRide(rideList)
           }
           onClick={handleRequestRide}
           style={{
@@ -890,12 +889,7 @@ export default function CustomerDashboard() {
           onClick={openScheduleModal}
           disabled={
             waiting ||
-            !!(
-              rideId &&
-              ["pending", "accepted", "in_progress", "scheduled"].includes(
-                rideStatus || ""
-              )
-            )
+            hasActiveRide(rideList)
           }
         >
           Schedule Ride
@@ -909,7 +903,7 @@ export default function CustomerDashboard() {
       )}
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
-        <h3 style={{ marginBottom: 8 }}>See Your Rides, to cancel or edit, please refresh your page if you want to request a new ride</h3>
+        <h3 style={{ marginBottom: 8 }}>See Your Rides below, to cancel or edit rides.</h3>
         {rideListLoading ? (
           <div>Loading...</div>
         ) : rideList.length === 0 ? (
