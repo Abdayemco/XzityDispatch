@@ -170,12 +170,23 @@ const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
 
+// --- The FIX: utility to check for active rides ---
+// Only block if there's a ride not cancelled or done
 function hasActiveRide(rideList: RideListItem[]) {
   return rideList.some(
     (r) =>
       ["pending", "accepted", "in_progress", "scheduled"].includes(
         (r.status || "").toLowerCase().trim()
       )
+  );
+}
+
+function noBlockActiveRide(rideList: RideListItem[]) {
+  // Only block if there is a ride that is not cancelled or done
+  return rideList.some(
+    (r) =>
+      !["done", "cancelled"].includes((r.status || "").toLowerCase().trim())
+      && ["pending", "accepted", "in_progress", "scheduled"].includes((r.status || "").toLowerCase().trim())
   );
 }
 
@@ -226,7 +237,6 @@ export default function CustomerDashboard() {
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
 
-  // --- POLLING CONTROL ---
   const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -386,48 +396,23 @@ export default function CustomerDashboard() {
       );
       if (res.ok) {
         const rides: RideListItem[] = await res.json();
-        const filtered = rides.filter((r) =>
-          ["pending", "accepted", "in_progress", "scheduled"].includes(
-            (r.status || "").toLowerCase().trim()
-          )
-        );
-        // Check if statuses have changed
-        let changed = false;
-        for (const r of filtered) {
-          if (lastStatusesRef.current[r.id] !== (r.status || "")) {
-            changed = true;
-            break;
-          }
+        setRideList(rides); // <-- FIX: set all rides, not just active
+        const nextStatuses: { [id: number]: string } = {};
+        for (const r of rides) {
+          nextStatuses[r.id] = r.status || "";
         }
-        if (changed || filtered.length !== Object.keys(lastStatusesRef.current).length) {
-          setRideList(filtered);
-          const nextStatuses: { [id: number]: string } = {};
-          for (const r of filtered) {
-            nextStatuses[r.id] = r.status || "";
-          }
-          lastStatusesRef.current = nextStatuses;
-        }
+        lastStatusesRef.current = nextStatuses;
       }
     } catch (err) {}
   }, [token]);
 
   useEffect(() => {
     fetchRidesSmart();
-    if (
-      rideList.some((r) =>
-        ["pending", "scheduled", "accepted", "in_progress"].includes(
-          (r.status || "").toLowerCase().trim()
-        )
-      )
-    ) {
-      pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
-    } else {
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-    }
+    pollingTimerRef.current = setInterval(fetchRidesSmart, 4000);
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
-  }, [fetchRidesSmart, rideList]);
+  }, [fetchRidesSmart]);
 
   // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
@@ -503,7 +488,15 @@ export default function CustomerDashboard() {
   };
 
   async function handleRequestRide() {
-    if (hasActiveRide(rideList)) {
+    if (
+      rideList.some(
+        (r) =>
+          !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
+          ["pending", "accepted", "in_progress", "scheduled"].includes(
+            (r.status || "").toLowerCase().trim()
+          )
+      )
+    ) {
       setError(
         "You already have an active ride. Please cancel or complete it before requesting a new one."
       );
@@ -673,6 +666,7 @@ export default function CustomerDashboard() {
       setShowDoneActions(true);
       setWaiting(false);
       setRideList((prev) => prev.filter((r) => r.id !== rideIdToCancel));
+      await fetchRidesSmart();
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
@@ -702,6 +696,7 @@ export default function CustomerDashboard() {
       }
       setWaiting(false);
       setRatingRideId(rideIdToMark); // show rating UI for this ride
+      await fetchRidesSmart();
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
@@ -860,7 +855,13 @@ export default function CustomerDashboard() {
             waiting ||
             !pickupLocation ||
             !vehicleType ||
-            hasActiveRide(rideList)
+            rideList.some(
+              (r) =>
+                !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
+                ["pending", "accepted", "in_progress", "scheduled"].includes(
+                  (r.status || "").toLowerCase().trim()
+                )
+            )
           }
           onClick={handleRequestRide}
           style={{
@@ -889,7 +890,13 @@ export default function CustomerDashboard() {
           onClick={openScheduleModal}
           disabled={
             waiting ||
-            hasActiveRide(rideList)
+            rideList.some(
+              (r) =>
+                !["done", "cancelled"].includes((r.status || "").toLowerCase().trim()) &&
+                ["pending", "accepted", "in_progress", "scheduled"].includes(
+                  (r.status || "").toLowerCase().trim()
+                )
+            )
           }
         >
           Schedule Ride
@@ -906,13 +913,18 @@ export default function CustomerDashboard() {
         <h3 style={{ marginBottom: 8 }}>See Your Rides below, to cancel or edit rides.</h3>
         {rideListLoading ? (
           <div>Loading...</div>
-        ) : rideList.length === 0 ? (
+        ) : rideList.filter(ride =>
+            ["pending", "accepted", "in_progress", "scheduled"].includes((ride.status || "").toLowerCase().trim())
+          ).length === 0 ? (
           <div style={{ color: "#888" }}>
             No scheduled or active rides.
           </div>
         ) : (
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {rideList
+              .filter(ride =>
+                ["pending", "accepted", "in_progress", "scheduled"].includes((ride.status || "").toLowerCase().trim())
+              )
               .sort((a, b) => {
                 if (a.scheduledAt && b.scheduledAt)
                   return (
