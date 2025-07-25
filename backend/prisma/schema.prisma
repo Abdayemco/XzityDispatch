@@ -74,6 +74,11 @@ model User {
   country         String?   // ISO country code, e.g. "LB"
   countryName     String?   // Human readable, e.g. "Lebanon"
   area            String?   // Area/prefix, e.g. "70" or "212"
+
+  // --- Last known location tracking ---
+  lastKnownLat   Float?
+  lastKnownLng   Float?
+  lastLocationAt DateTime?
 }
 
 model Ride {
