@@ -3,7 +3,7 @@ import { prisma } from "../utils/prisma";
 import { VehicleType, RideStatus } from "@prisma/client";
 import { DateTime } from "luxon";
 
-const LOCAL_TZ = "Africa/Cairo"; // Set your local timezone here
+const LOCAL_TZ = "Africa/Cairo";
 
 // Helper to normalize and validate vehicleType input (case-insensitive)
 function normalizeVehicleType(input: any): VehicleType | undefined {
@@ -272,9 +272,9 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
 };
 
 // --- GET ALL RIDES FOR CUSTOMER (SCHEDULED, ACTIVE, DONE, except CANCELLED) ---
+// UPDATE: include driver's lastKnownLat/lastKnownLng/acceptedAt in API for accepted rides!
 export const getAllCustomerRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // You can get customerId either from query or from req.user (if using authentication)
     let customerId: number | undefined;
     if (req.query.customerId) {
       customerId = Number(req.query.customerId);
@@ -304,10 +304,14 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       destinationName: r.destinationName,
       note: r.note,
       status: r.status,
+      acceptedAt: toLocalISOString(r.acceptedAt), // for accepted rides
       driver: r.driver ? {
         id: r.driver.id,
         name: r.driver.name,
         vehicleType: r.driver.vehicleType,
+        lastKnownLat: r.driver.lastKnownLat,      // <-- ADDED
+        lastKnownLng: r.driver.lastKnownLng,      // <-- ADDED
+        acceptedAt: toLocalISOString(r.acceptedAt), // <-- ADDED, for frontend 15min rule
       } : undefined,
       rated: r.rating !== null && r.rating !== undefined,
     }));
@@ -445,7 +449,6 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
 
     if (!updatedRide) return res.status(404).json({ error: "Ride not found" });
 
-    // Convert ride times for response
     res.json({
       ...updatedRide,
       scheduledAt: toLocalISOString(updatedRide.scheduledAt),
@@ -455,6 +458,16 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
       completedAt: toLocalISOString(updatedRide.completedAt),
       cancelledAt: toLocalISOString(updatedRide.cancelledAt),
       noShowReportedAt: toLocalISOString(updatedRide.noShowReportedAt),
+      driver: updatedRide.driver
+        ? {
+            id: updatedRide.driver.id,
+            name: updatedRide.driver.name,
+            vehicleType: updatedRide.driver.vehicleType,
+            lastKnownLat: updatedRide.driver.lastKnownLat,
+            lastKnownLng: updatedRide.driver.lastKnownLng,
+            acceptedAt: toLocalISOString(updatedRide.acceptedAt),
+          }
+        : undefined,
     });
   } catch (error) {
     console.error("Error accepting ride:", error);
@@ -521,7 +534,7 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
     if (ride.status !== RideStatus.SCHEDULED) {
       return res.status(400).json({ error: "Ride is not scheduled" });
     }
-    const graceMs = 10 * 60 * 1000; // 10 min grace period
+    const graceMs = 10 * 60 * 1000;
     const now = Date.now();
     const scheduledTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : null;
     if (!scheduledTime || now < scheduledTime + graceMs) {
@@ -532,8 +545,8 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       data: { status: RideStatus.NO_SHOW, noShowReportedAt: new Date() },
     });
 
-    res.json({ 
-      message: "Ride marked as No Show", 
+    res.json({
+      message: "Ride marked as No Show",
       ride: {
         ...updated,
         scheduledAt: toLocalISOString(updated.scheduledAt),
@@ -587,7 +600,7 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
       default:
         statusForFrontend = String(ride.status || "unknown").toLowerCase();
     }
-    return res.json({ 
+    return res.json({
       status: statusForFrontend,
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
@@ -632,6 +645,7 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
+// UPDATE: include driver location for accepted ride status
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user as { id: number; role: string };
@@ -639,7 +653,6 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
     const role = user.role?.toLowerCase();
     let where: any = {};
     if (role === "customer") {
-      // Only consider scheduled rides as "current" if within 30min of scheduledAt
       const now = new Date();
       const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
       where = {
@@ -691,6 +704,9 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
             id: ride.driver.id,
             name: ride.driver.name,
             vehicleType: (ride.driver.vehicleType || "").toLowerCase(),
+            lastKnownLat: ride.driver.lastKnownLat,   // <-- ADDED
+            lastKnownLng: ride.driver.lastKnownLng,   // <-- ADDED
+            acceptedAt: toLocalISOString(ride.acceptedAt), // <-- ADDED (for accepted rides)
           }
         : undefined,
       customer: ride.customer
@@ -705,6 +721,7 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
       destLng: ride.destLng,
       destinationName: ride.destinationName ?? undefined,
       note: ride.note ?? undefined,
+      acceptedAt: toLocalISOString(ride.acceptedAt), // <-- ADDED for consistency
     });
   } catch (error) {
     console.error("Error fetching current ride:", error);
@@ -714,9 +731,6 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
 
 /**
  * NEW: CUSTOMER LOCATION UPDATE ENDPOINT
- * Records or updates the customer's current location.
- * You can store this in a separate table (e.g., CustomerLocation) or in the user's profile.
- * Below is a simple upsert to the user record. Adjust as needed!
  */
 export const updateCustomerLocation = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -733,8 +747,6 @@ export const updateCustomerLocation = async (req: Request, res: Response, next: 
         .status(400)
         .json({ error: "Missing or invalid required fields" });
     }
-    // You can use a separate location table or update user profile.
-    // This example just updates the user record with last known location.
     await prisma.user.update({
       where: { id: numericCustomerId },
       data: {
@@ -752,7 +764,6 @@ export const updateCustomerLocation = async (req: Request, res: Response, next: 
 
 /**
  * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
- * Should be imported and started in index.ts
  */
 export async function cleanupStuckRides() {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
