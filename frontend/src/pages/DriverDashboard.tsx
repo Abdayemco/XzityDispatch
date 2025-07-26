@@ -41,6 +41,21 @@ const VEHICLE_TYPE_LABELS = {
   tow_truck: { label: "Tow Truck", icon: <FaTruckPickup /> }
 };
 
+// Haversine distance (in meters)
+function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371000; // meters
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 type Job = {
   id: string | number;
   pickupLat: number;
@@ -58,9 +73,9 @@ type Job = {
     | "no_show";
   assignedDriverId?: string | number;
   scheduledAt?: string | null;
-  lastKnownLat?: number;    // ADDED: for driver location
-  lastKnownLng?: number;    // ADDED: for driver location
-  acceptedAt?: string | null; // ADDED: for 15min logic
+  lastKnownLat?: number;
+  lastKnownLng?: number;
+  acceptedAt?: string | null;
 };
 
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
@@ -112,7 +127,6 @@ export default function DriverDashboard() {
     return saved ? Number(saved) : null;
   });
 
-  const [noShowEligible, setNoShowEligible] = useState(false);
   const [noShowMsg, setNoShowMsg] = useState<string | null>(null);
 
   const driverId = localStorage.getItem("driverId") || "";
@@ -211,7 +225,6 @@ export default function DriverDashboard() {
     []
   );
 
-  // --- Track location and update backend ---
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -235,7 +248,6 @@ export default function DriverDashboard() {
     }
   }, [driverLocation, locationLoaded, updateDriverLocationOnBackend]);
 
-  // --- DRIVER FIELDS for mapping and NoShow logic ---
   const fetchJobs = useCallback(async () => {
     try {
       setErrorMsg(null);
@@ -275,7 +287,6 @@ export default function DriverDashboard() {
     return () => clearInterval(interval);
   }, [fetchJobs, locationLoaded, driverJobId, cancelled, completed]);
 
-  // --- Accept Ride: include acceptedAt for timer logic ---
   const handleAccept = useCallback(
     async (jobId: string) => {
       if (driverJobId) return;
@@ -318,7 +329,6 @@ export default function DriverDashboard() {
     [driverJobId, driverId, token, jobs]
   );
 
-  // --- Start Ride ---
   async function handleStartRide() {
     if (!driverJobId) return;
     setStatusMsg(null);
@@ -351,32 +361,26 @@ export default function DriverDashboard() {
     }
   }
 
-  // --- No Show Button Logic: always available for scheduled jobs after grace period ---
+  // --- No Show Button Logic: enable if driver is within 30 meters of pickup ---
+  const canNoShow =
+    acceptedJob &&
+    driverLocation &&
+    acceptedJob.pickupLat &&
+    acceptedJob.pickupLng &&
+    getDistanceMeters(
+      driverLocation.lat,
+      driverLocation.lng,
+      acceptedJob.pickupLat,
+      acceptedJob.pickupLng
+    ) <= 30;
+
   useEffect(() => {
-    if (
-      acceptedJob &&
-      acceptedJob.status === "scheduled" &&
-      acceptedJob.scheduledAt
-    ) {
-      const schedTime = new Date(acceptedJob.scheduledAt).getTime();
-      const now = Date.now();
-      const eligible =
-        now > schedTime + NOSHOW_GRACE_MINUTES * 60 * 1000;
-      setNoShowEligible(eligible);
-      if (!eligible) {
-        setNoShowMsg(
-          `You can mark as "No Show" after ${
-            NOSHOW_GRACE_MINUTES
-          } minutes past the scheduled pickup time.`
-        );
-      } else {
-        setNoShowMsg(null);
-      }
+    if (!canNoShow) {
+      setNoShowMsg("Move closer to the pickup location (within 30 meters) to mark No Show.");
     } else {
-      setNoShowEligible(false);
       setNoShowMsg(null);
     }
-  }, [acceptedJob]);
+  }, [canNoShow]);
 
   async function handleNoShow() {
     if (!acceptedJob || !driverJobId) return;
@@ -401,8 +405,6 @@ export default function DriverDashboard() {
         setAcceptedJob(null);
         setDriverJobId(null);
         setJobStatus(null);
-        setNoShowEligible(false);
-        setNoShowMsg(null);
         setCompleted(false);
         setCancelled(false);
         setCountdown(0);
@@ -780,51 +782,53 @@ export default function DriverDashboard() {
         )}
 
       {driverJobId &&
-        jobStatus === "accepted" &&
-        !cancelled &&
-        !completed && (
+        jobStatus &&
+        !completed &&
+        !cancelled && (
           <div style={{ textAlign: "center", marginTop: 24, display: "flex", justifyContent: "center", gap: 24 }}>
-            <button
-              onClick={handleStartRide}
-              style={{
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                background: "#388e3c",
-                color: "#fff",
-                border: "none",
-                fontSize: 18,
-                fontWeight: "bold",
-                margin: "0 12px"
-              }}
-            >
-              Start Ride
-            </button>
-            {/* --- No Show Button next to Start Ride --- */}
-            {acceptedJob && acceptedJob.status === "scheduled" && (
+            {jobStatus === "accepted" && (
               <button
-                onClick={handleNoShow}
-                disabled={!noShowEligible}
+                onClick={handleStartRide}
                 style={{
-                  background: noShowEligible ? "#f44336" : "#aaa",
-                  color: "#fff",
-                  border: "none",
                   padding: "0.7em 1.4em",
                   borderRadius: 6,
-                  fontSize: 16,
-                  margin: "0 10px",
-                  opacity: noShowEligible ? 1 : 0.6,
-                  cursor: noShowEligible ? "pointer" : "not-allowed"
+                  background: "#388e3c",
+                  color: "#fff",
+                  border: "none",
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  margin: "0 12px"
                 }}
               >
-                Mark as No Show
+                Start Ride
               </button>
             )}
+            {/* --- No Show Button always visible for any active ride --- */}
+            <button
+              onClick={handleNoShow}
+              disabled={!canNoShow}
+              style={{
+                background: canNoShow ? "#f44336" : "#aaa",
+                color: "#fff",
+                border: "none",
+                padding: "0.7em 1.4em",
+                borderRadius: 6,
+                fontSize: 16,
+                margin: "0 10px",
+                opacity: canNoShow ? 1 : 0.6,
+                cursor: canNoShow ? "pointer" : "not-allowed"
+              }}
+            >
+              Mark as No Show
+            </button>
             {noShowMsg && (
-              <div style={{ color: "#d32f2f", marginTop: 6 }}>{noShowMsg}</div>
+              <div style={{ color: "#d32f2f", marginTop: 6, fontSize: 13 }}>{noShowMsg}</div>
             )}
-            <div style={{ marginTop: 8, color: "#888" }}>
-              Press "Start Ride" when you pick up the customer.
-            </div>
+            {jobStatus === "accepted" && (
+              <div style={{ marginTop: 8, color: "#888" }}>
+                Press "Start Ride" when you pick up the customer.
+              </div>
+            )}
           </div>
         )}
 
