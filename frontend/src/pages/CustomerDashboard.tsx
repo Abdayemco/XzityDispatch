@@ -233,6 +233,64 @@ export default function CustomerDashboard() {
   const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
   const [scheduledRideLimitError, setScheduledRideLimitError] = useState<string | null>(null);
 
+  // --- New: Periodic location update every 1 minute ---
+  useEffect(() => {
+    let watcherId: number | null = null;
+    let locationInterval: NodeJS.Timeout | null = null;
+
+    function sendLocationToBackend(lat: number, lng: number) {
+      const customerId = getCustomerIdFromStorage();
+      if (!customerId) return;
+      fetch(`${API_URL}/api/location/update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          customerId,
+          lat,
+          lng,
+          timestamp: Date.now(),
+        }),
+      });
+    }
+
+    function updateLocationAndSend() {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = {
+            lng: pos.coords.longitude,
+            lat: pos.coords.latitude,
+          };
+          setUserLocation(loc);
+          setPickupLocation((prev) =>
+            prev && prev.lat && prev.lng ? prev : loc
+          );
+          sendLocationToBackend(loc.lat, loc.lng);
+        },
+        () => {
+          // fallback: Cairo center
+          const loc = { lng: 31.2357, lat: 30.0444 };
+          setUserLocation(loc);
+          setPickupLocation((prev) => (prev ? prev : loc));
+          sendLocationToBackend(loc.lat, loc.lng);
+        }
+      );
+    }
+
+    // Initial location & backend update
+    updateLocationAndSend();
+
+    // Set up interval
+    locationInterval = setInterval(updateLocationAndSend, 60000);
+
+    return () => {
+      if (locationInterval) clearInterval(locationInterval);
+      if (watcherId) navigator.geolocation.clearWatch(watcherId);
+    };
+  }, [token]);
+
   async function getTimeZoneFromCoords(lat: number, lng: number): Promise<string> {
     const apiKey = import.meta.env.VITE_TIMEZONEDB_API_KEY;
     if (!apiKey) {
@@ -280,30 +338,6 @@ export default function CustomerDashboard() {
     const dt = DateTime.fromISO(datetimeLocal, { zone: timezone });
     return dt.toUTC().toISO();
   }
-
-  useEffect(() => {
-    const onStorage = () => setToken(localStorage.getItem("token"));
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = {
-          lng: pos.coords.longitude,
-          lat: pos.coords.latitude,
-        };
-        setUserLocation(loc);
-        setPickupLocation(loc);
-      },
-      () => {
-        const loc = { lng: 31.2357, lat: 30.0444 };
-        setUserLocation(loc);
-        setPickupLocation(loc);
-      }
-    );
-  }, []);
 
   useEffect(() => {
     if (pickupLocation && pickupLocation.lat && pickupLocation.lng) {
@@ -867,10 +901,10 @@ export default function CustomerDashboard() {
           margin: "24px 0",
           textAlign: "center",
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
-          gap: 10,
+          gap: 20,
         }}
       >
         <button
@@ -893,11 +927,6 @@ export default function CustomerDashboard() {
         >
           Request Ride
         </button>
-        {activeRideLimitError && (
-          <div style={{ color: "#d32f2f", marginTop: 6 }}>
-            {activeRideLimitError}
-          </div>
-        )}
         <button
           style={{
             background: "#1976D2",
@@ -915,18 +944,19 @@ export default function CustomerDashboard() {
         >
           Schedule Ride
         </button>
+      </div>
+      <div style={{ textAlign: "center" }}>
+        {activeRideLimitError && (
+          <div style={{ color: "#d32f2f", marginTop: 6 }}>
+            {activeRideLimitError}
+          </div>
+        )}
         {scheduledRideLimitError && (
           <div style={{ color: "#d32f2f", marginTop: 6 }}>
             {scheduledRideLimitError}
           </div>
         )}
       </div>
-      {pickupLocation && (
-        <div style={{ textAlign: "center", color: "#888" }}>
-          Pickup Location: {pickupLocation.lat.toFixed(4)},{" "}
-          {pickupLocation.lng.toFixed(4)}
-        </div>
-      )}
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
         <h3 style={{ marginBottom: 8 }}>See Your Rides below, to cancel or edit rides.</h3>
