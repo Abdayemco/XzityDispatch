@@ -17,9 +17,15 @@ export const updateLocationStatus = async (req: Request, res: Response, next: Ne
     ) {
       return res.status(400).json({ error: "Missing or invalid lat, lng, or online status" });
     }
+    // Also update lastKnownLat/lastKnownLng for proximity checks
     await prisma.user.update({
       where: { id: user.id },
-      data: { lat, lng, online },
+      data: {
+        lat, lng, online,
+        lastKnownLat: lat,
+        lastKnownLng: lng,
+        lastLocationAt: new Date(),
+      },
     });
     res.json({ message: "Location and status updated." });
   } catch (error) {
@@ -45,10 +51,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       vehicleType = undefined;
     }
 
-    // Never assign ParsedQs to vehicleType (TypeScript safety)
     const vehicleTypeUpper = vehicleType ? vehicleType.toUpperCase() : undefined;
 
-    // Only show scheduled rides 30min before scheduledAt
     const now = new Date();
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60 * 1000);
 
@@ -66,14 +70,12 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const rides = await prisma.ride.findMany({
       where: {
         OR: [
-          // Scheduled rides: visible 30min before scheduledAt, not assigned
           {
             status: RideStatus.SCHEDULED,
             scheduledAt: { lte: thirtyMinFromNow },
             driverId: null,
             vehicleType: { in: rideTypes },
           },
-          // Regular rides: not yet accepted/in_progress/done/cancelled
           {
             status: RideStatus.PENDING,
             driverId: null,
@@ -162,28 +164,68 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-// --- Mark Scheduled Ride as "No Show" ---
+// --- Mark Any Ride as "No Show" with Proximity Check and Customer Notification ---
 export const markRideNoShow = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user as { id: number; role: string };
     const driverId = user?.id;
     const rideId = Number(req.params.rideId);
 
-    const ride = await prisma.ride.findUnique({ where: { id: rideId } });
+    // Fetch ride, customer, and pickup coordinates
+    const ride = await prisma.ride.findUnique({
+      where: { id: rideId },
+      include: { customer: true, driver: true, chat: true }
+    });
     if (!ride) return res.status(404).json({ error: "Ride not found" });
-    if (ride.status !== RideStatus.SCHEDULED) {
-      return res.status(400).json({ error: "Ride is not scheduled" });
+
+    // Get driver's last known location
+    const driver = await prisma.user.findUnique({ where: { id: driverId } });
+    if (!driver || typeof driver.lastKnownLat !== "number" || typeof driver.lastKnownLng !== "number") {
+      return res.status(400).json({ error: "Driver location unavailable" });
     }
-    const graceMs = 10 * 60 * 1000; // 10 min grace period
-    const now = Date.now();
-    const scheduledTime = ride.scheduledAt ? new Date(ride.scheduledAt).getTime() : null;
-    if (!scheduledTime || now < scheduledTime + graceMs) {
-      return res.status(400).json({ error: "Cannot mark No Show before scheduled time + 10 min grace period." });
+
+    // Calculate distance (Haversine formula)
+    function toRad(v: number) { return (v * Math.PI) / 180; }
+    function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+      const R = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) *
+          Math.cos(toRad(lat2)) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
+    const dist = getDistanceMeters(
+      driver.lastKnownLat,
+      driver.lastKnownLng,
+      ride.originLat,
+      ride.originLng
+    );
+    if (dist > 30) {
+      return res.status(400).json({ error: "You must be within 30 meters of the pickup location to mark No Show." });
+    }
+
+    // Mark ride as NO_SHOW
     const updated = await prisma.ride.update({
       where: { id: rideId },
       data: { status: RideStatus.NO_SHOW, noShowReportedAt: new Date() },
     });
+
+    // Notify customer via chat/message if chat exists (optional)
+    if (ride.chat) {
+      await prisma.message.create({
+        data: {
+          chatId: ride.chat.id,
+          senderId: driverId,
+          content: "The driver came to your pickup location but did not find you (No Show).",
+          sentAt: new Date(),
+        }
+      });
+    }
+    // You may also want to send push/SMS notifications here
 
     res.json({ message: "Ride marked as No Show", ride: updated });
   } catch (error) {
@@ -243,6 +285,8 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
             id: ride.driver.id,
             name: ride.driver.name,
             vehicleType: (ride.driver.vehicleType || "").toLowerCase(),
+            lastKnownLat: ride.driver.lastKnownLat,
+            lastKnownLng: ride.driver.lastKnownLng,
           }
         : undefined,
       customer: ride.customer
@@ -254,6 +298,7 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
       scheduledAt: ride.scheduledAt,
       destLat: ride.destLat,
       destLng: ride.destLng,
+      acceptedAt: ride.acceptedAt,
     });
   } catch (error) {
     next(error);
