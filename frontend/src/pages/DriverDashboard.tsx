@@ -41,21 +41,6 @@ const VEHICLE_TYPE_LABELS = {
   tow_truck: { label: "Tow Truck", icon: <FaTruckPickup /> }
 };
 
-// Haversine distance (in meters)
-function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const R = 6371000; // meters
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 type Job = {
   id: string | number;
   pickupLat: number;
@@ -73,14 +58,10 @@ type Job = {
     | "no_show";
   assignedDriverId?: string | number;
   scheduledAt?: string | null;
-  lastKnownLat?: number;
-  lastKnownLng?: number;
-  acceptedAt?: string | null;
 };
 
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
 const ACCEPTED_TIMEOUT_MINUTES = 15;
-const NOSHOW_GRACE_MINUTES = 10;
 
 function saveChatSession(rideId: number | null, jobStatus: string | null) {
   localStorage.setItem("currentDriverRideId", rideId ? String(rideId) : "");
@@ -95,6 +76,21 @@ function getSavedChatSession() {
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
+
+// --- Haversine formula for meters ---
+function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export default function DriverDashboard() {
   const [token, setToken] = useState<string | null>(() =>
@@ -165,9 +161,6 @@ export default function DriverDashboard() {
               vehicleType: (data.vehicleType || "").toLowerCase(),
               status: data.rideStatus,
               scheduledAt: data.scheduledAt || null,
-              lastKnownLat: data.lastKnownLat || (data.driver && data.driver.lastKnownLat),
-              lastKnownLng: data.lastKnownLng || (data.driver && data.driver.lastKnownLng),
-              acceptedAt: data.acceptedAt || (data.driver && data.driver.acceptedAt)
             });
           }
         }
@@ -204,7 +197,6 @@ export default function DriverDashboard() {
     if (!token) navigate("/login", { replace: true });
   }, [navigate, token]);
 
-  // --- DRIVER PERIODIC LOCATION UPDATE ---
   const updateDriverLocationOnBackend = useCallback(
     async (lat: number, lng: number) => {
       const token = localStorage.getItem("token");
@@ -264,9 +256,6 @@ export default function DriverDashboard() {
           customerName: job.customerName ?? job.customer?.name ?? "",
           vehicleType: (job.vehicleType || "").toLowerCase(),
           scheduledAt: job.scheduledAt || null,
-          lastKnownLat: job.lastKnownLat ?? (job.driver && job.driver.lastKnownLat),
-          lastKnownLng: job.lastKnownLng ?? (job.driver && job.driver.lastKnownLng),
-          acceptedAt: job.acceptedAt ?? (job.driver && job.driver.acceptedAt)
         }));
         setJobs(mapped);
       }
@@ -311,10 +300,7 @@ export default function DriverDashboard() {
           setAcceptedJob({
             ...foundJob,
             status: data.status || foundJob?.status,
-            scheduledAt: data.scheduledAt || foundJob?.scheduledAt || null,
-            lastKnownLat: data.driver?.lastKnownLat ?? (foundJob && foundJob.lastKnownLat),
-            lastKnownLng: data.driver?.lastKnownLng ?? (foundJob && foundJob.lastKnownLng),
-            acceptedAt: data.acceptedAt || (foundJob && foundJob.acceptedAt) || new Date().toISOString(),
+            scheduledAt: data.scheduledAt || foundJob?.scheduledAt || null
           });
           setStatusMsg(`You have accepted job ${jobId}`);
           setCancelled(false);
@@ -361,7 +347,7 @@ export default function DriverDashboard() {
     }
   }
 
-  // --- No Show Button Logic: enable if driver is within 30 meters of pickup ---
+  // --- No Show Button Logic: enable if driver is within 30 meters of pickup for ANY ride ---
   const canNoShow =
     acceptedJob &&
     driverLocation &&
@@ -803,7 +789,7 @@ export default function DriverDashboard() {
                 Start Ride
               </button>
             )}
-            {/* --- No Show Button always visible for any active ride --- */}
+            {/* --- No Show Button always visible for any active ride, enabled only if within 30m --- */}
             <button
               onClick={handleNoShow}
               disabled={!canNoShow}
