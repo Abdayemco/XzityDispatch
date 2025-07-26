@@ -718,7 +718,7 @@ export default function CustomerDashboard() {
           ))}
         </MapContainer>
        )}
-      <div style={{ margin: "24px 0", textAlign: "center" }}>
+      {<div style={{ margin: "24px 0", textAlign: "center" }}>
         <label>
           <b>Vehicle Type:</b>
         </label>
