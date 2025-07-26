@@ -58,6 +58,9 @@ type Job = {
     | "no_show";
   assignedDriverId?: string | number;
   scheduledAt?: string | null;
+  lastKnownLat?: number;    // ADDED: for driver location
+  lastKnownLng?: number;    // ADDED: for driver location
+  acceptedAt?: string | null; // ADDED: for 15min logic
 };
 
 const IN_PROGRESS_TIMEOUT_MINUTES = 15;
@@ -148,6 +151,9 @@ export default function DriverDashboard() {
               vehicleType: (data.vehicleType || "").toLowerCase(),
               status: data.rideStatus,
               scheduledAt: data.scheduledAt || null,
+              lastKnownLat: data.lastKnownLat || (data.driver && data.driver.lastKnownLat),
+              lastKnownLng: data.lastKnownLng || (data.driver && data.driver.lastKnownLng),
+              acceptedAt: data.acceptedAt || (data.driver && data.driver.acceptedAt)
             });
           }
         }
@@ -184,6 +190,7 @@ export default function DriverDashboard() {
     if (!token) navigate("/login", { replace: true });
   }, [navigate, token]);
 
+  // --- DRIVER PERIODIC LOCATION UPDATE ---
   const updateDriverLocationOnBackend = useCallback(
     async (lat: number, lng: number) => {
       const token = localStorage.getItem("token");
@@ -204,6 +211,7 @@ export default function DriverDashboard() {
     []
   );
 
+  // --- Track location and update backend ---
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -227,6 +235,7 @@ export default function DriverDashboard() {
     }
   }, [driverLocation, locationLoaded, updateDriverLocationOnBackend]);
 
+  // --- DRIVER FIELDS for mapping and NoShow logic ---
   const fetchJobs = useCallback(async () => {
     try {
       setErrorMsg(null);
@@ -243,6 +252,9 @@ export default function DriverDashboard() {
           customerName: job.customerName ?? job.customer?.name ?? "",
           vehicleType: (job.vehicleType || "").toLowerCase(),
           scheduledAt: job.scheduledAt || null,
+          lastKnownLat: job.lastKnownLat ?? (job.driver && job.driver.lastKnownLat),
+          lastKnownLng: job.lastKnownLng ?? (job.driver && job.driver.lastKnownLng),
+          acceptedAt: job.acceptedAt ?? (job.driver && job.driver.acceptedAt)
         }));
         setJobs(mapped);
       }
@@ -263,6 +275,7 @@ export default function DriverDashboard() {
     return () => clearInterval(interval);
   }, [fetchJobs, locationLoaded, driverJobId, cancelled, completed]);
 
+  // --- Accept Ride: include acceptedAt for timer logic ---
   const handleAccept = useCallback(
     async (jobId: string) => {
       if (driverJobId) return;
@@ -287,7 +300,10 @@ export default function DriverDashboard() {
           setAcceptedJob({
             ...foundJob,
             status: data.status || foundJob?.status,
-            scheduledAt: data.scheduledAt || foundJob?.scheduledAt || null
+            scheduledAt: data.scheduledAt || foundJob?.scheduledAt || null,
+            lastKnownLat: data.driver?.lastKnownLat ?? (foundJob && foundJob.lastKnownLat),
+            lastKnownLng: data.driver?.lastKnownLng ?? (foundJob && foundJob.lastKnownLng),
+            acceptedAt: data.acceptedAt || (foundJob && foundJob.acceptedAt) || new Date().toISOString(),
           });
           setStatusMsg(`You have accepted job ${jobId}`);
           setCancelled(false);
@@ -302,6 +318,7 @@ export default function DriverDashboard() {
     [driverJobId, driverId, token, jobs]
   );
 
+  // --- Start Ride ---
   async function handleStartRide() {
     if (!driverJobId) return;
     setStatusMsg(null);
@@ -334,7 +351,7 @@ export default function DriverDashboard() {
     }
   }
 
-  // --- No Show Button Logic ---
+  // --- No Show Button Logic: always available for scheduled jobs after grace period ---
   useEffect(() => {
     if (
       acceptedJob &&
@@ -367,7 +384,7 @@ export default function DriverDashboard() {
     setErrorMsg(null);
     try {
       const res = await fetch(
-        `${API_URL}/api/rides/${driverJobId}/no-show?driverId=${driverId}`,
+        `${API_URL}/api/rides/${driverJobId}/no_show?driverId=${driverId}`,
         {
           method: "PUT",
           headers: {
@@ -766,7 +783,7 @@ export default function DriverDashboard() {
         jobStatus === "accepted" &&
         !cancelled &&
         !completed && (
-          <div style={{ textAlign: "center", marginTop: 24 }}>
+          <div style={{ textAlign: "center", marginTop: 24, display: "flex", justifyContent: "center", gap: 24 }}>
             <button
               onClick={handleStartRide}
               style={{
@@ -782,37 +799,32 @@ export default function DriverDashboard() {
             >
               Start Ride
             </button>
-            <div style={{ marginTop: 8, color: "#888" }}>
-              Press "Start Ride" when you pick up the customer.
-            </div>
-          </div>
-        )}
-
-      {/* --- No Show Button --- */}
-      {driverJobId &&
-        acceptedJob &&
-        acceptedJob.status === "scheduled" && (
-          <div style={{ textAlign: "center", marginTop: 18 }}>
-            <button
-              onClick={handleNoShow}
-              disabled={!noShowEligible}
-              style={{
-                background: noShowEligible ? "#f44336" : "#aaa",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "0 10px",
-                opacity: noShowEligible ? 1 : 0.6,
-                cursor: noShowEligible ? "pointer" : "not-allowed"
-              }}
-            >
-              Mark as No Show
-            </button>
+            {/* --- No Show Button next to Start Ride --- */}
+            {acceptedJob && acceptedJob.status === "scheduled" && (
+              <button
+                onClick={handleNoShow}
+                disabled={!noShowEligible}
+                style={{
+                  background: noShowEligible ? "#f44336" : "#aaa",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.7em 1.4em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  margin: "0 10px",
+                  opacity: noShowEligible ? 1 : 0.6,
+                  cursor: noShowEligible ? "pointer" : "not-allowed"
+                }}
+              >
+                Mark as No Show
+              </button>
+            )}
             {noShowMsg && (
               <div style={{ color: "#d32f2f", marginTop: 6 }}>{noShowMsg}</div>
             )}
+            <div style={{ marginTop: 8, color: "#888" }}>
+              Press "Start Ride" when you pick up the customer.
+            </div>
           </div>
         )}
 
