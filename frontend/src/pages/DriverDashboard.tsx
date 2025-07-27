@@ -217,6 +217,7 @@ export default function DriverDashboard() {
     []
   );
 
+  // Initial location fetch on mount
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -233,6 +234,33 @@ export default function DriverDashboard() {
       }
     );
   }, []);
+
+  // Poll and update driver's location every 1 minute
+  useEffect(() => {
+    let locationInterval: NodeJS.Timeout | null = null;
+
+    function pollAndUpdateLocation() {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setDriverLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          updateDriverLocationOnBackend(pos.coords.latitude, pos.coords.longitude);
+        },
+        () => {
+          // fallback location (optional)
+          setDriverLocation({ lat: 51.505, lng: -0.09 });
+          updateDriverLocationOnBackend(51.505, -0.09);
+        }
+      );
+    }
+
+    pollAndUpdateLocation(); // initial
+
+    locationInterval = setInterval(pollAndUpdateLocation, 60000); // every 1 min
+
+    return () => {
+      if (locationInterval) clearInterval(locationInterval);
+    };
+  }, [updateDriverLocationOnBackend]);
 
   useEffect(() => {
     if (driverLocation && locationLoaded) {
@@ -743,6 +771,9 @@ export default function DriverDashboard() {
               border: "1px solid #ffe0b2"
             }}
           >
+            <div style={{ marginBottom: 8, color: "#388e3c" }}>
+              Please press <b>start</b> when you pick up the customer
+            </div>
             <div>
               {jobStatus === "accepted" ? (
                 <>
@@ -772,6 +803,9 @@ export default function DriverDashboard() {
         !completed &&
         !cancelled && (
           <div style={{ textAlign: "center", marginTop: 24, display: "flex", justifyContent: "center", gap: 24 }}>
+            <div style={{ marginRight: 10, color: "#388e3c", fontWeight: 600 }}>
+              Please press <b>start</b> when you pick up the customer
+            </div>
             {jobStatus === "accepted" && (
               <button
                 onClick={handleStartRide}
