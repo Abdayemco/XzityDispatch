@@ -253,8 +253,6 @@ export default function DriverDashboard() {
       );
     }
 
-    pollAndUpdateLocation(); // initial
-
     locationInterval = setInterval(pollAndUpdateLocation, 60000); // every 1 min
 
     return () => {
@@ -375,7 +373,7 @@ export default function DriverDashboard() {
     }
   }
 
-  // --- No Show Button Logic: enable if driver is within 30 meters of pickup for ANY ride ---
+  // --- No Show Button Logic: only if driver is within 25 meters of pickup ---
   const canNoShow =
     acceptedJob &&
     driverLocation &&
@@ -386,11 +384,11 @@ export default function DriverDashboard() {
       driverLocation.lng,
       acceptedJob.pickupLat,
       acceptedJob.pickupLng
-    ) <= 30;
+    ) <= 25;
 
   useEffect(() => {
     if (!canNoShow) {
-      setNoShowMsg("Move closer to the pickup location (within 30 meters) to mark No Show.");
+      setNoShowMsg("Move closer to the pickup location (within 25 meters) to mark No Show.");
     } else {
       setNoShowMsg(null);
     }
@@ -755,98 +753,85 @@ export default function DriverDashboard() {
       )}
 
       {driverJobId &&
-        ((jobStatus === "accepted" && countdown > 0) ||
-          (jobStatus === "in_progress" && countdown > 0)) &&
-        !completed &&
-        !cancelled && (
-          <div
-            style={{
-              color: jobStatus === "accepted" ? "#ff9800" : "#1976D2",
-              textAlign: "center",
-              fontWeight: "bold",
-              marginTop: 24,
-              background: "#fffde7",
-              padding: 18,
-              borderRadius: 8,
-              border: "1px solid #ffe0b2"
-            }}
-          >
-            <div style={{ marginBottom: 8, color: "#388e3c" }}>
-              Please press <b>start</b> when you pick up the customer
-            </div>
-            <div>
-              {jobStatus === "accepted" ? (
-                <>
-                  You must start the ride within{" "}
-                  <span style={{ color: "#d32f2f" }}>
-                    {formatCountdown(countdown)}
-                  </span>{" "}
-                  or you'll be able to accept new jobs automatically.
-                </>
-              ) : (
-                <>
-                  Waiting for customer to mark the ride as done...
-                  <br />
-                  If not completed in{" "}
-                  <span style={{ color: "#d32f2f" }}>
-                    {formatCountdown(countdown)}
-                  </span>
-                  , you'll be able to accept new rides automatically.
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-      {driverJobId &&
         jobStatus &&
         !completed &&
         !cancelled && (
-          <div style={{ textAlign: "center", marginTop: 24, display: "flex", justifyContent: "center", gap: 24 }}>
-            <div style={{ marginRight: 10, color: "#388e3c", fontWeight: 600 }}>
-              Please press <b>start</b> when you pick up the customer
-            </div>
-            {jobStatus === "accepted" && (
+          <div style={{ textAlign: "center", marginTop: 24 }}>
+            {(jobStatus === "accepted" || jobStatus === "in_progress") && (
+              <div style={{ marginBottom: 10, color: "#388e3c", fontWeight: 600 }}>
+                Please press <b>start</b> when you pick up the customer
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "center", gap: 24 }}>
+              {jobStatus === "accepted" && (
+                <button
+                  onClick={handleStartRide}
+                  style={{
+                    padding: "0.7em 1.4em",
+                    borderRadius: 6,
+                    background: "#388e3c",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    margin: "0 12px"
+                  }}
+                >
+                  Start Ride
+                </button>
+              )}
+              {/* --- No Show Button always visible for any active ride, enabled only if within 25m --- */}
               <button
-                onClick={handleStartRide}
+                onClick={handleNoShow}
+                disabled={!canNoShow}
                 style={{
-                  padding: "0.7em 1.4em",
-                  borderRadius: 6,
-                  background: "#388e3c",
+                  background: canNoShow ? "#f44336" : "#aaa",
                   color: "#fff",
                   border: "none",
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  margin: "0 12px"
+                  padding: "0.7em 1.4em",
+                  borderRadius: 6,
+                  fontSize: 16,
+                  margin: "0 10px",
+                  opacity: canNoShow ? 1 : 0.6,
+                  cursor: canNoShow ? "pointer" : "not-allowed"
                 }}
               >
-                Start Ride
+                Mark as No Show
               </button>
-            )}
-            {/* --- No Show Button always visible for any active ride, enabled only if within 30m --- */}
-            <button
-              onClick={handleNoShow}
-              disabled={!canNoShow}
-              style={{
-                background: canNoShow ? "#f44336" : "#aaa",
-                color: "#fff",
-                border: "none",
-                padding: "0.7em 1.4em",
-                borderRadius: 6,
-                fontSize: 16,
-                margin: "0 10px",
-                opacity: canNoShow ? 1 : 0.6,
-                cursor: canNoShow ? "pointer" : "not-allowed"
-              }}
-            >
-              Mark as No Show
-            </button>
+            </div>
             {noShowMsg && (
               <div style={{ color: "#d32f2f", marginTop: 6, fontSize: 13 }}>{noShowMsg}</div>
             )}
             {jobStatus === "accepted" && (
-              <div style={{ marginTop: 8, color: "#888" }}>
-                Press "Start Ride" when you pick up the customer.
+              <div
+                style={{
+                  marginTop: 12,
+                  color: "#ff9800",
+                  fontWeight: "bold"
+                }}
+              >
+                You must start the ride within{" "}
+                <span style={{ color: "#d32f2f" }}>
+                  {formatCountdown(countdown)}
+                </span>{" "}
+                or you'll be able to accept new jobs automatically.
+              </div>
+            )}
+            {jobStatus === "in_progress" && (
+              <div
+                style={{
+                  marginTop: 12,
+                  color: "#1976D2",
+                  fontWeight: "bold"
+                }}
+              >
+                Waiting for customer to mark the ride as done...
+                <br />
+                If not completed in{" "}
+                <span style={{ color: "#d32f2f" }}>
+                  {formatCountdown(countdown)}
+                </span>
+                , you'll be able to accept new rides automatically.
               </div>
             )}
           </div>
