@@ -82,7 +82,13 @@ type OverpassElement = {
     emergency?: string;
   };
 };
-type DriverInfo = { name?: string; vehicleType?: string };
+type DriverInfo = {
+  name?: string;
+  vehicleType?: string;
+  lastKnownLat?: number;
+  lastKnownLng?: number;
+  acceptedAt?: string;
+};
 type RideListItem = {
   id: number;
   vehicleType: string;
@@ -91,6 +97,7 @@ type RideListItem = {
   scheduledAt?: string;
   note?: string;
   driver?: DriverInfo;
+  acceptedAt?: string;
 };
 
 function RateDriver({
@@ -232,6 +239,10 @@ export default function CustomerDashboard() {
   // --- Button error states ---
   const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
   const [scheduledRideLimitError, setScheduledRideLimitError] = useState<string | null>(null);
+
+  // --- DRIVER MARKER STATE for tracking driver car on map ---
+  const [driverMarker, setDriverMarker] = useState<{ lat: number; lng: number } | null>(null);
+  const driverMarkerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- New: Periodic location update every 1 minute ---
   useEffect(() => {
@@ -466,6 +477,61 @@ export default function CustomerDashboard() {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
   }, [fetchRidesSmart, rideList]);
+
+  // --- DRIVER MARKER UPDATE: Show car on customer map when accepted/in_progress for up to 15min ---
+  useEffect(() => {
+    // Find an accepted or in_progress ride with driver location
+    const acceptedRide = rideList.find(
+      (r) =>
+        ["accepted", "in_progress"].includes((r.status || "").toLowerCase()) &&
+        r.driver &&
+        typeof r.driver.lastKnownLat === "number" &&
+        typeof r.driver.lastKnownLng === "number"
+    );
+
+    if (!acceptedRide || !acceptedRide.driver) {
+      setDriverMarker(null);
+      if (driverMarkerTimeoutRef.current) {
+        clearTimeout(driverMarkerTimeoutRef.current);
+        driverMarkerTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // Only show marker for 15min after acceptance
+    let hideAfterMs: number | null = null;
+    let acceptedAtStr = acceptedRide.driver.acceptedAt;
+    if (acceptedAtStr) {
+      const acceptedAt = DateTime.fromISO(acceptedAtStr).toMillis();
+      const now = Date.now();
+      const msSinceAccepted = now - acceptedAt;
+      if (msSinceAccepted > 15 * 60 * 1000) {
+        setDriverMarker(null);
+        if (driverMarkerTimeoutRef.current) {
+          clearTimeout(driverMarkerTimeoutRef.current);
+          driverMarkerTimeoutRef.current = null;
+        }
+        return;
+      }
+      hideAfterMs = 15 * 60 * 1000 - msSinceAccepted;
+    }
+
+    setDriverMarker({
+      lat: acceptedRide.driver.lastKnownLat!,
+      lng: acceptedRide.driver.lastKnownLng!,
+    });
+
+    if (driverMarkerTimeoutRef.current) clearTimeout(driverMarkerTimeoutRef.current);
+    if (hideAfterMs) {
+      driverMarkerTimeoutRef.current = setTimeout(
+        () => setDriverMarker(null),
+        hideAfterMs
+      );
+    }
+    return () => {
+      if (driverMarkerTimeoutRef.current) clearTimeout(driverMarkerTimeoutRef.current);
+    };
+  }, [rideList]);
 
   // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
@@ -811,6 +877,15 @@ export default function CustomerDashboard() {
               icon={createLeafletIcon(markerCustomer, 32, 41)}
             >
               <Popup>Pickup Here</Popup>
+            </Marker>
+          )}
+          {/* --- DRIVER CAR MARKER --- */}
+          {driverMarker && (
+            <Marker
+              position={[driverMarker.lat, driverMarker.lng]}
+              icon={createLeafletIcon(carIcon, 40, 40)}
+            >
+              <Popup>Your Driver</Popup>
             </Marker>
           )}
           {emergencyLocations.map((em, idx) => (
