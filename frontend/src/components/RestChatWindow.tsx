@@ -83,9 +83,9 @@ export default function RestChatWindow({ rideId, sender, messages: messagesProp,
   // Helper for chat bubble style
   function bubbleStyle(m) {
     if (m?.sender?.role === "driver")
-      return { background: "#e3f2fd", color: "#1976D2", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+      return { background: "#e3f2fd", color: "#1976D2", fontWeight: "bold", borderRadius: 16, padding: "16px 9px", display: "inline-block" };
     if (m?.sender?.role === "customer")
-      return { background: "#e8f5e9", color: "#388e3c", fontWeight: "bold", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
+      return { background: "#e8f5e9", color: "#388e3c", fontWeight: "bold", borderRadius: 16, padding: "16px 8px", display: "inline-block" };
     return { background: "#eee", color: "#444", borderRadius: 16, padding: "8px 16px", display: "inline-block" };
   }
 
