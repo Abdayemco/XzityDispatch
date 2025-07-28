@@ -164,7 +164,7 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-// --- Mark Any Ride as "No Show" with Proximity Check and Customer Notification ---
+// --- Mark Any Ride as "No Show" with Proximity Check and Automated Chat Message ---
 export const markRideNoShow = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user as { id: number; role: string };
@@ -204,8 +204,8 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       ride.originLat,
       ride.originLng
     );
-    if (dist > 30) {
-      return res.status(400).json({ error: "You must be within 30 meters of the pickup location to mark No Show." });
+    if (dist > 25) {
+      return res.status(400).json({ error: "You must be within 25 meters of the pickup location to mark No Show." });
     }
 
     // Mark ride as NO_SHOW
@@ -214,18 +214,17 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       data: { status: RideStatus.NO_SHOW, noShowReportedAt: new Date() },
     });
 
-    // Notify customer via chat/message if chat exists (optional)
+    // Send automated chat message to customer if chat exists
     if (ride.chat) {
       await prisma.message.create({
         data: {
           chatId: ride.chat.id,
           senderId: driverId,
-          content: "The driver came to your pickup location but did not find you (No Show).",
+          content: "I m at your requested pickup location but couldn't find you, if you are available kindly reply, I will leave in 5 minutes from now, Thank You.",
           sentAt: new Date(),
         }
       });
     }
-    // You may also want to send push/SMS notifications here
 
     res.json({ message: "Ride marked as No Show", ride: updated });
   } catch (error) {
