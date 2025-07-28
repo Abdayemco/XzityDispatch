@@ -1245,8 +1245,8 @@ export default function CustomerDashboard() {
                               }
                               style={{
                                 width: 330,
-                                minHeight: 120,
-                                maxHeight: 120,
+                                minHeight: 60,
+                                maxHeight: 180,
                               }}
                             />
                           )}
