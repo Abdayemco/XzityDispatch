@@ -1244,9 +1244,9 @@ export default function CustomerDashboard() {
                                 handleSendMessage(text, ride.id)
                               }
                               style={{
-                                width: 180,
+                                width: 280,
                                 minHeight: 60,
-                                maxHeight: 220,
+                                maxHeight: 90,
                               }}
                             />
                           )}
