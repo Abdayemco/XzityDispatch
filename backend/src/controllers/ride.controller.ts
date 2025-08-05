@@ -345,6 +345,8 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
     } else if (driver.vehicleType === "CAR" || driver.vehicleType === "TUKTUK") {
       rideTypes = [driver.vehicleType, "DELIVERY"];
+    } else if (driver.vehicleType === "CAR") {
+      rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
     } else if (driver.vehicleType) {
       rideTypes = [driver.vehicleType];
     }
