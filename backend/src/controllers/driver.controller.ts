@@ -56,18 +56,20 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const now = new Date();
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60 * 1000);
 
+
     let rideTypes: VehicleType[] = [];
     if (vehicleTypeUpper === "TOW_TRUCK") {
       rideTypes = ["TOW_TRUCK", "TRUCK"];
     } else if (vehicleTypeUpper === "WHEELCHAIR") {
       rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
-    } else if (vehicleTypeUpper === "CAR" || vehicleTypeUpper === "TUKTUK") {
-      rideTypes = [vehicleTypeUpper as VehicleType, "DELIVERY"];
     } else if (vehicleTypeUpper === "CAR") {
-      rideTypes = ["CAR", "TUKTUK", "DELIVERY"];    
+      rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
+    } else if (vehicleTypeUpper === "TUKTUK") {
+      rideTypes = ["TUKTUK", "DELIVERY"];
     } else if (vehicleTypeUpper) {
       rideTypes = [vehicleTypeUpper as VehicleType];
     }
+
 
     const rides = await prisma.ride.findMany({
       where: {

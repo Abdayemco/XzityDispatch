@@ -343,10 +343,10 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       rideTypes = ["TOW_TRUCK", "TRUCK"];
     } else if (driver.vehicleType === "WHEELCHAIR") {
       rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
-    } else if (driver.vehicleType === "CAR" || driver.vehicleType === "TUKTUK") {
-      rideTypes = [driver.vehicleType, "DELIVERY"];
     } else if (driver.vehicleType === "CAR") {
       rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
+    } else if (driver.vehicleType === "TUKTUK") {
+      rideTypes = ["TUKTUK", "DELIVERY"];
     } else if (driver.vehicleType) {
       rideTypes = [driver.vehicleType];
     }
