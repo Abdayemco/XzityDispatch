@@ -17,6 +17,7 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
+// --- VEHICLE ICON OPTIONS ---
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -823,6 +824,9 @@ export default function CustomerDashboard() {
     }
   }
 
+  // --- Map Ref for Center Button ---
+  const mapRef = useRef<L.Map | null>(null);
+
   // --- UI Rendering Section ---
   return (
     <div style={{ padding: 24 }}>
@@ -852,72 +856,102 @@ export default function CustomerDashboard() {
       {error && (
         <div style={{ color: "#d32f2f", textAlign: "center" }}>{error}</div>
       )}
+
+      {/* Map section with center button */}
       {userLocation && (
-        <MapContainer
-          center={[userLocation.lat, userLocation.lng]}
-          zoom={13}
-          style={{
-            height: 320,
-            borderRadius: 8,
-            margin: "0 auto",
-            width: "100%",
-            maxWidth: 640,
-          }}
-          whenCreated={(map) => {
-            map.on("click", (e: any) => {
-              setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
-              setPickupSet(true);
-            });
-          }}
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {pickupLocation && (
-            <Marker
-              position={[pickupLocation.lat, pickupLocation.lng]}
-              icon={createLeafletIcon(markerCustomer, 32, 41)}
-            >
-              <Popup>Pickup Here</Popup>
-            </Marker>
-          )}
-          {/* --- DRIVER CAR MARKER --- */}
-          {driverMarker && (
-            <Marker
-              position={[driverMarker.lat, driverMarker.lng]}
-              icon={createLeafletIcon(carIcon, 40, 40)}
-            >
-              <Popup>Your Driver</Popup>
-            </Marker>
-          )}
-          {emergencyLocations.map((em, idx) => (
-            <Marker
-              key={idx}
-              position={[em.lat, em.lng]}
-              icon={createEmergencyIcon(em.icon)}
-            >
-              <Popup>
-                <div>
-                  <strong>{em.name}</strong> <br />
-                  <span style={{ textTransform: "capitalize" }}>{em.type}</span>
-                  {em.phone && (
-                    <>
-                      <br />
-                      <a
-                        href={`tel:${em.phone}`}
-                        style={{
-                          color: "#1976D2",
-                          textDecoration: "none",
-                        }}
-                      >
-                        📞 Call: {em.phone}
-                      </a>
-                    </>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+        <div style={{ position: "relative", maxWidth: 640, margin: "0 auto" }}>
+          {/* Center button */}
+          <button
+            onClick={() => {
+              if (userLocation && mapRef.current) {
+                mapRef.current.setView([userLocation.lat, userLocation.lng], 13);
+              }
+            }}
+            style={{
+              position: "absolute",
+              top: 18,
+              right: 18,
+              zIndex: 500,
+              background: "#fff",
+              border: "1px solid #1976D2",
+              color: "#1976D2",
+              borderRadius: "50%",
+              width: 44,
+              height: 44,
+              fontSize: 22,
+              boxShadow: "0 2px 8px #0003",
+              cursor: "pointer"
+            }}
+            title="Center map on my location"
+            aria-label="Center map"
+          >⌖</button>
+          <MapContainer
+            center={[userLocation.lat, userLocation.lng]}
+            zoom={13}
+            style={{
+              height: 320,
+              borderRadius: 8,
+              width: "100%",
+            }}
+            ref={mapRef as any}
+            whenCreated={(map) => {
+              mapRef.current = map;
+              map.on("click", (e: any) => {
+                setPickupLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+                setPickupSet(true);
+              });
+            }}
+          >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {pickupLocation && (
+              <Marker
+                position={[pickupLocation.lat, pickupLocation.lng]}
+                icon={createLeafletIcon(markerCustomer, 32, 41)}
+              >
+                <Popup>Pickup Here</Popup>
+              </Marker>
+            )}
+            {/* --- DRIVER CAR MARKER --- */}
+            {driverMarker && (
+              <Marker
+                position={[driverMarker.lat, driverMarker.lng]}
+                icon={createLeafletIcon(carIcon, 40, 40)}
+              >
+                <Popup>Your Driver</Popup>
+              </Marker>
+            )}
+            {emergencyLocations.map((em, idx) => (
+              <Marker
+                key={idx}
+                position={[em.lat, em.lng]}
+                icon={createEmergencyIcon(em.icon)}
+              >
+                <Popup>
+                  <div>
+                    <strong>{em.name}</strong> <br />
+                    <span style={{ textTransform: "capitalize" }}>{em.type}</span>
+                    {em.phone && (
+                      <>
+                        <br />
+                        <a
+                          href={`tel:${em.phone}`}
+                          style={{
+                            color: "#1976D2",
+                            textDecoration: "none",
+                          }}
+                        >
+                          📞 Call: {em.phone}
+                        </a>
+                      </>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
       )}
+
       <div style={{ margin: "24px 0", textAlign: "center" }}>
         <label>
           <b>Vehicle Type:</b>
