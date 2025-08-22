@@ -1,14 +1,11 @@
 import React, { useState } from "react";
-import {
-  Platform,
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+// Only import react-native if not web
+const isWeb = typeof window !== "undefined" && typeof document !== "undefined";
+let Platform: any, View: any, Text: any, TouchableOpacity: any, Modal: any, TextInput: any, StyleSheet: any, ActivityIndicator: any;
+if (!isWeb) {
+  // @ts-ignore
+  ({ Platform, View, Text, TouchableOpacity, Modal, TextInput, StyleSheet, ActivityIndicator } = require("react-native"));
+}
 import { API_URL } from "../utils/config";
 
 const API = API_URL.replace(/\/$/, "");
@@ -47,8 +44,8 @@ export default function ContactAdminButton() {
     setLoading(false);
   };
 
-  // Web version
-  if (Platform.OS === "web") {
+  // Web version (standard React)
+  if (isWeb) {
     return (
       <>
         <button
@@ -227,136 +224,142 @@ export default function ContactAdminButton() {
     );
   }
 
-  // Native (Android/iOS)
-  return (
-    <>
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.buttonText}>Contact Administrator</Text>
-      </TouchableOpacity>
-      <Modal
-        visible={open}
-        animationType="slide"
-        transparent
-        onRequestClose={handleClose}
-      >
-        <View style={styles.modalBg}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Text style={{ fontSize: 23, color: "#888" }}>×</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>Contact Administrator</Text>
-            {sent ? (
-              <Text style={styles.successMsg}>Message sent to admin!</Text>
-            ) : (
-              <>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Name"
-                  value={form.name}
-                  onChangeText={t => handleChange("name", t)}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Tel"
-                  value={form.tel}
-                  onChangeText={t => handleChange("tel", t)}
-                  keyboardType="phone-pad"
-                />
-                <TextInput
-                  style={[styles.input, { height: 100 }]}
-                  placeholder="Message"
-                  value={form.message}
-                  onChangeText={t => handleChange("message", t)}
-                  multiline
-                />
-                <TouchableOpacity
-                  style={styles.submitBtn}
-                  onPress={handleSubmit}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.submitBtnText}>Send</Text>
-                  )}
-                </TouchableOpacity>
-                {error ? (
-                  <Text style={styles.errorMsg}>{error}</Text>
-                ) : null}
-              </>
-            )}
+  // Native version (Expo/React Native)
+  if (!isWeb) {
+    return (
+      <>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => setOpen(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.buttonText}>Contact Administrator</Text>
+        </TouchableOpacity>
+        <Modal
+          visible={open}
+          animationType="slide"
+          transparent
+          onRequestClose={handleClose}
+        >
+          <View style={styles.modalBg}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+                <Text style={{ fontSize: 23, color: "#888" }}>×</Text>
+              </TouchableOpacity>
+              <Text style={styles.title}>Contact Administrator</Text>
+              {sent ? (
+                <Text style={styles.successMsg}>Message sent to admin!</Text>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Name"
+                    value={form.name}
+                    onChangeText={t => handleChange("name", t)}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Tel"
+                    value={form.tel}
+                    onChangeText={t => handleChange("tel", t)}
+                    keyboardType="phone-pad"
+                  />
+                  <TextInput
+                    style={[styles.input, { height: 100 }]}
+                    placeholder="Message"
+                    value={form.message}
+                    onChangeText={t => handleChange("message", t)}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={styles.submitBtn}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.submitBtnText}>Send</Text>
+                    )}
+                  </TouchableOpacity>
+                  {error ? (
+                    <Text style={styles.errorMsg}>{error}</Text>
+                  ) : null}
+                </>
+              )}
+            </View>
           </View>
-        </View>
-      </Modal>
-    </>
-  );
+        </Modal>
+      </>
+    );
+  }
+
+  return null;
 }
 
-const styles = StyleSheet.create({
-  button: {
-    position: "absolute",
-    bottom: 18,
-    alignSelf: "center",
-    backgroundColor: "#1976D2",
-    paddingVertical: 11,
-    paddingHorizontal: 30,
-    borderRadius: 24,
-    zIndex: 10000,
-    elevation: 3,
-  },
-  buttonText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 24,
-    width: 330,
-    maxWidth: "90%",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 7,
-  },
-  closeBtn: { position: "absolute", right: 12, top: 8, zIndex: 2 },
-  title: {
-    fontSize: 19,
-    fontWeight: "bold",
-    color: "#1976d2",
-    marginTop: 4,
-    marginBottom: 18,
-    alignSelf: "center",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 13,
-    fontSize: 15,
-  },
-  submitBtn: {
-    backgroundColor: "#1976D2",
-    padding: 11,
-    borderRadius: 8,
-    marginTop: 5,
-    alignItems: "center",
-  },
-  submitBtnText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
-  errorMsg: { marginTop: 8, color: "#d32f2f", textAlign: "center" },
-  successMsg: {
-    color: "#388e3c",
-    textAlign: "center",
-    fontWeight: "bold",
-    marginVertical: 14,
-    fontSize: 16,
-  },
-});
+const styles = !isWeb
+  ? StyleSheet.create({
+      button: {
+        position: "absolute",
+        bottom: 18,
+        alignSelf: "center",
+        backgroundColor: "#1976D2",
+        paddingVertical: 11,
+        paddingHorizontal: 30,
+        borderRadius: 24,
+        zIndex: 10000,
+        elevation: 3,
+      },
+      buttonText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
+      modalBg: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "center",
+        alignItems: "center",
+      },
+      modalContent: {
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 24,
+        width: 330,
+        maxWidth: "90%",
+        shadowColor: "#000",
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        elevation: 7,
+      },
+      closeBtn: { position: "absolute", right: 12, top: 8, zIndex: 2 },
+      title: {
+        fontSize: 19,
+        fontWeight: "bold",
+        color: "#1976d2",
+        marginTop: 4,
+        marginBottom: 18,
+        alignSelf: "center",
+      },
+      input: {
+        borderWidth: 1,
+        borderColor: "#ccc",
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 13,
+        fontSize: 15,
+      },
+      submitBtn: {
+        backgroundColor: "#1976D2",
+        padding: 11,
+        borderRadius: 8,
+        marginTop: 5,
+        alignItems: "center",
+      },
+      submitBtnText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
+      errorMsg: { marginTop: 8, color: "#d32f2f", textAlign: "center" },
+      successMsg: {
+        color: "#388e3c",
+        textAlign: "center",
+        fontWeight: "bold",
+        marginVertical: 14,
+        fontSize: 16,
+      },
+    })
+  : undefined;
