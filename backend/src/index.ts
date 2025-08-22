@@ -4,7 +4,7 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { getRideById } from "./models/ride";
 import { saveMessage } from "./models/messageStore";
-import { cleanupStuckRides } from "./controllers/ride.controller"; // <-- Add this import
+import { cleanupStuckRides, cleanupUnacceptedRides } from "./controllers/ride.controller"; // <-- Add this import
 
 const port = Number(process.env.PORT) || 5000;
 
@@ -113,8 +113,9 @@ server.listen(port, () => {
   console.log(`🚀 Backend running at http://localhost:${port}`);
 });
 
-// --- Start the cleanup job for stuck rides ---
+// --- Start the cleanup jobs for stuck rides and for unaccepted rides ---
 setInterval(cleanupStuckRides, 5 * 60 * 1000); // runs every 5 minutes
+setInterval(cleanupUnacceptedRides, 5 * 60 * 1000); // runs every 5 minutes
 
 server.on("error", (err) => {
   console.error("❌ Failed to start server:", err);

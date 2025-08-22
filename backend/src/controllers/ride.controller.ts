@@ -61,6 +61,76 @@ async function isDriverBusy(driverId: number) {
   return !!busyRide;
 }
 
+// --- AUTO-CANCEL UNACCEPTED RIDES ---
+export async function cleanupUnacceptedRides() {
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60000);
+
+  // Cancel regular rides (pending/requested) older than 1 hour and unassigned
+  const regular = await prisma.ride.updateMany({
+    where: {
+      status: { in: [RideStatus.PENDING, "REQUESTED"] },
+      driverId: null,
+      requestedAt: { lt: oneHourAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: now,
+    },
+  });
+
+  // Cancel scheduled rides that have not been accepted 1 hour after scheduledAt
+  const scheduled = await prisma.ride.updateMany({
+    where: {
+      status: RideStatus.SCHEDULED,
+      driverId: null,
+      scheduledAt: { not: null, lt: oneHourAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: now,
+    },
+  });
+
+  if (regular.count > 0 || scheduled.count > 0) {
+    console.log(
+      `[Cleanup] Auto-cancelled ${regular.count} regular and ${scheduled.count} scheduled rides (unaccepted after 1h).`
+    );
+  }
+}
+
+/**
+ * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
+ */
+export async function cleanupStuckRides() {
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+  const result1 = await prisma.ride.updateMany({
+    where: {
+      status: RideStatus.ACCEPTED,
+      acceptedAt: { lt: fifteenMinutesAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: new Date(),
+    },
+  });
+  const result2 = await prisma.ride.updateMany({
+    where: {
+      status: RideStatus.IN_PROGRESS,
+      startedAt: { lt: fifteenMinutesAgo },
+    },
+    data: {
+      status: RideStatus.CANCELLED,
+      cancelledAt: new Date(),
+    },
+  });
+  if (result1.count > 0 || result2.count > 0) {
+    console.log(
+      `[Cleanup] Cancelled ${result1.count} ACCEPTED and ${result2.count} IN_PROGRESS stuck rides.`
+    );
+  }
+}
+
 // --- CREATE RIDE (REGULAR OR SCHEDULED) ---
 export const requestRide = async (
   req: Request,
@@ -271,8 +341,7 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// --- GET ALL RIDES FOR CUSTOMER (SCHEDULED, ACTIVE, DONE, except CANCELLED) ---
-// UPDATE: include driver's lastKnownLat/lastKnownLng/acceptedAt in API for accepted rides!
+// --- GET ALL RIDES FOR CUSTOMER (SCHEDULED, ACTIVE, DONE, CANCELLED) ---
 export const getAllCustomerRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let customerId: number | undefined;
@@ -288,7 +357,6 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
     const rides = await prisma.ride.findMany({
       where: {
         customerId,
-        status: { not: RideStatus.CANCELLED }
       },
       orderBy: { scheduledAt: "asc" },
       include: {
@@ -296,6 +364,7 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       },
     });
 
+    // Show all rides for customer (including cancelled for notification purposes)
     const formattedRides = rides.map(r => ({
       id: r.id,
       scheduledAt: toLocalISOString(r.scheduledAt),
@@ -304,14 +373,14 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       destinationName: r.destinationName,
       note: r.note,
       status: r.status,
-      acceptedAt: toLocalISOString(r.acceptedAt), // for accepted rides
+      acceptedAt: toLocalISOString(r.acceptedAt),
       driver: r.driver ? {
         id: r.driver.id,
         name: r.driver.name,
         vehicleType: r.driver.vehicleType,
-        lastKnownLat: r.driver.lastKnownLat,      // <-- ADDED
-        lastKnownLng: r.driver.lastKnownLng,      // <-- ADDED
-        acceptedAt: toLocalISOString(r.acceptedAt), // <-- ADDED, for frontend 15min rule
+        lastKnownLat: r.driver.lastKnownLat,
+        lastKnownLng: r.driver.lastKnownLng,
+        acceptedAt: toLocalISOString(r.acceptedAt),
       } : undefined,
       rated: r.rating !== null && r.rating !== undefined,
     }));
@@ -370,6 +439,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
           {
             status: RideStatus.PENDING,
             driverId: null,
+            requestedAt: { gte: oneHourAgo },
             vehicleType: { in: rideTypes },
           }
         ]
@@ -647,7 +717,6 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
 };
 
 // --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
-// UPDATE: include driver location for accepted ride status
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user as { id: number; role: string };
@@ -706,9 +775,9 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
             id: ride.driver.id,
             name: ride.driver.name,
             vehicleType: (ride.driver.vehicleType || "").toLowerCase(),
-            lastKnownLat: ride.driver.lastKnownLat,   // <-- ADDED
-            lastKnownLng: ride.driver.lastKnownLng,   // <-- ADDED
-            acceptedAt: toLocalISOString(ride.acceptedAt), // <-- ADDED (for accepted rides)
+            lastKnownLat: ride.driver.lastKnownLat,
+            lastKnownLng: ride.driver.lastKnownLng,
+            acceptedAt: toLocalISOString(ride.acceptedAt),
           }
         : undefined,
       customer: ride.customer
@@ -723,7 +792,7 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
       destLng: ride.destLng,
       destinationName: ride.destinationName ?? undefined,
       note: ride.note ?? undefined,
-      acceptedAt: toLocalISOString(ride.acceptedAt), // <-- ADDED for consistency
+      acceptedAt: toLocalISOString(ride.acceptedAt),
     });
   } catch (error) {
     console.error("Error fetching current ride:", error);
@@ -763,35 +832,3 @@ export const updateCustomerLocation = async (req: Request, res: Response, next: 
     next(error);
   }
 };
-
-/**
- * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
- */
-export async function cleanupStuckRides() {
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-  const result1 = await prisma.ride.updateMany({
-    where: {
-      status: RideStatus.ACCEPTED,
-      acceptedAt: { lt: fifteenMinutesAgo },
-    },
-    data: {
-      status: RideStatus.CANCELLED,
-      cancelledAt: new Date(),
-    },
-  });
-  const result2 = await prisma.ride.updateMany({
-    where: {
-      status: RideStatus.IN_PROGRESS,
-      startedAt: { lt: fifteenMinutesAgo },
-    },
-    data: {
-      status: RideStatus.CANCELLED,
-      cancelledAt: new Date(),
-    },
-  });
-  if (result1.count > 0 || result2.count > 0) {
-    console.log(
-      `[Cleanup] Cancelled ${result1.count} ACCEPTED and ${result2.count} IN_PROGRESS stuck rides.`
-    );
-  }
-}
