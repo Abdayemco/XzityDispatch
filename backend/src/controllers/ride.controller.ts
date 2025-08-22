@@ -66,10 +66,10 @@ export async function cleanupUnacceptedRides() {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
-  // Cancel regular rides (pending/requested) older than 1 hour and unassigned
+  // Cancel regular rides (pending) older than 1 hour and unassigned
   const regular = await prisma.ride.updateMany({
     where: {
-      status: { in: [RideStatus.PENDING, "REQUESTED"] },
+      status: RideStatus.PENDING,
       driverId: null,
       requestedAt: { lt: oneHourAgo },
     },
