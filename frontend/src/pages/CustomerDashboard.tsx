@@ -1500,13 +1500,13 @@ export default function CustomerDashboard() {
 
       {/* --- Contact (Administrator) & Logout Buttons --- */}
       <button
-        onClick={handleContactUs}
+        onClick={handleLogout}
         style={{
           position: "fixed",
-          left: 24,
+          right: 24,
           bottom: 24,
           zIndex: 2000,
-          background: "#1976D2",
+          background: "#d32f2f",
           color: "#fff",
           border: "none",
           borderRadius: "18px",
@@ -1517,10 +1517,10 @@ export default function CustomerDashboard() {
           boxShadow: "0 2px 10px #0002",
           cursor: "pointer",
         }}
-        title="Contact"
-        aria-label="Contact"
+        title="Logout"
+        aria-label="Logout"
       >
-        Contact
+        Logout
       </button>
     </div>
   );
