@@ -99,7 +99,6 @@ type RideListItem = {
   driver?: DriverInfo;
   acceptedAt?: string;
   createdAt?: string;
-  cancelledReason?: string;
 };
 
 function RateDriver({
@@ -227,7 +226,8 @@ export default function CustomerDashboard() {
   const [rideListLoading, setRideListLoading] = useState(false);
 
   // --- POLLING CONTROL ---
-  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isMounted = useRef(false);
 
   // --- Button logic: count rides ---
   const activeRides = rideList.filter(
@@ -249,7 +249,6 @@ export default function CustomerDashboard() {
 
   // --- New: Periodic location update every 1 minute ---
   useEffect(() => {
-    let watcherId: number | null = null;
     let locationInterval: NodeJS.Timeout | null = null;
 
     function sendLocationToBackend(lat: number, lng: number) {
@@ -284,7 +283,6 @@ export default function CustomerDashboard() {
           sendLocationToBackend(loc.lat, loc.lng);
         },
         () => {
-          // fallback: Cairo center
           const loc = { lng: 31.2357, lat: 30.0444 };
           setUserLocation(loc);
           setPickupLocation((prev) => (prev ? prev : loc));
@@ -301,7 +299,6 @@ export default function CustomerDashboard() {
 
     return () => {
       if (locationInterval) clearInterval(locationInterval);
-      if (watcherId) navigator.geolocation.clearWatch(watcherId);
     };
   }, [token]);
 
@@ -424,8 +421,9 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // --- SMART POLLING every 10 seconds. Only update list if status or count changes
+  // --- Poll every 10s, only start/stop timer on mount/unmount, and do not overlap polls ---
   const fetchRidesSmart = useCallback(async () => {
+    if (!isMounted.current) return;
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
     setRideListLoading(true);
@@ -438,7 +436,6 @@ export default function CustomerDashboard() {
       );
       if (res.ok) {
         const rides: RideListItem[] = await res.json();
-        // Only include pending, accepted, in_progress, scheduled
         const filtered = rides.filter((r) =>
           ["pending", "accepted", "in_progress", "scheduled"].includes(
             (r.status || "").toLowerCase().trim()
@@ -466,13 +463,16 @@ export default function CustomerDashboard() {
     setRideListLoading(false);
   }, [token, rideList]);
 
-  // --- Poll every 10s, only start/stop timer on mount/unmount ---
   useEffect(() => {
+    isMounted.current = true;
     fetchRidesSmart();
-    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-    pollingTimerRef.current = setInterval(fetchRidesSmart, 10000);
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => {
+      fetchRidesSmart();
+    }, 10000);
     return () => {
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      isMounted.current = false;
+      if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [fetchRidesSmart]);
 
@@ -746,7 +746,6 @@ export default function CustomerDashboard() {
       setSchedNote("");
       setSchedError(null);
       setScheduledRideLimitError(null);
-      // Immediately fetch updated ride list after edit
       fetchRidesSmart();
     } catch (err: any) {
       setSchedError("Network or server error.");
@@ -825,6 +824,11 @@ export default function CustomerDashboard() {
     localStorage.removeItem("token");
     localStorage.removeItem("userId");
     window.location.reload();
+  }
+
+  // --- CONTACT US ---
+  function handleContactUs() {
+    window.location.href = "mailto:support@xzity.com"; // Change to your real support address
   }
 
   // --- Map Ref for Center Button ---
@@ -1072,10 +1076,9 @@ export default function CustomerDashboard() {
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
         <h3 style={{ marginBottom: 8 }}>
-          Edit your active rides below.
-          <br />
+          Edit rides below.<br/>
           <span style={{ color: "#d32f2f", fontWeight: 400, fontSize: 15 }}>
-            Note: Rides that are not accepted in an hour will be automatically cancelled, please request a new ride if still needed.
+            Unaccepted rides will be auto canceled in 1 hr
           </span>
         </h3>
         {rideListLoading ? (
@@ -1504,7 +1507,30 @@ export default function CustomerDashboard() {
         </div>
       )}
 
-      {/* --- Logout Button --- */}
+      {/* --- Contact Us & Logout Buttons --- */}
+      <button
+        onClick={handleContactUs}
+        style={{
+          position: "fixed",
+          left: 24,
+          bottom: 24,
+          zIndex: 2000,
+          background: "#1976D2",
+          color: "#fff",
+          border: "none",
+          borderRadius: "18px",
+          width: 120,
+          height: 48,
+          fontSize: 18,
+          fontWeight: "bold",
+          boxShadow: "0 2px 10px #0002",
+          cursor: "pointer",
+        }}
+        title="Contact Us"
+        aria-label="Contact Us"
+      >
+        Contact Us
+      </button>
       <button
         onClick={handleLogout}
         style={{
@@ -1512,20 +1538,21 @@ export default function CustomerDashboard() {
           right: 24,
           bottom: 24,
           zIndex: 2000,
-          background: "#1976D2",
+          background: "#d32f2f",
           color: "#fff",
           border: "none",
-          borderRadius: "50%",
-          width: 56,
-          height: 56,
-          fontSize: 24,
+          borderRadius: "18px",
+          width: 120,
+          height: 48,
+          fontSize: 18,
+          fontWeight: "bold",
           boxShadow: "0 2px 10px #0002",
           cursor: "pointer",
         }}
         title="Logout"
         aria-label="Logout"
       >
-        ⎋
+        Logout
       </button>
     </div>
   );
