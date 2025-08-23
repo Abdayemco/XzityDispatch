@@ -17,7 +17,6 @@ import hospitalIcon from "../assets/emergency-hospital.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
-// --- VEHICLE ICON OPTIONS ---
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -228,7 +227,6 @@ export default function CustomerDashboard() {
   const [rideListLoading, setRideListLoading] = useState(false);
 
   // --- POLLING CONTROL ---
-  const lastStatusesRef = useRef<{ [id: number]: string }>({});
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Button logic: count rides ---
@@ -426,7 +424,7 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // SMART POLLING: only refresh when status or ride count changes. Poll every 10 seconds.
+  // --- SMART POLLING every 10 seconds. Only update list if status or count changes
   const fetchRidesSmart = useCallback(async () => {
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
@@ -468,28 +466,18 @@ export default function CustomerDashboard() {
     setRideListLoading(false);
   }, [token, rideList]);
 
+  // --- Poll every 10s, only start/stop timer on mount/unmount ---
   useEffect(() => {
     fetchRidesSmart();
-    // Poll every 10 seconds if there are any active/scheduled rides
-    if (
-      rideList.some((r) =>
-        ["pending", "scheduled", "accepted", "in_progress"].includes(
-          (r.status || "").toLowerCase().trim()
-        )
-      )
-    ) {
-      pollingTimerRef.current = setInterval(fetchRidesSmart, 10000);
-    } else {
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-    }
+    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    pollingTimerRef.current = setInterval(fetchRidesSmart, 10000);
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
-  }, [fetchRidesSmart, rideList]);
+  }, [fetchRidesSmart]);
 
   // --- DRIVER MARKER UPDATE: Show car on customer map when accepted/in_progress for up to 15min ---
   useEffect(() => {
-    // Find an accepted or in_progress ride with driver location
     const acceptedRide = rideList.find(
       (r) =>
         ["accepted", "in_progress"].includes((r.status || "").toLowerCase()) &&
@@ -497,7 +485,6 @@ export default function CustomerDashboard() {
         typeof r.driver.lastKnownLat === "number" &&
         typeof r.driver.lastKnownLng === "number"
     );
-
     if (!acceptedRide || !acceptedRide.driver) {
       setDriverMarker(null);
       if (driverMarkerTimeoutRef.current) {
@@ -506,8 +493,6 @@ export default function CustomerDashboard() {
       }
       return;
     }
-
-    // Only show marker for 15min after acceptance
     let hideAfterMs: number | null = null;
     let acceptedAtStr = acceptedRide.driver.acceptedAt;
     if (acceptedAtStr) {
@@ -524,12 +509,10 @@ export default function CustomerDashboard() {
       }
       hideAfterMs = 15 * 60 * 1000 - msSinceAccepted;
     }
-
     setDriverMarker({
       lat: acceptedRide.driver.lastKnownLat!,
       lng: acceptedRide.driver.lastKnownLng!,
     });
-
     if (driverMarkerTimeoutRef.current) clearTimeout(driverMarkerTimeoutRef.current);
     if (hideAfterMs) {
       driverMarkerTimeoutRef.current = setTimeout(
@@ -763,6 +746,7 @@ export default function CustomerDashboard() {
       setSchedNote("");
       setSchedError(null);
       setScheduledRideLimitError(null);
+      // Immediately fetch updated ride list after edit
       fetchRidesSmart();
     } catch (err: any) {
       setSchedError("Network or server error.");
@@ -1088,7 +1072,11 @@ export default function CustomerDashboard() {
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
         <h3 style={{ marginBottom: 8 }}>
-          See your active and scheduled rides below. You can edit, cancel, or chat with your driver.
+          Edit your active rides below.
+          <br />
+          <span style={{ color: "#d32f2f", fontWeight: 400, fontSize: 15 }}>
+            Note: Rides that are not accepted in an hour will be automatically cancelled, please request a new ride if still needed.
+          </span>
         </h3>
         {rideListLoading ? (
           <div>Loading...</div>
@@ -1119,7 +1107,6 @@ export default function CustomerDashboard() {
                   );
                 if (a.scheduledAt) return -1;
                 if (b.scheduledAt) return 1;
-                // Fallback: by ID descending
                 return b.id - a.id;
               })
               .map((ride) => {
