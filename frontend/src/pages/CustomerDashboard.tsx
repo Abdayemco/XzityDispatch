@@ -1522,29 +1522,6 @@ export default function CustomerDashboard() {
       >
         Contact
       </button>
-      <button
-        onClick={handleLogout}
-        style={{
-          position: "fixed",
-          right: 24,
-          bottom: 24,
-          zIndex: 2000,
-          background: "#d32f2f",
-          color: "#fff",
-          border: "none",
-          borderRadius: "18px",
-          width: 120,
-          height: 48,
-          fontSize: 18,
-          fontWeight: "bold",
-          boxShadow: "0 2px 10px #0002",
-          cursor: "pointer",
-        }}
-        title="Logout"
-        aria-label="Logout"
-      >
-        Logout
-      </button>
     </div>
   );
 }
