@@ -169,11 +169,6 @@ function RateDriver({
   );
 }
 
-function saveChatSession(rideId: number | null, rideStatus: RideStatus) {
-  localStorage.setItem("currentRideId", rideId ? String(rideId) : "");
-  localStorage.setItem("currentRideStatus", rideStatus || "");
-}
-
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
@@ -475,7 +470,6 @@ export default function CustomerDashboard() {
     };
   }, [fetchRidesSmart]);
 
-  // --- DRIVER MARKER UPDATE: Show car on customer map when accepted/in_progress for up to 15min ---
   useEffect(() => {
     const acceptedRide = rideList.find(
       (r) =>
@@ -524,7 +518,6 @@ export default function CustomerDashboard() {
     };
   }, [rideList]);
 
-  // --- Chat polling for all rides with accepted/in_progress status ---
   useEffect(() => {
     let timers: { [rideId: string]: NodeJS.Timeout } = {};
     rideList.forEach((ride) => {
@@ -825,9 +818,9 @@ export default function CustomerDashboard() {
     window.location.reload();
   }
 
-  // --- CONTACT US ---
+  // --- CONTACT (Administrator) ---
   function handleContactUs() {
-    window.location.href = "mailto:support@xzity.com"; // Change to your real support address
+    window.location.href = "mailto:support@xzity.com"; // Or your admin handler
   }
 
   // --- Map Ref for Center Button ---
@@ -1505,7 +1498,7 @@ export default function CustomerDashboard() {
         </div>
       )}
 
-      {/* --- Contact Us & Logout Buttons --- */}
+      {/* --- Contact (Administrator) & Logout Buttons --- */}
       <button
         onClick={handleContactUs}
         style={{
@@ -1524,10 +1517,10 @@ export default function CustomerDashboard() {
           boxShadow: "0 2px 10px #0002",
           cursor: "pointer",
         }}
-        title="Contact Us"
-        aria-label="Contact Us"
+        title="Contact"
+        aria-label="Contact"
       >
-        Contact Us
+        Contact
       </button>
       <button
         onClick={handleLogout}
