@@ -53,8 +53,7 @@ export default function ContactAdminButton() {
           style={{
             position: "fixed",
             bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
+            left: 24,
             background: "#1976D2",
             color: "#fff",
             border: "none",
@@ -67,7 +66,7 @@ export default function ContactAdminButton() {
             boxShadow: "0 2px 12px #0002",
           }}
         >
-          Contact Administrator
+          Contact
         </button>
         {open && (
           <div
@@ -233,7 +232,7 @@ export default function ContactAdminButton() {
           onPress={() => setOpen(true)}
           activeOpacity={0.85}
         >
-          <Text style={styles.buttonText}>Contact Administrator</Text>
+          <Text style={styles.buttonText}>Contact</Text>
         </TouchableOpacity>
         <Modal
           visible={open}
@@ -302,7 +301,7 @@ const styles = !isWeb
       button: {
         position: "absolute",
         bottom: 18,
-        alignSelf: "center",
+        left: 18,
         backgroundColor: "#1976D2",
         paddingVertical: 11,
         paddingHorizontal: 30,
