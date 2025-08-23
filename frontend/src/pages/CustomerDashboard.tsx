@@ -99,6 +99,8 @@ type RideListItem = {
   note?: string;
   driver?: DriverInfo;
   acceptedAt?: string;
+  createdAt?: string;
+  cancelledReason?: string; // this should be set by backend for auto-cancelled rides
 };
 
 function RateDriver({
@@ -230,12 +232,14 @@ export default function CustomerDashboard() {
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Button logic: count rides ---
-  const activeRidesCount = rideList.filter(
+  const activeRides = rideList.filter(
     r => ["pending", "accepted", "in_progress"].includes((r.status || "").toLowerCase().trim())
-  ).length;
-  const scheduledRidesCount = rideList.filter(
+  );
+  const scheduledRides = rideList.filter(
     r => (r.status || "").toLowerCase().trim() === "scheduled"
-  ).length;
+  );
+  const activeRidesCount = activeRides.length;
+  const scheduledRidesCount = scheduledRides.length;
 
   // --- Button error states ---
   const [activeRideLimitError, setActiveRideLimitError] = useState<string | null>(null);
@@ -426,6 +430,7 @@ export default function CustomerDashboard() {
   const fetchRidesSmart = useCallback(async () => {
     const customerId = getCustomerIdFromStorage();
     if (!customerId) return;
+    setRideListLoading(true);
     try {
       const res = await fetch(
         `${API_URL}/api/rides/all?customerId=${customerId}`,
@@ -436,11 +441,11 @@ export default function CustomerDashboard() {
       if (res.ok) {
         const rides: RideListItem[] = await res.json();
         const filtered = rides.filter((r) =>
-          ["pending", "accepted", "in_progress", "scheduled"].includes(
+          // show all rides, including cancelled for notification
+          ["pending", "accepted", "in_progress", "scheduled", "cancelled"].includes(
             (r.status || "").toLowerCase().trim()
           )
         );
-        // Check if statuses have changed
         let changed = false;
         for (const r of filtered) {
           if (lastStatusesRef.current[r.id] !== (r.status || "")) {
@@ -448,7 +453,7 @@ export default function CustomerDashboard() {
             break;
           }
         }
-        if (changed) {
+        if (changed || rideList.length !== filtered.length) {
           setRideList(filtered);
           const nextStatuses: { [id: number]: string } = {};
           for (const r of filtered) {
@@ -458,7 +463,8 @@ export default function CustomerDashboard() {
         }
       }
     } catch (err) {}
-  }, [token]);
+    setRideListLoading(false);
+  }, [token, rideList.length]);
 
   useEffect(() => {
     fetchRidesSmart();
@@ -658,6 +664,7 @@ export default function CustomerDashboard() {
       setRideStatus("pending");
       setWaiting(false);
       setActiveRideLimitError(null);
+      fetchRidesSmart();
     } catch (err: any) {
       setError("Network or server error.");
     } finally {
@@ -754,6 +761,7 @@ export default function CustomerDashboard() {
       setSchedNote("");
       setSchedError(null);
       setScheduledRideLimitError(null);
+      fetchRidesSmart();
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
@@ -787,6 +795,7 @@ export default function CustomerDashboard() {
       setRideList((prev) => prev.filter((r) => r.id !== rideIdToCancel));
       setActiveRideLimitError(null);
       setScheduledRideLimitError(null);
+      fetchRidesSmart();
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
@@ -818,10 +827,18 @@ export default function CustomerDashboard() {
       setRatingRideId(rideIdToMark); // show rating UI for this ride
       setActiveRideLimitError(null);
       setScheduledRideLimitError(null);
+      fetchRidesSmart();
     } catch (err) {
       setError("Network or server error.");
       setWaiting(false);
     }
+  }
+
+  // --- LOGOUT ---
+  function handleLogout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    window.location.reload();
   }
 
   // --- Map Ref for Center Button ---
@@ -829,7 +846,7 @@ export default function CustomerDashboard() {
 
   // --- UI Rendering Section ---
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24, minHeight: "100vh", position: "relative" }}>
       <h2
         style={{
           textAlign: "center",
@@ -860,7 +877,6 @@ export default function CustomerDashboard() {
       {/* Map section with center button */}
       {userLocation && (
         <div style={{ position: "relative", maxWidth: 640, margin: "0 auto" }}>
-          {/* Center button */}
           <button
             onClick={() => {
               if (userLocation && mapRef.current) {
@@ -1066,9 +1082,12 @@ export default function CustomerDashboard() {
           </div>
         )}
       </div>
+
       {/* --- Ride List Below --- */}
       <div style={{ margin: "32px 0 8px", textAlign: "center" }}>
-        <h3 style={{ marginBottom: 8 }}>See your Rides below, edit or cancel it.</h3>
+        <h3 style={{ marginBottom: 8 }}>
+          See your active and scheduled rides below. You can edit, cancel, or chat with your driver.
+        </h3>
         {rideListLoading ? (
           <div>Loading...</div>
         ) : rideList.length === 0 ? (
@@ -1079,6 +1098,20 @@ export default function CustomerDashboard() {
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {rideList
               .sort((a, b) => {
+                // Active rides first, then scheduled, then cancelled, then by scheduledAt/createdAt
+                const statusOrder = (status: string | undefined) => {
+                  switch ((status || "").toLowerCase().trim()) {
+                    case "in_progress": return 1;
+                    case "accepted": return 2;
+                    case "pending": return 3;
+                    case "scheduled": return 4;
+                    case "cancelled": return 5;
+                    default: return 10;
+                  }
+                };
+                const sa = statusOrder(a.status);
+                const sb = statusOrder(b.status);
+                if (sa !== sb) return sa - sb;
                 if (a.scheduledAt && b.scheduledAt)
                   return (
                     DateTime.fromISO(a.scheduledAt).toMillis() -
@@ -1092,6 +1125,8 @@ export default function CustomerDashboard() {
                 const normalizedStatus = (ride.status || "")
                   .toLowerCase()
                   .trim();
+
+                // Only show cancel/edit/done/rate/chat for non-cancelled rides
                 return (
                   <div
                     key={ride.id}
@@ -1107,6 +1142,7 @@ export default function CustomerDashboard() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: 18,
+                      opacity: normalizedStatus === "cancelled" ? 0.65 : 1,
                     }}
                   >
                     <div style={{ flex: 1, textAlign: "left" }}>
@@ -1119,6 +1155,8 @@ export default function CustomerDashboard() {
                           ? "Accepted"
                           : normalizedStatus === "in_progress"
                           ? "In Progress"
+                          : normalizedStatus === "cancelled"
+                          ? "Cancelled"
                           : ""}
                       </div>
                       <div style={{ marginTop: 2 }}>
@@ -1166,50 +1204,44 @@ export default function CustomerDashboard() {
                           {ride.driver.vehicleType || "Unknown"}
                         </div>
                       )}
+                      {/* --- Cancelled ride notification --- */}
+                      {normalizedStatus === "cancelled" && (
+                        <div style={{ color: "#d32f2f", fontWeight: "bold", fontSize: 14 }}>
+                          {ride.cancelledReason
+                            ? ride.cancelledReason
+                            : "This ride was automatically cancelled because no driver accepted your request within 1 hour. Please request a new ride."}
+                        </div>
+                      )}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      {ratingRideId === ride.id ? (
-                        <RateDriver
-                          rideId={ride.id}
-                          onRated={() => {
-                            setRatingRideId(null);
-                            setRideList((prev) =>
-                              prev.filter((r) => r.id !== ride.id)
-                            );
-                          }}
-                        />
-                      ) : (
-                        <>
-                          {["pending", "scheduled"].includes(
-                            normalizedStatus
-                          ) && (
-                            <>
-                              <button
-                                style={{
-                                  background: "#f44336",
-                                  color: "#fff",
-                                  border: "none",
-                                  padding: "0.5em 1.2em",
-                                  borderRadius: 6,
-                                  fontSize: 15,
-                                  marginBottom: 2,
-                                  fontWeight: "bold",
-                                }}
-                                onClick={() => handleCancelRide(ride.id)}
-                              >
-                                Cancel
-                              </button>
-                              {normalizedStatus === "scheduled" && (
+                    {/* --- Action Buttons and Chat/Rating --- */}
+                    {normalizedStatus !== "cancelled" && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        {ratingRideId === ride.id ? (
+                          <RateDriver
+                            rideId={ride.id}
+                            onRated={() => {
+                              setRatingRideId(null);
+                              setRideList((prev) =>
+                                prev.filter((r) => r.id !== ride.id)
+                              );
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {["pending", "scheduled"].includes(
+                              normalizedStatus
+                            ) && (
+                              <>
                                 <button
                                   style={{
-                                    background: "#1976D2",
+                                    background: "#f44336",
                                     color: "#fff",
                                     border: "none",
                                     padding: "0.5em 1.2em",
@@ -1218,75 +1250,93 @@ export default function CustomerDashboard() {
                                     marginBottom: 2,
                                     fontWeight: "bold",
                                   }}
-                                  onClick={() => {
-                                    setSchedEditMode(true);
-                                    setSchedRideId(ride.id);
-                                    setSchedVehicleType(
-                                      ride.vehicleType || ""
-                                    );
-                                    setSchedDestinationName(
-                                      ride.destinationName || ""
-                                    );
-                                    setSchedDatetime(
-                                      ride.scheduledAt
-                                        ? DateTime.fromISO(
-                                            ride.scheduledAt
-                                          ).toFormat(
-                                            "yyyy-MM-dd'T'HH:mm"
-                                          )
-                                        : ""
-                                    );
-                                    setSchedNote(ride.note || "");
-                                    setScheduledModalOpen(true);
-                                  }}
+                                  onClick={() => handleCancelRide(ride.id)}
                                 >
-                                  Edit
+                                  Cancel
                                 </button>
-                              )}
-                            </>
-                          )}
-                          {normalizedStatus === "in_progress" && (
-                            <button
-                              style={{
-                                background: "#388e3c",
-                                color: "#fff",
-                                border: "none",
-                                padding: "0.5em 1.2em",
-                                borderRadius: 6,
-                                fontSize: 15,
-                                fontWeight: "bold",
-                              }}
-                              onClick={() => handleMarkRideDone(ride.id)}
-                            >
-                              Done
-                            </button>
-                          )}
-                          {(normalizedStatus === "accepted" ||
-                            normalizedStatus === "in_progress") && (
-                            <RestChatWindow
-                              rideId={String(ride.id)}
-                              sender={{
-                                id: getCustomerIdFromStorage(),
-                                name: "Customer",
-                                role: "customer",
-                                avatar: "",
-                              }}
-                              messages={
-                                chatMessagesByRideId[String(ride.id)] || []
-                              }
-                              onSend={(text) =>
-                                handleSendMessage(text, ride.id)
-                              }
-                              style={{
-                                width: 330,
-                                minHeight: 60,
-                                maxHeight: 220,
-                              }}
-                            />
-                          )}
-                        </>
-                      )}
-                    </div>
+                                {normalizedStatus === "scheduled" && (
+                                  <button
+                                    style={{
+                                      background: "#1976D2",
+                                      color: "#fff",
+                                      border: "none",
+                                      padding: "0.5em 1.2em",
+                                      borderRadius: 6,
+                                      fontSize: 15,
+                                      marginBottom: 2,
+                                      fontWeight: "bold",
+                                    }}
+                                    onClick={() => {
+                                      setSchedEditMode(true);
+                                      setSchedRideId(ride.id);
+                                      setSchedVehicleType(
+                                        ride.vehicleType || ""
+                                      );
+                                      setSchedDestinationName(
+                                        ride.destinationName || ""
+                                      );
+                                      setSchedDatetime(
+                                        ride.scheduledAt
+                                          ? DateTime.fromISO(
+                                              ride.scheduledAt
+                                            ).toFormat(
+                                              "yyyy-MM-dd'T'HH:mm"
+                                            )
+                                          : ""
+                                      );
+                                      setSchedNote(ride.note || "");
+                                      setScheduledModalOpen(true);
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            {normalizedStatus === "in_progress" && (
+                              <button
+                                style={{
+                                  background: "#388e3c",
+                                  color: "#fff",
+                                  border: "none",
+                                  padding: "0.5em 1.2em",
+                                  borderRadius: 6,
+                                  fontSize: 15,
+                                  fontWeight: "bold",
+                                }}
+                                onClick={() => handleMarkRideDone(ride.id)}
+                              >
+                                Done
+                              </button>
+                            )}
+                            {(normalizedStatus === "accepted" ||
+                              normalizedStatus === "in_progress") && (
+                              <RestChatWindow
+                                rideId={String(ride.id)}
+                                sender={{
+                                  id: getCustomerIdFromStorage(),
+                                  name: "Customer",
+                                  role: "customer",
+                                  avatar: "",
+                                }}
+                                messages={
+                                  chatMessagesByRideId[String(ride.id)] || []
+                                }
+                                onSend={(text) =>
+                                  handleSendMessage(text, ride.id)
+                                }
+                                style={{
+                                  width: 330,
+                                  minHeight: 60,
+                                  maxHeight: 220,
+                                }}
+                                open={true}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1294,6 +1344,7 @@ export default function CustomerDashboard() {
         )}
       </div>
 
+      {/* --- Scheduled Ride Modal --- */}
       {scheduledModalOpen && (
         <div
           style={{
@@ -1480,6 +1531,30 @@ export default function CustomerDashboard() {
           </div>
         </div>
       )}
+
+      {/* --- Logout Button --- */}
+      <button
+        onClick={handleLogout}
+        style={{
+          position: "fixed",
+          right: 24,
+          bottom: 24,
+          zIndex: 2000,
+          background: "#1976D2",
+          color: "#fff",
+          border: "none",
+          borderRadius: "50%",
+          width: 56,
+          height: 56,
+          fontSize: 24,
+          boxShadow: "0 2px 10px #0002",
+          cursor: "pointer",
+        }}
+        title="Logout"
+        aria-label="Logout"
+      >
+        ⎋
+      </button>
     </div>
   );
 }
