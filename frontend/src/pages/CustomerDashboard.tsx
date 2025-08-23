@@ -227,7 +227,7 @@ export default function CustomerDashboard() {
 
   // --- POLLING CONTROL ---
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const isMounted = useRef(false);
+  const isPolling = useRef(false);
 
   // --- Button logic: count rides ---
   const activeRides = rideList.filter(
@@ -291,10 +291,7 @@ export default function CustomerDashboard() {
       );
     }
 
-    // Initial location & backend update
     updateLocationAndSend();
-
-    // Set up interval
     locationInterval = setInterval(updateLocationAndSend, 60000);
 
     return () => {
@@ -421,11 +418,15 @@ export default function CustomerDashboard() {
       .catch(() => {});
   }, [userLocation]);
 
-  // --- Poll every 10s, only start/stop timer on mount/unmount, and do not overlap polls ---
+  // --- Poll every 10s, do not overlap polls
   const fetchRidesSmart = useCallback(async () => {
-    if (!isMounted.current) return;
+    if (isPolling.current) return;
+    isPolling.current = true;
     const customerId = getCustomerIdFromStorage();
-    if (!customerId) return;
+    if (!customerId) {
+      isPolling.current = false;
+      return;
+    }
     setRideListLoading(true);
     try {
       const res = await fetch(
@@ -441,7 +442,6 @@ export default function CustomerDashboard() {
             (r.status || "").toLowerCase().trim()
           )
         );
-        // Only update if rides changed by id or status or count
         let changed = false;
         if (filtered.length !== rideList.length) changed = true;
         else {
@@ -461,17 +461,16 @@ export default function CustomerDashboard() {
       }
     } catch (err) {}
     setRideListLoading(false);
+    isPolling.current = false;
   }, [token, rideList]);
 
   useEffect(() => {
-    isMounted.current = true;
     fetchRidesSmart();
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(() => {
       fetchRidesSmart();
     }, 10000);
     return () => {
-      isMounted.current = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [fetchRidesSmart]);
@@ -746,7 +745,7 @@ export default function CustomerDashboard() {
       setSchedNote("");
       setSchedError(null);
       setScheduledRideLimitError(null);
-      fetchRidesSmart();
+      await fetchRidesSmart(); // force update after schedule edit
     } catch (err: any) {
       setSchedError("Network or server error.");
       setSchedWaiting(false);
@@ -1090,7 +1089,6 @@ export default function CustomerDashboard() {
                 ["pending", "accepted", "in_progress", "scheduled"].includes((r.status || "").toLowerCase().trim())
               )
               .sort((a, b) => {
-                // Active rides first, then scheduled, then by scheduledAt/createdAt
                 const statusOrder = (status: string | undefined) => {
                   switch ((status || "").toLowerCase().trim()) {
                     case "in_progress": return 1;
