@@ -8,6 +8,8 @@ import adminRoutes from "./routes/admin.routes";
 import contactRouter from "./routes/contact";
 import chatRoutes from "./routes/chat";
 import driverRoutes from "./routes/driver.routes";
+import familyRoutes from "./routes/family.routes";
+import businessRoutes from "./routes/business.routes";
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -70,6 +72,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
+app.use("/api/families", familyRoutes);      // <-- Added for Family endpoints
+app.use("/api/businesses", businessRoutes);  // <-- Added for Business endpoints
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);
