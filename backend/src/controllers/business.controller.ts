@@ -44,6 +44,7 @@ export const inviteEmployee = async (req: Request, res: Response) => {
   // Create a pending UserRole for this phone (user account may not exist yet)
   await prisma.userRole.create({
     data: {
+      userId: 0, // Placeholder until verification
       businessId,
       role: "EMPLOYEE",
       phone,
