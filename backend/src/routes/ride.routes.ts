@@ -12,6 +12,7 @@ import {
   cancelRide,
   editScheduledRide,
   getAllCustomerRides,
+  getAllDriverRides, // <-- ADD THIS IMPORT
 } from "../controllers/ride.controller";
 import { checkUserStatus } from "../middlewares/checkUserStatus";
 
@@ -52,6 +53,9 @@ router.put("/:rideId/cancel", checkUserStatus, cancelRide);
 
 // Get available rides for driver (including scheduled)
 router.get("/available", checkUserStatus, getAvailableRides);
+
+// NEW: Get all rides for a driver (scheduled, active, done, cancelled)
+router.get("/all-driver", checkUserStatus, getAllDriverRides);
 
 // Driver accepts a ride (pending or scheduled)
 router.put("/:rideId/accept", checkUserStatus, acceptRide);

@@ -392,6 +392,53 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
   }
 };
 
+// --- GET ALL RIDES FOR DRIVER (SCHEDULED, ACTIVE, DONE, CANCELLED) ---
+export const getAllDriverRides = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let driverId: number | undefined;
+    if (req.query.driverId) {
+      driverId = Number(req.query.driverId);
+    } else if (req.user && typeof req.user === "object" && "id" in req.user) {
+      driverId = (req.user as any).id;
+    }
+    if (!driverId || isNaN(driverId)) {
+      return res.status(400).json({ error: "Missing or invalid driverId" });
+    }
+
+    const rides = await prisma.ride.findMany({
+      where: {
+        driverId,
+      },
+      orderBy: { scheduledAt: "asc" },
+      include: {
+        customer: true,
+      },
+    });
+
+    // Show all rides for driver (including cancelled/completed)
+    const formattedRides = rides.map(r => ({
+      id: r.id,
+      scheduledAt: toLocalISOString(r.scheduledAt),
+      scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
+      vehicleType: r.vehicleType,
+      destinationName: r.destinationName,
+      note: r.note,
+      status: r.status,
+      acceptedAt: toLocalISOString(r.acceptedAt),
+      customer: r.customer ? {
+        id: r.customer.id,
+        name: r.customer.name,
+      } : undefined,
+      rated: r.rating !== null && r.rating !== undefined,
+    }));
+
+    res.json(formattedRides);
+  } catch (error) {
+    console.error("Error fetching all rides for driver:", error);
+    next(error);
+  }
+};
+
 // --- GET AVAILABLE RIDES FOR DRIVER (SCHEDULED & REGULAR) ---
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
