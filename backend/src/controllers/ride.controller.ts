@@ -31,7 +31,6 @@ function toLocalDisplay(date: Date | string | null | undefined): string | null {
     .toFormat("yyyy-MM-dd HH:mm");
 }
 
-// Helper to check if a driver is busy with a ride (ACCEPTED/IN_PROGRESS) that started less than 15 min ago
 async function isDriverBusy(driverId: number) {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
   const busyRide = await prisma.ride.findFirst({
@@ -418,6 +417,10 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
     // Show all rides for driver (including cancelled/completed)
     const formattedRides = rides.map(r => ({
       id: r.id,
+      originLat: r.originLat,
+      originLng: r.originLng,
+      destLat: r.destLat,
+      destLng: r.destLng,
       scheduledAt: toLocalISOString(r.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
       vehicleType: r.vehicleType,
@@ -425,6 +428,10 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
       note: r.note,
       status: r.status,
       acceptedAt: toLocalISOString(r.acceptedAt),
+      startedAt: toLocalISOString(r.startedAt),
+      completedAt: toLocalISOString(r.completedAt),
+      cancelledAt: toLocalISOString(r.cancelledAt),
+      noShowReportedAt: toLocalISOString(r.noShowReportedAt),
       customer: r.customer ? {
         id: r.customer.id,
         name: r.customer.name,
