@@ -447,6 +447,19 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
 };
 
 // --- GET AVAILABLE RIDES FOR DRIVER (SCHEDULED & REGULAR) ---
+// 33km filter applied if lat/lng sent
+function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const driverId = Number(req.query.driverId);
@@ -478,6 +491,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
     const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
+    // Fetch all available rides (do NOT filter by distance in SQL for compatibility)
     const rides = await prisma.ride.findMany({
       where: {
         OR: [
@@ -514,7 +528,22 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       orderBy: { scheduledAt: "asc" }
     });
 
-    const mappedRides = rides.map(ride => ({
+    // If driver's lat/lng sent, filter in JS by 33km
+    let filteredRides = rides;
+    const lat = req.query.lat ? Number(req.query.lat) : null;
+    const lng = req.query.lng ? Number(req.query.lng) : null;
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      filteredRides = rides.filter(ride => {
+        if (
+          typeof ride.originLat !== "number" ||
+          typeof ride.originLng !== "number"
+        ) return false;
+        const distKm = haversineDistanceKm(lat, lng, ride.originLat, ride.originLng);
+        return distKm <= 33;
+      });
+    }
+
+    const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
