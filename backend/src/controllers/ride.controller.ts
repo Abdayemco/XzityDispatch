@@ -491,7 +491,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
     const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
-    // Fetch all available rides (do NOT filter by distance in SQL for compatibility)
+    // --- INCLUDE requestedAt in select! ---
     const rides = await prisma.ride.findMany({
       where: {
         OR: [
@@ -517,6 +517,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         originLat: true,
         originLng: true,
         vehicleType: true,
+        requestedAt: true, // <-- FIXED: ADDED THIS LINE
         customer: { select: { name: true } },
         scheduledAt: true,
         status: true,
@@ -543,12 +544,14 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       });
     }
 
+    // --- INCLUDE requestedAt in mapping! ---
     const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
+      requestedAt: ride.requestedAt, // <-- FIXED: ADDED THIS LINE
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationLat: ride.destLat,
