@@ -31,6 +31,33 @@ function toLocalDisplay(date: Date | string | null | undefined): string | null {
     .toFormat("yyyy-MM-dd HH:mm");
 }
 
+// Helper to return just the time (HH:mm) from UTC date
+function toLocalHHmm(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
+    .setZone(LOCAL_TZ)
+    .toFormat("HH:mm");
+}
+
+// Helper to calculate distance between two points in km
+function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Helper to estimate ETA in minutes given distance in km
+function estimateTimeMin(distanceKm: number, averageKmh: number = 30): number {
+  if (!distanceKm || distanceKm <= 0) return 0;
+  return Math.ceil((distanceKm / averageKmh) * 60);
+}
+
 async function isDriverBusy(driverId: number) {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
   const busyRide = await prisma.ride.findFirst({
@@ -364,26 +391,53 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
     });
 
     // Show all rides for customer (including cancelled for notification purposes)
-    const formattedRides = rides.map(r => ({
-      id: r.id,
-      requestedAt: r.requestedAt, // PATCH: include requestedAt
-      scheduledAt: toLocalISOString(r.scheduledAt),
-      scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
-      vehicleType: r.vehicleType,
-      destinationName: r.destinationName,
-      note: r.note,
-      status: r.status,
-      acceptedAt: toLocalISOString(r.acceptedAt),
-      driver: r.driver ? {
-        id: r.driver.id,
-        name: r.driver.name,
-        vehicleType: r.driver.vehicleType,
-        lastKnownLat: r.driver.lastKnownLat,      // PATCH: include driver's lat
-        lastKnownLng: r.driver.lastKnownLng,      // PATCH: include driver's lng
+    const formattedRides = rides.map(r => {
+      // Add requestedAtTime (HH:mm only)
+      const requestedAtTime = r.requestedAt ? toLocalHHmm(r.requestedAt) : null;
+      // Add driver's lastKnownLat/lastKnownLng
+      let eta = null;
+      let etaKm = null;
+      let etaMin = null;
+      if (
+        r.driver &&
+        r.driver.lastKnownLat != null && r.driver.lastKnownLng != null &&
+        r.originLat != null && r.originLng != null
+      ) {
+        const distanceKm = getDistanceKm(
+          r.driver.lastKnownLat,
+          r.driver.lastKnownLng,
+          r.originLat,
+          r.originLng
+        );
+        etaKm = Number(distanceKm.toFixed(1));
+        etaMin = estimateTimeMin(distanceKm);
+        eta = { etaMin, etaKm };
+      }
+      return {
+        id: r.id,
+        scheduledAt: toLocalISOString(r.scheduledAt),
+        scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
+        vehicleType: r.vehicleType,
+        destinationName: r.destinationName,
+        note: r.note,
+        status: r.status,
         acceptedAt: toLocalISOString(r.acceptedAt),
-      } : undefined,
-      rated: r.rating !== null && r.rating !== undefined,
-    }));
+        requestedAtTime, // <-- just the time (HH:mm)
+        driver: r.driver
+          ? {
+              id: r.driver.id,
+              name: r.driver.name,
+              vehicleType: r.driver.vehicleType,
+              lastKnownLat: r.driver.lastKnownLat,
+              lastKnownLng: r.driver.lastKnownLng,
+              acceptedAt: toLocalISOString(r.acceptedAt),
+            }
+          : undefined,
+        etaMin: etaMin ?? null, // <-- ETA in minutes (null if no driver)
+        etaKm: etaKm ?? null,   // <-- ETA in km (null if no driver)
+        rated: r.rating !== null && r.rating !== undefined,
+      };
+    });
 
     res.json(formattedRides);
   } catch (error) {
@@ -492,6 +546,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
     const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
+    // --- INCLUDE requestedAt in select! ---
     const rides = await prisma.ride.findMany({
       where: {
         OR: [
@@ -517,7 +572,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         originLat: true,
         originLng: true,
         vehicleType: true,
-        requestedAt: true,
+        requestedAt: true, // <-- FIXED: ADDED THIS LINE
         customer: { select: { name: true } },
         scheduledAt: true,
         status: true,
@@ -529,6 +584,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       orderBy: { scheduledAt: "asc" }
     });
 
+    // If driver's lat/lng sent, filter in JS by 33km
     let filteredRides = rides;
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
@@ -543,13 +599,14 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       });
     }
 
+    // --- INCLUDE requestedAt in mapping! ---
     const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
-      requestedAt: ride.requestedAt,
+      requestedAt: ride.requestedAt, // <-- FIXED: ADDED THIS LINE
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationLat: ride.destLat,
@@ -579,6 +636,7 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
     }
     const rideId = Number(req.params.rideId);
 
+    // Accept pending or scheduled ride
     const ride = await prisma.ride.updateMany({
       where: {
         id: rideId,
@@ -640,6 +698,7 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
+    // Only allow starting if accepted
     const ride = await prisma.ride.findFirst({
       where: {
         id: rideId,
@@ -682,6 +741,7 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
+    // Only scheduled rides, after scheduledAt + grace period
     const ride = await prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) return res.status(404).json({ error: "Ride not found" });
     if (ride.status !== RideStatus.SCHEDULED) {
