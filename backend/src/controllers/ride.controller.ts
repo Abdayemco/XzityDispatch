@@ -366,6 +366,7 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
     // Show all rides for customer (including cancelled for notification purposes)
     const formattedRides = rides.map(r => ({
       id: r.id,
+      requestedAt: r.requestedAt, // PATCH: include requestedAt
       scheduledAt: toLocalISOString(r.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
       vehicleType: r.vehicleType,
@@ -377,8 +378,8 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         id: r.driver.id,
         name: r.driver.name,
         vehicleType: r.driver.vehicleType,
-        lastKnownLat: r.driver.lastKnownLat,
-        lastKnownLng: r.driver.lastKnownLng,
+        lastKnownLat: r.driver.lastKnownLat,      // PATCH: include driver's lat
+        lastKnownLng: r.driver.lastKnownLng,      // PATCH: include driver's lng
         acceptedAt: toLocalISOString(r.acceptedAt),
       } : undefined,
       rated: r.rating !== null && r.rating !== undefined,
@@ -491,7 +492,6 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
     const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
     const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
-    // --- INCLUDE requestedAt in select! ---
     const rides = await prisma.ride.findMany({
       where: {
         OR: [
@@ -517,7 +517,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         originLat: true,
         originLng: true,
         vehicleType: true,
-        requestedAt: true, // <-- FIXED: ADDED THIS LINE
+        requestedAt: true,
         customer: { select: { name: true } },
         scheduledAt: true,
         status: true,
@@ -529,7 +529,6 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       orderBy: { scheduledAt: "asc" }
     });
 
-    // If driver's lat/lng sent, filter in JS by 33km
     let filteredRides = rides;
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
@@ -544,14 +543,13 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       });
     }
 
-    // --- INCLUDE requestedAt in mapping! ---
     const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
-      requestedAt: ride.requestedAt, // <-- FIXED: ADDED THIS LINE
+      requestedAt: ride.requestedAt,
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationLat: ride.destLat,
@@ -581,7 +579,6 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
     }
     const rideId = Number(req.params.rideId);
 
-    // Accept pending or scheduled ride
     const ride = await prisma.ride.updateMany({
       where: {
         id: rideId,
@@ -643,7 +640,6 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
-    // Only allow starting if accepted
     const ride = await prisma.ride.findFirst({
       where: {
         id: rideId,
@@ -686,7 +682,6 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
-    // Only scheduled rides, after scheduledAt + grace period
     const ride = await prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) return res.status(404).json({ error: "Ride not found" });
     if (ride.status !== RideStatus.SCHEDULED) {
