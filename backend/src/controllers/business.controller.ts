@@ -22,6 +22,21 @@ export const createBusiness = async (req: Request, res: Response) => {
   res.json(business);
 };
 
+// List all business groups for a user (as admin or employee)
+export const listBusinessGroups = async (req: Request, res: Response) => {
+  const userId = Number(req.query.userId);
+  if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+  // Find all businesses where user is an admin/employee (via userRole)
+  const userBusinesses = await prisma.business.findMany({
+    where: {
+      users: { some: { userId } }
+    }
+  });
+
+  res.json(userBusinesses);
+};
+
 // Invite an employee (creates an invitation and a pending UserRole)
 export const inviteEmployee = async (req: Request, res: Response) => {
   const businessId = Number(req.params.businessId);

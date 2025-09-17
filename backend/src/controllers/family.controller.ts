@@ -22,6 +22,21 @@ export const createFamily = async (req: Request, res: Response) => {
   res.json(family);
 };
 
+// List all family groups for a user (as admin or member)
+export const listFamilyGroups = async (req: Request, res: Response) => {
+  const userId = Number(req.query.userId);
+  if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+  // Find all families where user is an admin/member (via userRole)
+  const userFamilies = await prisma.family.findMany({
+    where: {
+      users: { some: { userId } }
+    }
+  });
+
+  res.json(userFamilies);
+};
+
 // Invite a family member (creates an invitation and a pending UserRole)
 export const inviteFamilyMember = async (req: Request, res: Response) => {
   const familyId = Number(req.params.familyId);

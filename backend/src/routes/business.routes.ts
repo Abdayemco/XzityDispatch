@@ -3,11 +3,15 @@ import {
   createBusiness,
   inviteEmployee,
   verifyEmployee,
+  listBusinessGroups,
   listEmployees,
   removeEmployee
 } from "../controllers/business.controller";
 
 const router = Router();
+
+// List all business groups for a user (NEW)
+router.get("/", listBusinessGroups);
 
 router.post("/", createBusiness);
 router.post("/:businessId/invite", inviteEmployee);
