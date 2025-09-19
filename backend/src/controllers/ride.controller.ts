@@ -572,7 +572,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
         originLat: true,
         originLng: true,
         vehicleType: true,
-        requestedAt: true, // <-- FIXED: ADDED THIS LINE
+        requestedAt: true,
         customer: { select: { name: true } },
         scheduledAt: true,
         status: true,
@@ -606,7 +606,7 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
       vehicleType: ride.vehicleType,
-      requestedAt: ride.requestedAt, // <-- FIXED: ADDED THIS LINE
+      requestedAt: ride.requestedAt,
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationLat: ride.destLat,
@@ -615,6 +615,28 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       note: ride.note,
       status: ride.status,
     }));
+
+    // ----------- DEBUG LOG OUTPUT -----------
+    console.log("=== getAvailableRides DEBUG ===");
+    console.log({
+      driverId,
+      driverVehicleType: driver.vehicleType,
+      rideTypes,
+      ridesFound: rides.length,
+      filteredRides: filteredRides.length,
+      rides: filteredRides.map(r => ({
+        id: r.id,
+        status: r.status,
+        vehicleType: r.vehicleType,
+        originLat: r.originLat,
+        originLng: r.originLng,
+        requestedAt: r.requestedAt
+      })),
+      params: {
+        lat, lng,
+      }
+    });
+    console.log("===============================");
 
     res.json(mappedRides);
   } catch (error) {
