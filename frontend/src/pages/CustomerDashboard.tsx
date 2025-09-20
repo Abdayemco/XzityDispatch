@@ -1175,8 +1175,6 @@ export default function CustomerDashboard() {
                           Note: {ride.note}
                         </div>
                       )}
-                      // ...everything above remains unchanged...
-
                       {ride.driver && (
                         <div style={{ color: "#1976D2", fontSize: 14 }}>
                           Driver: {ride.driver.name || "Assigned"} | Vehicle:{" "}
@@ -1201,7 +1199,6 @@ export default function CustomerDashboard() {
                           Cancel
                         </button>
                       )}
-// ...everything below remains unchanged...
                     </div>
                     <div
                       style={{
