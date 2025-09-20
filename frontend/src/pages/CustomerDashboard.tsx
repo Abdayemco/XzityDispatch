@@ -1175,12 +1175,33 @@ export default function CustomerDashboard() {
                           Note: {ride.note}
                         </div>
                       )}
+                      // ...everything above remains unchanged...
+
                       {ride.driver && (
                         <div style={{ color: "#1976D2", fontSize: 14 }}>
                           Driver: {ride.driver.name || "Assigned"} | Vehicle:{" "}
                           {ride.driver.vehicleType || "Unknown"}
                         </div>
                       )}
+                      {/* --- Cancel button for accepted ride with driver, directly below driver info --- */}
+                      {normalizedStatus === "accepted" && ride.driver && (
+                        <button
+                          style={{
+                            background: "#f44336",
+                            color: "#fff",
+                            border: "none",
+                            padding: "0.5em 1.2em",
+                            borderRadius: 6,
+                            fontSize: 15,
+                            margin: "10px 0 8px 0",
+                            fontWeight: "bold",
+                          }}
+                          onClick={() => handleCancelRide(ride.id)}
+                        >
+                          Cancel
+                        </button>
+                      )}
+// ...everything below remains unchanged...
                     </div>
                     <div
                       style={{
