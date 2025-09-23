@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../utils/prisma";
 import { VehicleType, RideStatus, Role } from "@prisma/client";
 import { DateTime } from "luxon";
@@ -506,7 +507,7 @@ function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: num
   const toRad = (v: number) => (v * Math.PI) / 180;
   const R = 6371;
   const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lat2 - lng1);
+  const dLng = toRad(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
@@ -514,14 +515,6 @@ function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * NEW: Generic provider requests endpoint.
- * Filters requests/rides for DRIVERS, SHOPPERS, HAIR_DRESSERS, INSTITUTES.
- * - For drivers: matches vehicle type as before.
- * - For shoppers: only "shopping" jobs (future extension).
- * - For hair dressers: matches hairType.
- * - For institutes: matches beautyServices.
- */
 export const getAvailableRequests = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const providerId = Number(req.query.providerId);
@@ -597,18 +590,15 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
     }
     // --- SHOPPER LOGIC (future extension, filter jobs by type) ---
     else if (role === Role.SHOPPER) {
-      // Example: Fetch jobs with a "shopping" flag or future job type
       rides = []; // Placeholder for future shopping jobs
     }
     // --- HAIR_DRESSER LOGIC ---
     else if (role === Role.HAIR_DRESSER) {
-      // Find jobs/requests needing hair dresser, matching hairType if possible
-      // For now, assume rides with a note containing "hair" are requests for hair dressing
       rides = await prisma.ride.findMany({
         where: {
           status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
           driverId: null,
-          note: { contains: "hair", mode: "insensitive" },
+          note: { contains: "hair", mode: Prisma.QueryMode.insensitive },
         },
         select: {
           id: true,
@@ -625,18 +615,15 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         },
         orderBy: { scheduledAt: "asc" }
       });
-      // Filter by hairType if specified
       if (provider.hairType) {
         rides = rides.filter(r =>
           !r.note ||
-          r.note.toLowerCase().includes(provider.hairType.toLowerCase())
+          r.note.toLowerCase().includes((provider.hairType ?? '').toLowerCase())
         );
       }
     }
     // --- INSTITUTE LOGIC ---
     else if (role === Role.INSTITUTE) {
-      // Find jobs/requests needing beauty services, matching beautyServices
-      // For now, assume rides with a note containing "beauty" or any of the services
       let serviceKeywords: string[] = [];
       if (provider.beautyServices) {
         serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
@@ -646,9 +633,9 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
           status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
           driverId: null,
           OR: [
-            { note: { contains: "beauty", mode: "insensitive" } },
+            { note: { contains: "beauty", mode: Prisma.QueryMode.insensitive } },
             ...serviceKeywords.map(sk => ({
-              note: { contains: sk, mode: "insensitive" }
+              note: { contains: sk, mode: Prisma.QueryMode.insensitive }
             }))
           ]
         },
@@ -1058,6 +1045,15 @@ export const updateCustomerLocation = async (req: Request, res: Response, next: 
     return res.json({ success: true });
   } catch (error) {
     console.error("Error updating customer location:", error);
+    next(error);
+  }
+};
+
+export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Implement your logic for fetching available rides for drivers here
+    res.json([]); // placeholder
+  } catch (error) {
     next(error);
   }
 };
