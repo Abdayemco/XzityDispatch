@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   requestRide,
   getAvailableRides,
+  getAvailableRequests, // <-- ADD THIS IMPORT
   acceptRide,
   startRide,
   markRideNoShow,
@@ -12,7 +13,7 @@ import {
   cancelRide,
   editScheduledRide,
   getAllCustomerRides,
-  getAllDriverRides, // <-- ADD THIS IMPORT
+  getAllDriverRides,
 } from "../controllers/ride.controller";
 import { checkUserStatus } from "../middlewares/checkUserStatus";
 
@@ -65,5 +66,12 @@ router.put("/:rideId/start", checkUserStatus, startRide);
 
 // Driver marks scheduled ride as "No Show"
 router.put("/:rideId/no_show", checkUserStatus, markRideNoShow);
+
+/**
+ * PROVIDER ROUTES (DRIVER, SHOPPER, HAIR_DRESSER, INSTITUTE)
+ */
+
+// NEW: Get available requests for any provider type (use providerId & role)
+router.get("/available-requests", checkUserStatus, getAvailableRequests);
 
 export default router;

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
-import { VehicleType, RideStatus } from "@prisma/client";
+import { VehicleType, RideStatus, Role } from "@prisma/client";
 import { DateTime } from "luxon";
 
 const LOCAL_TZ = "Africa/Cairo";
@@ -501,13 +501,12 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
   }
 };
 
-// --- GET AVAILABLE RIDES FOR DRIVER (SCHEDULED & REGULAR) ---
-// 33km filter applied if lat/lng sent
+// --- GET AVAILABLE REQUESTS FOR PROVIDER (DRIVER/SHOPPER/HAIR_DRESSER/INSTITUTE) ---
 function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (v: number) => (v * Math.PI) / 180;
   const R = 6371;
   const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
+  const dLng = toRad(lat2 - lng1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
@@ -515,79 +514,169 @@ function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * NEW: Generic provider requests endpoint.
+ * Filters requests/rides for DRIVERS, SHOPPERS, HAIR_DRESSERS, INSTITUTES.
+ * - For drivers: matches vehicle type as before.
+ * - For shoppers: only "shopping" jobs (future extension).
+ * - For hair dressers: matches hairType.
+ * - For institutes: matches beautyServices.
+ */
+export const getAvailableRequests = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const driverId = Number(req.query.driverId);
-    if (!driverId) {
-      return res.status(401).json({ error: "Unauthorized: Missing driver id" });
+    const providerId = Number(req.query.providerId);
+    if (!providerId) {
+      return res.status(401).json({ error: "Unauthorized: Missing provider id" });
     }
-    const driver = await prisma.user.findUnique({
-      where: { id: driverId },
-      select: { vehicleType: true },
+    // Get full provider profile
+    const provider = await prisma.user.findUnique({
+      where: { id: providerId }
     });
-    if (!driver) {
-      return res.status(404).json({ error: "Driver not found" });
+    if (!provider) {
+      return res.status(404).json({ error: "Provider not found" });
     }
 
-    let rideTypes: VehicleType[] = [];
-    if (driver.vehicleType === "TOW_TRUCK") {
-      rideTypes = ["TOW_TRUCK", "TRUCK"];
-    } else if (driver.vehicleType === "WHEELCHAIR") {
-      rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
-    } else if (driver.vehicleType === "CAR") {
-      rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
-    } else if (driver.vehicleType === "TUKTUK") {
-      rideTypes = ["TUKTUK", "DELIVERY"];
-    } else if (driver.vehicleType) {
-      rideTypes = [driver.vehicleType];
-    }
+    const role = provider.role;
+    let rides: any[] = [];
 
-    const now = new Date();
-    const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
-    const oneHourAgo = new Date(now.getTime() - 60 * 60000);
+    // --- DRIVER LOGIC ---
+    if (role === Role.DRIVER) {
+      let rideTypes: VehicleType[] = [];
+      if (provider.vehicleType === "TOW_TRUCK") {
+        rideTypes = ["TOW_TRUCK", "TRUCK"];
+      } else if (provider.vehicleType === "WHEELCHAIR") {
+        rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
+      } else if (provider.vehicleType === "CAR") {
+        rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
+      } else if (provider.vehicleType === "TUKTUK") {
+        rideTypes = ["TUKTUK", "DELIVERY"];
+      } else if (provider.vehicleType) {
+        rideTypes = [provider.vehicleType];
+      }
 
-    // --- INCLUDE requestedAt in select! ---
-    const rides = await prisma.ride.findMany({
-      where: {
-        OR: [
-          {
-            status: RideStatus.SCHEDULED,
-            scheduledAt: {
-              lte: thirtyMinFromNow,
-              gte: oneHourAgo,
+      const now = new Date();
+      const thirtyMinFromNow = new Date(now.getTime() + 30 * 60000);
+      const oneHourAgo = new Date(now.getTime() - 60 * 60000);
+
+      rides = await prisma.ride.findMany({
+        where: {
+          OR: [
+            {
+              status: RideStatus.SCHEDULED,
+              scheduledAt: {
+                lte: thirtyMinFromNow,
+                gte: oneHourAgo,
+              },
+              driverId: null,
+              vehicleType: { in: rideTypes },
             },
-            driverId: null,
-            vehicleType: { in: rideTypes },
-          },
-          {
-            status: RideStatus.PENDING,
-            driverId: null,
-            requestedAt: { gte: oneHourAgo },
-            vehicleType: { in: rideTypes },
-          }
-        ]
-      },
-      select: {
-        id: true,
-        originLat: true,
-        originLng: true,
-        vehicleType: true,
-        requestedAt: true,
-        customer: { select: { name: true } },
-        scheduledAt: true,
-        status: true,
-        destLat: true,
-        destLng: true,
-        destinationName: true,
-        note: true,
-      },
-      orderBy: { scheduledAt: "asc" }
-    });
+            {
+              status: RideStatus.PENDING,
+              driverId: null,
+              requestedAt: { gte: oneHourAgo },
+              vehicleType: { in: rideTypes },
+            }
+          ]
+        },
+        select: {
+          id: true,
+          originLat: true,
+          originLng: true,
+          vehicleType: true,
+          requestedAt: true,
+          customer: { select: { name: true } },
+          scheduledAt: true,
+          status: true,
+          destLat: true,
+          destLng: true,
+          destinationName: true,
+          note: true,
+        },
+        orderBy: { scheduledAt: "asc" }
+      });
+    }
+    // --- SHOPPER LOGIC (future extension, filter jobs by type) ---
+    else if (role === Role.SHOPPER) {
+      // Example: Fetch jobs with a "shopping" flag or future job type
+      rides = []; // Placeholder for future shopping jobs
+    }
+    // --- HAIR_DRESSER LOGIC ---
+    else if (role === Role.HAIR_DRESSER) {
+      // Find jobs/requests needing hair dresser, matching hairType if possible
+      // For now, assume rides with a note containing "hair" are requests for hair dressing
+      rides = await prisma.ride.findMany({
+        where: {
+          status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
+          driverId: null,
+          note: { contains: "hair", mode: "insensitive" },
+        },
+        select: {
+          id: true,
+          originLat: true,
+          originLng: true,
+          requestedAt: true,
+          customer: { select: { name: true } },
+          scheduledAt: true,
+          status: true,
+          destLat: true,
+          destLng: true,
+          destinationName: true,
+          note: true,
+        },
+        orderBy: { scheduledAt: "asc" }
+      });
+      // Filter by hairType if specified
+      if (provider.hairType) {
+        rides = rides.filter(r =>
+          !r.note ||
+          r.note.toLowerCase().includes(provider.hairType.toLowerCase())
+        );
+      }
+    }
+    // --- INSTITUTE LOGIC ---
+    else if (role === Role.INSTITUTE) {
+      // Find jobs/requests needing beauty services, matching beautyServices
+      // For now, assume rides with a note containing "beauty" or any of the services
+      let serviceKeywords: string[] = [];
+      if (provider.beautyServices) {
+        serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
+      }
+      rides = await prisma.ride.findMany({
+        where: {
+          status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
+          driverId: null,
+          OR: [
+            { note: { contains: "beauty", mode: "insensitive" } },
+            ...serviceKeywords.map(sk => ({
+              note: { contains: sk, mode: "insensitive" }
+            }))
+          ]
+        },
+        select: {
+          id: true,
+          originLat: true,
+          originLng: true,
+          requestedAt: true,
+          customer: { select: { name: true } },
+          scheduledAt: true,
+          status: true,
+          destLat: true,
+          destLng: true,
+          destinationName: true,
+          note: true,
+        },
+        orderBy: { scheduledAt: "asc" }
+      });
+    }
+    // --- DEFAULT: No results for other roles ---
+    else {
+      rides = [];
+    }
 
-    // If driver's lat/lng sent, filter in JS by 33km
-    let filteredRides = rides;
+    // Location-based filtering (optional, 33km radius)
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
+    let filteredRides = rides;
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
       filteredRides = rides.filter(ride => {
         if (
@@ -599,13 +688,12 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       });
     }
 
-    // --- INCLUDE requestedAt in mapping! ---
+    // Map output for frontend
     const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
       pickupLng: ride.originLng,
       customerName: ride.customer?.name || "",
-      vehicleType: ride.vehicleType,
       requestedAt: ride.requestedAt,
       scheduledAt: toLocalISOString(ride.scheduledAt),
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
@@ -616,31 +704,9 @@ export const getAvailableRides = async (req: Request, res: Response, next: NextF
       status: ride.status,
     }));
 
-    // ----------- DEBUG LOG OUTPUT -----------
-    console.log("=== getAvailableRides DEBUG ===");
-    console.log({
-      driverId,
-      driverVehicleType: driver.vehicleType,
-      rideTypes,
-      ridesFound: rides.length,
-      filteredRides: filteredRides.length,
-      rides: filteredRides.map(r => ({
-        id: r.id,
-        status: r.status,
-        vehicleType: r.vehicleType,
-        originLat: r.originLat,
-        originLng: r.originLng,
-        requestedAt: r.requestedAt
-      })),
-      params: {
-        lat, lng,
-      }
-    });
-    console.log("===============================");
-
     res.json(mappedRides);
   } catch (error) {
-    console.error("Error fetching available rides:", error);
+    console.error("Error fetching available requests for provider:", error);
     next(error);
   }
 };
