@@ -11,6 +11,9 @@ enum Role {
   ADMIN
   DRIVER
   CUSTOMER
+  SHOPPER
+  HAIR_DRESSER
+  INSTITUTE
 }
 
 enum UserRoleType {
@@ -89,6 +92,10 @@ model User {
 
   // NEW: User Roles (families/businesses)
   roles          UserRole[]
+
+  // Provider extensions
+  hairType       String?      // For Hair Dresser role: "Male", "Female", "Both"
+  beautyServices String?      // For Institute/Beauty: comma-separated e.g. "Makeup,Nails,Spa"
 }
 
 model Ride {

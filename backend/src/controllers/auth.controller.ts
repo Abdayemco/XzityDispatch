@@ -12,16 +12,11 @@ function detectCountryArea(phone: string) {
   try {
     const phoneNumber = parsePhoneNumber(phone);
     if (!phoneNumber) return { country: null, countryName: null, area: null };
-    // ISO country code, e.g. "LB", "US", "FR", etc.
     const country = phoneNumber.country || null;
-    // Human readable country name
     const countryName = country ? getName(country) : null;
-    // Area: for most countries, first 2-4 digits of the national number (after country code)
-    // You can further customize for specific countries if needed
     const nationalNumber = phoneNumber.nationalNumber || "";
     let area = null;
     if (nationalNumber.length >= 2) {
-      // Default: first 2-4 digits, tweak as needed for your use case
       area = nationalNumber.slice(0, 4);
     }
     return { country, countryName, area };
@@ -33,7 +28,7 @@ function detectCountryArea(phone: string) {
 // --- REGISTER CONTROLLER ---
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, phone, email, password, role, vehicleType, avatar } = req.body;
+    const { name, phone, email, password, role, vehicleType, avatar, hairType, beautyServices } = req.body;
 
     if (
       !name?.trim() ||
@@ -42,6 +37,21 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       !role?.trim()
     ) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // --- Add validation for new roles ---
+    const upperRole = role.trim().toUpperCase();
+    if (
+      upperRole === "HAIR_DRESSER" &&
+      !hairType
+    ) {
+      return res.status(400).json({ error: "hairType required for hair dresser registration" });
+    }
+    if (
+      upperRole === "INSTITUTE" &&
+      (!beautyServices || !Array.isArray(beautyServices) || beautyServices.length === 0)
+    ) {
+      return res.status(400).json({ error: "beautyServices required for institute registration" });
     }
 
     const existing = await prisma.user.findUnique({ where: { phone } });
@@ -64,7 +74,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     let trialStart: Date | null = null;
     let trialEnd: Date | null = null;
     let subscriptionStatus: string | null = null;
-    if (role.trim().toUpperCase() === "DRIVER") {
+    if (upperRole === "DRIVER") {
       trialStart = new Date();
       trialEnd = new Date();
       trialEnd.setMonth(trialEnd.getMonth() + 1);
@@ -74,26 +84,36 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     // --- Detect Country and Area from Phone ---
     const { country, countryName, area } = detectCountryArea(phone.trim());
 
+    // --- Build userData with new fields ---
+    let userData: any = {
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email?.trim() || null,
+      password: hashedPassword,
+      role: upperRole,
+      vehicleType: upperRole === "DRIVER" ? vehicleType?.toUpperCase() : null,
+      verificationCode,
+      phoneVerified: false,
+      disabled: false,
+      avatar: avatar?.trim() || null,
+      trialStart,
+      trialEnd,
+      subscriptionStatus,
+      country,
+      countryName,
+      area,
+    };
+
+    // Add new fields based on role
+    if (upperRole === "HAIR_DRESSER") {
+      userData.hairType = hairType;
+    }
+    if (upperRole === "INSTITUTE") {
+      userData.beautyServices = beautyServices;
+    }
+
     const user = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        phone: phone.trim(),
-        email: email?.trim() || null,
-        password: hashedPassword,
-        role: role.trim().toUpperCase(),
-        vehicleType: role.trim().toUpperCase() === "DRIVER" ? vehicleType?.toUpperCase() : null,
-        verificationCode,
-        phoneVerified: false,
-        disabled: false,
-        avatar: avatar?.trim() || null,
-        trialStart,
-        trialEnd,
-        subscriptionStatus,
-        // --- Add country, countryName, and area ---
-        country,        // ISO code (e.g. "LB", "US")
-        countryName,    // Full name (e.g. "Lebanon", "United States")
-        area,           // Area code (first few digits of local number)
-      },
+      data: userData,
     });
 
     await transporter.sendMail({
@@ -109,13 +129,25 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         `Country: ${countryName || country || "N/A"}`,
         `Area: ${area || "N/A"}`,
         `Verification Code: ${verificationCode}`,
+        upperRole === "HAIR_DRESSER" ? `Hair Type: ${hairType}` : "",
+        upperRole === "INSTITUTE" ? `Beauty Services: ${(beautyServices || []).join(", ")}` : "",
         "",
         "Please send the verification code to the user via SMS or WhatsApp."
       ].join('\n')
     });
 
     return res.status(201).json({
-      user: { id: user.id, phone: user.phone, email: user.email, avatar: user.avatar, country, countryName, area },
+      user: {
+        id: user.id,
+        phone: user.phone,
+        email: user.email,
+        avatar: user.avatar,
+        country,
+        countryName,
+        area,
+        hairType: user.hairType || undefined,
+        beautyServices: user.beautyServices || undefined,
+      },
       message: "User registered. The admin has received the verification code and will contact you soon.",
     });
   } catch (error) {
@@ -198,6 +230,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           country: user.country || null,
           countryName: user.countryName || null,
           area: user.area || null,
+          hairType: user.hairType || undefined,
+          beautyServices: user.beautyServices || undefined,
         }
       });
     }
@@ -290,6 +324,8 @@ export const verifyCode = async (req: Request, res: Response, next: NextFunction
         country: user.country || null,
         countryName: user.countryName || null,
         area: user.area || null,
+        hairType: user.hairType || undefined,
+        beautyServices: user.beautyServices || undefined,
       }
     });
   } catch (error) {
