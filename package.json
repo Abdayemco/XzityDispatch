@@ -1,11 +1,9 @@
 {
-  "dependencies": {
-    "cors": "^2.8.5",
-    "luxon": "^3.7.1",
-    "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {
-    "@types/luxon": "^3.6.2",
-    "@types/node-fetch": "^2.6.12"
-  }
+  "name": "xzity-dispatch",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
 }
