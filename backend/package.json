@@ -10,7 +10,9 @@
     "prisma:migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy"
   },
+  {
   "dependencies": {
+    "prisma": "^5.22.0",
     "@prisma/client": "^5.22.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
