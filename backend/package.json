@@ -1,5 +1,5 @@
 {
-  "name": "xzity-dispatch-backend",
+  "name": "xzitydispatch-backend",
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
