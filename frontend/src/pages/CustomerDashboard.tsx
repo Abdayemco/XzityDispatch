@@ -185,7 +185,6 @@ const API_URL = import.meta.env.VITE_API_URL
 // ...PASTE HERE THE REST OF YOUR EXISTING CustomerDashboard COMPONENT (ALL HANDLERS, STATE, AND UI)
 // (No other changes are required. The only update is the vehicleOptions array above.)
 // Your logic for requesting rides, scheduling rides, rendering the map, etc., remains the same.
-
 export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("token")
