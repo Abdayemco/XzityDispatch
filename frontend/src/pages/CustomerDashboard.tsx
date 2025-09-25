@@ -14,9 +14,14 @@ import wheelchairIcon from "../assets/marker-wheelchair.png";
 import fireIcon from "../assets/emergency-fire.png";
 import policeIcon from "../assets/emergency-police.png";
 import hospitalIcon from "../assets/emergency-hospital.png";
+import shoppingIcon from "../assets/marker-shopping.png";
+import hairIcon from "../assets/marker-hairdresser.png";
+import cleaningIcon from "../assets/marker-cleaning.png";
+import instituteIcon from "../assets/marker-institute.png";
 import RestChatWindow from "../components/RestChatWindow";
 import { DateTime } from "luxon";
 
+// ==== ALL AVAILABLE VEHICLE/SERVICE TYPES (NEW TYPES ADDED) ====
 const vehicleOptions = [
   { value: "CAR", label: "Car", icon: carIcon },
   { value: "DELIVERY", label: "Delivery", icon: deliveryIcon },
@@ -25,7 +30,11 @@ const vehicleOptions = [
   { value: "TRUCK", label: "Truck", icon: truckIcon },
   { value: "WATER_TRUCK", label: "Water Truck", icon: waterTruckIcon },
   { value: "TOW_TRUCK", label: "Tow Truck", icon: towTruckIcon },
-  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon }
+  { value: "WHEELCHAIR", label: "Wheelchair", icon: wheelchairIcon },
+  { value: "SHOPPING", label: "Shopping", icon: shoppingIcon || carIcon },
+  { value: "HAIR_DRESSER", label: "Hair Dresser", icon: hairIcon || carIcon },
+  { value: "CLEANING", label: "Cleaning", icon: cleaningIcon || carIcon },
+  { value: "INSTITUTE", label: "Institute", icon: instituteIcon || carIcon },
 ];
 
 function createLeafletIcon(url: string, w = 32, h = 41) {
@@ -172,6 +181,10 @@ function RateDriver({
 const API_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, "")
   : "";
+
+// ...PASTE HERE THE REST OF YOUR EXISTING CustomerDashboard COMPONENT (ALL HANDLERS, STATE, AND UI)
+// (No other changes are required. The only update is the vehicleOptions array above.)
+// Your logic for requesting rides, scheduling rides, rendering the map, etc., remains the same.
 
 export default function CustomerDashboard() {
   const [token, setToken] = useState<string | null>(() =>
