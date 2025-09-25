@@ -616,10 +616,10 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
       // Safe null check for provider.hairType
-      if (provider.hairType != null && provider.hairType !== "") {
+      if (provider.hairType && provider.hairType !== "") {
         rides = rides.filter(r =>
           !r.note ||
-          r.note.toLowerCase().includes(provider.hairType.toLowerCase())
+          r.note.toLowerCase().includes((provider.hairType ?? "").toLowerCase())
         );
       }
     }
