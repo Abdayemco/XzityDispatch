@@ -266,24 +266,40 @@ export default function DriverDashboard() {
     }
   }, [driverLocation, locationLoaded, updateDriverLocationOnBackend]);
 
+  // NEW: Fetch only accepted jobs for THIS driver (respective order)
   const fetchJobs = useCallback(async () => {
     try {
       setErrorMsg(null);
-      const url = `${API_URL}/api/rides/available?vehicleType=${driverVehicleType}&driverId=${driverId}`;
+      if (!driverId) return;
+      // Get all jobs for the driver (scheduled, active, done, cancelled)
+      const url = `${API_URL}/api/rides/all-driver?driverId=${driverId}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
-        const mapped = data.map((job: any) => ({
-          ...job,
-          pickupLat: job.pickupLat ?? job.originLat,
-          pickupLng: job.pickupLng ?? job.originLng,
-          customerName: job.customerName ?? job.customer?.name ?? "",
-          vehicleType: (job.vehicleType || "").toLowerCase(),
-          scheduledAt: job.scheduledAt || null,
-        }));
-        setJobs(mapped);
+        // Filter for only accepted jobs, ordered by acceptedAt or scheduledAt
+        const accepted = data
+          .filter((job: any) =>
+            job.status === "accepted" ||
+            job.status === "in_progress" ||
+            job.status === "scheduled" ||
+            job.status === "pending"
+          )
+          .sort((a: any, b: any) => {
+            const aTime = new Date(a.acceptedAt || a.scheduledAt || 0).getTime();
+            const bTime = new Date(b.acceptedAt || b.scheduledAt || 0).getTime();
+            return bTime - aTime; // newest first
+          })
+          .map((job: any) => ({
+            ...job,
+            pickupLat: job.pickupLat ?? job.originLat,
+            pickupLng: job.pickupLng ?? job.originLng,
+            customerName: job.customerName ?? job.customer?.name ?? "",
+            vehicleType: (job.vehicleType || "").toLowerCase(),
+            scheduledAt: job.scheduledAt || null,
+          }));
+        setJobs(accepted);
       }
       else {
         setErrorMsg(data?.error || "Server returned an error fetching jobs.");
@@ -293,7 +309,7 @@ export default function DriverDashboard() {
       setErrorMsg("Network error fetching jobs.");
       setJobs([]);
     }
-  }, [driverVehicleType, token, driverId]);
+  }, [token, driverId]);
 
   useEffect(() => {
     if (!locationLoaded || driverJobId || cancelled || completed) return;
@@ -676,7 +692,7 @@ export default function DriverDashboard() {
           marginBottom: 8
         }}
       >
-        Available Rides By Xzity
+        Accepted Rides By Xzity
       </h2>
       <audio
         ref={beepRef}
