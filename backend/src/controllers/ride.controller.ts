@@ -16,31 +16,24 @@ function normalizeVehicleType(input: any): VehicleType | undefined {
   return undefined;
 }
 
-// Helper to convert UTC date (or null) to ISO string in local timezone
 function toLocalISOString(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
     .setZone(LOCAL_TZ)
     .toISO({ suppressMilliseconds: true });
 }
-
-// Helper to format time for display (e.g., "yyyy-MM-dd HH:mm")
 function toLocalDisplay(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
     .setZone(LOCAL_TZ)
     .toFormat("yyyy-MM-dd HH:mm");
 }
-
-// Helper to return just the time (HH:mm) from UTC date
 function toLocalHHmm(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
     .setZone(LOCAL_TZ)
     .toFormat("HH:mm");
 }
-
-// Helper to calculate distance between two points in km
 function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (v: number) => (v * Math.PI) / 180;
   const R = 6371;
@@ -52,8 +45,6 @@ function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): 
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-// Helper to estimate ETA in minutes given distance in km
 function estimateTimeMin(distanceKm: number, averageKmh: number = 30): number {
   if (!distanceKm || distanceKm <= 0) return 0;
   return Math.ceil((distanceKm / averageKmh) * 60);
@@ -93,7 +84,6 @@ export async function cleanupUnacceptedRides() {
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60000);
 
-  // Cancel regular rides (pending) older than 1 hour and unassigned
   const regular = await prisma.ride.updateMany({
     where: {
       status: RideStatus.PENDING,
@@ -106,7 +96,6 @@ export async function cleanupUnacceptedRides() {
     },
   });
 
-  // Cancel scheduled rides that have not been accepted 1 hour after scheduledAt
   const scheduled = await prisma.ride.updateMany({
     where: {
       status: RideStatus.SCHEDULED,
@@ -126,9 +115,6 @@ export async function cleanupUnacceptedRides() {
   }
 }
 
-/**
- * CLEANUP JOB: Cancels "stuck" rides still in ACCEPTED/IN_PROGRESS after 15 minutes.
- */
 export async function cleanupStuckRides() {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
   const result1 = await prisma.ride.updateMany({
@@ -158,7 +144,6 @@ export async function cleanupStuckRides() {
   }
 }
 
-// --- CREATE RIDE (REGULAR OR SCHEDULED) ---
 export const requestRide = async (
   req: Request,
   res: Response,
@@ -174,7 +159,7 @@ export const requestRide = async (
       destinationName,
       note,
       vehicleType,
-      scheduledAt, // optional, ISO string for scheduled ride (should be in local time!)
+      scheduledAt,
     } = req.body;
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
@@ -195,7 +180,6 @@ export const requestRide = async (
         .json({ error: "Missing or invalid required fields" });
     }
 
-    // Convert scheduledAt (if provided) from local time to UTC for DB storage
     let scheduledAtUTC: Date | undefined = undefined;
     if (scheduledAt) {
       const dt = DateTime.fromISO(scheduledAt, { zone: LOCAL_TZ });
@@ -204,7 +188,6 @@ export const requestRide = async (
       }
     }
 
-    // If scheduledAt supplied, create as SCHEDULED ride
     const ride = await prisma.ride.create({
       data: {
         customer: { connect: { id: numericCustomerId } },
@@ -237,7 +220,6 @@ export const requestRide = async (
   }
 };
 
-// --- EDIT SCHEDULED RIDE ---
 export const editScheduledRide = async (
   req: Request,
   res: Response,
@@ -268,7 +250,6 @@ export const editScheduledRide = async (
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // Parse and convert scheduledAt if given
     let scheduledAtUTC: Date | undefined = undefined;
     if (scheduledAt) {
       const zone = timeZone || LOCAL_TZ;
@@ -308,7 +289,6 @@ export const editScheduledRide = async (
   }
 };
 
-// --- CANCEL RIDE (any status, including scheduled) ---
 export const cancelRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
@@ -338,7 +318,6 @@ export const cancelRide = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-// --- MARK RIDE AS DONE (any status, including scheduled) ---
 export const markRideAsDone = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
@@ -368,7 +347,6 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// --- GET ALL RIDES FOR CUSTOMER (SCHEDULED, ACTIVE, DONE, CANCELLED) ---
 export const getAllCustomerRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let customerId: number | undefined;
@@ -391,11 +369,8 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       },
     });
 
-    // Show all rides for customer (including cancelled for notification purposes)
     const formattedRides = rides.map(r => {
-      // Add requestedAtTime (HH:mm only)
       const requestedAtTime = r.requestedAt ? toLocalHHmm(r.requestedAt) : null;
-      // Add driver's lastKnownLat/lastKnownLng
       let eta = null;
       let etaKm = null;
       let etaMin = null;
@@ -423,7 +398,7 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         note: r.note,
         status: r.status,
         acceptedAt: toLocalISOString(r.acceptedAt),
-        requestedAtTime, // <-- just the time (HH:mm)
+        requestedAtTime,
         driver: r.driver
           ? {
               id: r.driver.id,
@@ -434,8 +409,8 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
               acceptedAt: toLocalISOString(r.acceptedAt),
             }
           : undefined,
-        etaMin: etaMin ?? null, // <-- ETA in minutes (null if no driver)
-        etaKm: etaKm ?? null,   // <-- ETA in km (null if no driver)
+        etaMin: etaMin ?? null,
+        etaKm: etaKm ?? null,
         rated: r.rating !== null && r.rating !== undefined,
       };
     });
@@ -447,7 +422,6 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
   }
 };
 
-// --- GET ALL RIDES FOR DRIVER (SCHEDULED, ACTIVE, DONE, CANCELLED) ---
 export const getAllDriverRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let driverId: number | undefined;
@@ -470,7 +444,6 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
       },
     });
 
-    // Show all rides for driver (including cancelled/completed)
     const formattedRides = rides.map(r => ({
       id: r.id,
       originLat: r.originLat,
@@ -521,7 +494,6 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
     if (!providerId) {
       return res.status(401).json({ error: "Unauthorized: Missing provider id" });
     }
-    // Get full provider profile
     const provider = await prisma.user.findUnique({
       where: { id: providerId }
     });
@@ -532,19 +504,40 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
     const role = provider.role;
     let rides: any[] = [];
 
-    // --- DRIVER LOGIC ---
+    // --- DRIVER LOGIC (UPDATED as per your rules) ---
     if (role === Role.DRIVER) {
       let rideTypes: VehicleType[] = [];
-      if (provider.vehicleType === "TOW_TRUCK") {
-        rideTypes = ["TOW_TRUCK", "TRUCK"];
-      } else if (provider.vehicleType === "WHEELCHAIR") {
-        rideTypes = ["WHEELCHAIR", "CAR", "DELIVERY", "TUKTUK"];
-      } else if (provider.vehicleType === "CAR") {
-        rideTypes = ["CAR", "TUKTUK", "DELIVERY"];
-      } else if (provider.vehicleType === "TUKTUK") {
-        rideTypes = ["TUKTUK", "DELIVERY"];
-      } else if (provider.vehicleType) {
-        rideTypes = [provider.vehicleType];
+
+      switch (provider.vehicleType) {
+        case "CAR":
+          rideTypes = ["CAR", "TUKTUK", "DELIVERY", "SHOPPING"];
+          break;
+        case "TUKTUK":
+          rideTypes = ["TUKTUK", "DELIVERY", "SHOPPING"];
+          break;
+        case "DELIVERY":
+          rideTypes = ["DELIVERY", "SHOPPING"];
+          break;
+        case "SHOPPING":
+          rideTypes = ["SHOPPING", "DELIVERY"];
+          break;
+        case "TOW_TRUCK":
+          rideTypes = ["TOW_TRUCK", "TRUCK"];
+          break;
+        case "WHEELCHAIR":
+          rideTypes = ["WHEELCHAIR", "CAR", "TUKTUK", "DELIVERY", "SHOPPING"];
+          break;
+        case "CLEANING":
+          rideTypes = ["CLEANING"];
+          break;
+        case "HAIR_DRESSER":
+          rideTypes = ["HAIR_DRESSER"];
+          break;
+        case "INSTITUTE":
+          rideTypes = ["INSTITUTE"];
+          break;
+        default:
+          rideTypes = [provider.vehicleType];
       }
 
       const now = new Date();
@@ -588,11 +581,11 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
     }
-    // --- SHOPPER LOGIC (future extension, filter jobs by type) ---
+    // SHOPPER LOGIC
     else if (role === Role.SHOPPER) {
-      rides = []; // Placeholder for future shopping jobs
+      rides = [];
     }
-    // --- HAIR_DRESSER LOGIC ---
+    // HAIR_DRESSER LOGIC
     else if (role === Role.HAIR_DRESSER) {
       rides = await prisma.ride.findMany({
         where: {
@@ -615,7 +608,6 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         },
         orderBy: { scheduledAt: "asc" }
       });
-      // Safe null check for provider.hairType
       if (provider.hairType && provider.hairType !== "") {
         rides = rides.filter(r =>
           !r.note ||
@@ -623,7 +615,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         );
       }
     }
-    // --- INSTITUTE LOGIC ---
+    // INSTITUTE LOGIC
     else if (role === Role.INSTITUTE) {
       let serviceKeywords: string[] = [];
       if (provider.beautyServices) {
@@ -656,12 +648,11 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
     }
-    // --- DEFAULT: No results for other roles ---
+    // DEFAULT: No results for other roles
     else {
       rides = [];
     }
 
-    // Location-based filtering (optional, 33km radius)
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lng = req.query.lng ? Number(req.query.lng) : null;
     let filteredRides = rides;
@@ -676,7 +667,6 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
       });
     }
 
-    // Map output for frontend
     const mappedRides = filteredRides.map(ride => ({
       id: ride.id,
       pickupLat: ride.originLat,
@@ -712,7 +702,6 @@ export const acceptRide = async (req: Request, res: Response, next: NextFunction
     }
     const rideId = Number(req.params.rideId);
 
-    // Accept pending or scheduled ride
     const ride = await prisma.ride.updateMany({
       where: {
         id: rideId,
@@ -774,7 +763,6 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
 
-    // Only allow starting if accepted
     const ride = await prisma.ride.findFirst({
       where: {
         id: rideId,
@@ -807,7 +795,6 @@ export const startRide = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-// --- DRIVER MARKS RIDE AS "NO SHOW" ---
 export const markRideNoShow = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const driverId = Number(req.query.driverId);
@@ -816,8 +803,6 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
     if (!driverId || !rideId) {
       return res.status(400).json({ error: "Invalid driverId or rideId" });
     }
-
-    // Only scheduled rides, after scheduledAt + grace period
     const ride = await prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) return res.status(404).json({ error: "Ride not found" });
     if (ride.status !== RideStatus.SCHEDULED) {
@@ -849,7 +834,6 @@ export const markRideNoShow = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// --- GET RIDE STATUS FOR POLLING ---
 export const getRideStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
@@ -900,7 +884,6 @@ export const getRideStatus = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-// --- CUSTOMER RATES RIDE ---
 export const rateRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Number(req.params.rideId);
@@ -933,7 +916,6 @@ export const rateRide = async (req: Request, res: Response, next: NextFunction) 
   }
 };
 
-// --- GET CURRENT RIDE FOR CUSTOMER/DRIVER ---
 export const getCurrentRide = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user as { id: number; role: string };
@@ -1017,9 +999,6 @@ export const getCurrentRide = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-/**
- * NEW: CUSTOMER LOCATION UPDATE ENDPOINT
- */
 export const updateCustomerLocation = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { customerId, lat, lng, timestamp } = req.body;
@@ -1052,7 +1031,6 @@ export const updateCustomerLocation = async (req: Request, res: Response, next: 
 
 export const getAvailableRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Implement your logic for fetching available rides for drivers here
     res.json([]); // placeholder
   } catch (error) {
     next(error);
