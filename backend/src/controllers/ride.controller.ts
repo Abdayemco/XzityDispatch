@@ -532,7 +532,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
     const role = provider.role;
     let rides: any[] = [];
 
-    // --- DRIVER LOGIC (PATCHED) ---
+    // --- DRIVER LOGIC (PATCHED AND COMPLETE) ---
     if (role === Role.DRIVER) {
       let rideTypes: VehicleType[] = [];
       switch (provider.vehicleType) {
@@ -562,6 +562,15 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
           break;
         case "INSTITUTE":
           rideTypes = ["INSTITUTE"];
+          break;
+        case "LIMO":
+          rideTypes = ["LIMO"];
+          break;
+        case "TRUCK":
+          rideTypes = ["TRUCK"];
+          break;
+        case "WATER_TRUCK":
+          rideTypes = ["WATER_TRUCK"];
           break;
         default:
           rideTypes = [provider.vehicleType];
