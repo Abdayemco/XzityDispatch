@@ -10,13 +10,9 @@ import tuktukIcon from "../assets/marker-toktok.png";
 import truckIcon from "../assets/marker-truck.png";
 import towTruckIcon from "../assets/marker-towtruck.png";
 import wheelchairIcon from "../assets/marker-wheelchair.png";
-import limoIcon from "../assets/marker-limo.png";
-import shoppingIcon from "../assets/marker-shopping.png";
-import hairIcon from "../assets/marker-hair.png";
-import cleaningIcon from "../assets/marker-cleaning.png";
-import instituteIcon from "../assets/marker-institute.png";
+import limoIcon from "../assets/marker-limo.png"; // <-- Add limo icon
 
-// Updated getVehicleIcon to support all job types (matches backend/frontend)
+// Updated getVehicleIcon to support LIMO, TOW_TRUCK and WHEELCHAIR
 function getVehicleIcon(vehicleType: string) {
   switch (vehicleType.toUpperCase()) {
     case "CAR":
@@ -35,15 +31,7 @@ function getVehicleIcon(vehicleType: string) {
     case "WHEELCHAIR":
       return wheelchairIcon;
     case "LIMO":
-      return limoIcon;
-    case "SHOPPING":
-      return shoppingIcon;
-    case "HAIR_DRESSER":
-      return hairIcon;
-    case "CLEANING":
-      return cleaningIcon;
-    case "INSTITUTE":
-      return instituteIcon;
+      return limoIcon; // <-- Add support for LIMO
     default:
       return carIcon;
   }
@@ -75,7 +63,7 @@ type AppMapProps = {
   driverVehicleType?: string;
   showCustomerMarker?: boolean;
   showDriverMarker?: boolean;
-  onAcceptRide?: (jobId: string) => void;
+  onAcceptRide?: (jobId: string) => void; // <-- NEW PROP: handler for accepting rides
 };
 
 const DEFAULT_CENTER: [number, number] = [51.505, -0.09];
@@ -88,7 +76,7 @@ const AppMap: React.FC<AppMapProps> = ({
   driverVehicleType = "car",
   showCustomerMarker = false,
   showDriverMarker = false,
-  onAcceptRide,
+  onAcceptRide, // <-- receive the handler
 }) => {
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
@@ -100,6 +88,7 @@ const AppMap: React.FC<AppMapProps> = ({
 
   // Handler for accepting a ride
   const handleAcceptRide = async (jobId: string) => {
+    // If handler is provided from parent, use it (e.g. to open chat window), else fallback to legacy
     if (onAcceptRide) {
       onAcceptRide(jobId);
       return;
