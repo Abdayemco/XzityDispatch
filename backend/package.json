@@ -2,13 +2,14 @@
   "name": "xzity-dispatch-backend",
   "version": "1.0.0",
   "main": "dist/index.js",
+  "private": true,
   "scripts": {
     "dev": "ts-node-dev src/index.ts",
-    "build": "prisma generate && tsc",
+    "build": "prisma generate --schema=prisma/schema.prisma && tsc",
     "start": "node dist/index.js",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy"
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma"
   },
   "dependencies": {
     "prisma": "^5.22.0",
@@ -41,5 +42,5 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.4"
   },
-  "postinstall": "prisma generate"
+  "postinstall": "prisma generate --schema=prisma/schema.prisma"
 }
