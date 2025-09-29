@@ -14,6 +14,7 @@ enum Role {
   SHOPPER
   HAIR_DRESSER
   INSTITUTE
+  CLEANING  // <-- ADDED for Cleaning job accounts
 }
 
 enum UserRoleType {
@@ -126,6 +127,11 @@ model Ride {
   chat              Chat?
   scheduledAt       DateTime?   // For scheduled rides
   noShowReportedAt  DateTime?   // When "No Show" is marked
+
+  // --- EXTENSIONS for beauty, cleaning, shopping, etc ---
+  beautyServices    String?     // For multi-select beauty/institute jobs
+  imageUri          String?     // For shopping jobs with photo
+  subType           String?     // For hairdresser, etc.
 
   @@index([customerId])
   @@index([driverId])
