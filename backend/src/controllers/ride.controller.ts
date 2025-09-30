@@ -150,6 +150,7 @@ export const requestRide = async (
   next: NextFunction
 ) => {
   try {
+    console.log("Incoming ride request:", req.body);
     const {
       customerId,
       originLat,
