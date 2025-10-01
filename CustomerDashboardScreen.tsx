@@ -496,86 +496,87 @@ export default function CustomerDashboardScreen() {
 
   // --- Handle service modal submit ---
   async function handleScheduleService({
-    description,
-    dateTime,
-    imageUri,
-    isOrderNow,
-    subType,
-    selectedBeauty,
-  }: {
-    description: string;
-    dateTime: string | null;
-    imageUri?: string;
-    isOrderNow?: boolean;
-    subType?: string;
-    selectedBeauty?: string[];
-  }) {
-    if (!userLocation || !serviceType || !description) {
-      setError("All fields are required & must be valid.");
-      return;
-    }
-    setServiceLoading(true);
-    setError(null);
-    const token = await AsyncStorage.getItem("token");
-    const customerId = await getCustomerIdFromStorage();
-    if (!token || customerId === null) {
-      setError("Not logged in.");
-      setServiceLoading(false);
-      return;
-    }
-    // If it's a scheduled service, send scheduledAt as ISO string. Otherwise, treat as "Request Now".
-    let scheduledAtISO: string | undefined = undefined;
-    if (!isOrderNow && dateTime) {
-      const parsed = dayjs(dateTime, "MM/DD/YYYY HH:mm", true);
-      if (!parsed.isValid()) {
-        setError("Invalid date/time.");
-        setServiceLoading(false);
-        return;
-      }
-      scheduledAtISO = parsed.toISOString();
-    }
-    // Unify payload for all service jobs
-    const payload: any = {
-      customerId,
-      originLat: userLocation.lat,
-      originLng: userLocation.lng,
-      destLat: userLocation.lat,
-      destLng: userLocation.lng,
-      vehicleType: serviceType,
-      description,
-      note: description,
-    };
-    if (scheduledAtISO) payload.scheduledAt = scheduledAtISO;
-    if (serviceType === "SHOPPING" && imageUri) payload.imageUri = imageUri;
-    if (serviceType === "HAIR_DRESSER" && subType) payload.subType = subType;
-    if (serviceType === "BEAUTY" && selectedBeauty && selectedBeauty.length > 0) {
-      payload.beautyServices = selectedBeauty.join(",");
-    }
-
-    try {
-      const res = await fetch(`${API_URL}/api/rides/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to schedule service.");
-        setServiceLoading(false);
-        return;
-      }
-      setServiceModalVisible(false);
-      setServiceType(null);
-      setEditServiceId(null);
-      fetchRides();
-      setError(null);
-    } catch (err) {
-      setError("Network or server error.");
-    } finally {
-      setServiceLoading(false);
-    }
+  description,
+  dateTime,
+  imageUri,
+  isOrderNow,
+  subType,
+  selectedBeauty,
+}: {
+  description: string;
+  dateTime: string | null;
+  imageUri?: string;
+  isOrderNow?: boolean;
+  subType?: string;
+  selectedBeauty?: string[];
+}) {
+  if (!userLocation || !serviceType || !description) {
+    setError("All fields are required & must be valid.");
+    return;
+  }
+  setServiceLoading(true);
+  setError(null);
+  const token = await AsyncStorage.getItem("token");
+  const customerId = await getCustomerIdFromStorage();
+  if (!token || customerId === null) {
+    setError("Not logged in.");
+    setServiceLoading(false);
+    return;
   }
 
+  let scheduledAtISO: string | undefined = undefined;
+  if (!isOrderNow && dateTime) {
+    const parsed = dayjs(dateTime, "MM/DD/YYYY HH:mm", true);
+    if (!parsed.isValid()) {
+      setError("Invalid date/time.");
+      setServiceLoading(false);
+      return;
+    }
+    scheduledAtISO = parsed.toISOString();
+  }
+
+  const payload: any = {
+    customerId,
+    originLat: userLocation.lat,
+    originLng: userLocation.lng,
+    destLat: userLocation.lat,
+    destLng: userLocation.lng,
+    vehicleType: serviceType,
+    description,
+    note: description,
+  };
+  if (scheduledAtISO) payload.scheduledAt = scheduledAtISO;
+  if (serviceType === "SHOPPING" && imageUri) payload.imageUri = imageUri;
+  if (serviceType === "HAIR_DRESSER" && subType) {
+    payload.subType = subType;
+  }
+  if (serviceType === "BEAUTY" && selectedBeauty && selectedBeauty.length > 0) {
+    payload.beautyServices = selectedBeauty.join(",");
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/rides/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Failed to schedule service.");
+      setServiceLoading(false);
+      return;
+    }
+    setServiceModalVisible(false);
+    setServiceType(null);
+    setEditServiceId(null);
+    fetchRides();
+    setError(null);
+  } catch (err) {
+    setError("Network or server error.");
+  } finally {
+    setServiceLoading(false);
+  }
+}
   // ...rest of your handlers unchanged...
 
   async function handleRequestRide(extra?: {
