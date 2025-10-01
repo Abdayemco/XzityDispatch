@@ -921,7 +921,7 @@ renderItem={({ item: ride }) => {
       )}
       {ride.vehicleType === "BEAUTY" && ride.description && (
         <Text style={{ color: "#1976D2" }}>
-          Beauty: {ride.beautyServices ? ride.beautyServices + " - " : ""}{ride.description}
+          Beauty: {ride.subType ? ride.subType + " - " : ""}{ride.description}
         </Text>
       )}
       {ride.vehicleType === "HAIR_DRESSER" && ride.description && (
