@@ -91,6 +91,7 @@ type RideListItem = {
   description?: string;
   imageUri?: string;
   subType?: string;
+  beautyServices?: string; // Added for BEAUTY jobs support
 };
 
 type ChatMessage = {
@@ -296,6 +297,7 @@ async function getMapboxRoute(driverLocation, customerLocation, mapboxToken) {
 }
 
 export default function CustomerDashboardScreen() {
+  // ... all your other hooks/state/handlers remain unchanged ...
   const [token, setToken] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState<string>("You");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -499,12 +501,14 @@ export default function CustomerDashboardScreen() {
     imageUri,
     isOrderNow,
     subType,
+    selectedBeauty,
   }: {
     description: string;
     dateTime: string | null;
     imageUri?: string;
     isOrderNow?: boolean;
     subType?: string;
+    selectedBeauty?: string[];
   }) {
     if (!userLocation || !serviceType || !description) {
       setError("All fields are required & must be valid.");
@@ -543,7 +547,10 @@ export default function CustomerDashboardScreen() {
     };
     if (scheduledAtISO) payload.scheduledAt = scheduledAtISO;
     if (serviceType === "SHOPPING" && imageUri) payload.imageUri = imageUri;
-    if (subType) payload.subType = subType;
+    if (serviceType === "HAIR_DRESSER" && subType) payload.subType = subType;
+    if (serviceType === "BEAUTY" && selectedBeauty && selectedBeauty.length > 0) {
+      payload.beautyServices = selectedBeauty.join(",");
+    }
 
     try {
       const res = await fetch(`${API_URL}/api/rides/request`, {
@@ -568,6 +575,8 @@ export default function CustomerDashboardScreen() {
       setServiceLoading(false);
     }
   }
+
+  // ...rest of your handlers unchanged...
 
   async function handleRequestRide(extra?: {
     description?: string;
@@ -767,7 +776,8 @@ export default function CustomerDashboardScreen() {
     }
   }
 
-  // --- MAP MARKERS LOGIC ---
+  // --- MAP  MARKERS  LOGIC ---
+ // --- MAP MARKERS LOGIC ---
   const mostActiveRide = rideList.find(r =>
     ["accepted", "in_progress"].includes((r.status ?? "").toLowerCase())
   );
@@ -867,68 +877,68 @@ export default function CustomerDashboardScreen() {
               })
           }
           keyExtractor={r => String(r.id)}
-renderItem={({ item: ride }) => {
-  const status = (ride.status ?? "").toLowerCase();
-  const showChat = (["accepted", "in_progress"].includes(status) && openChatRideId === ride.id);
-  const canCancel = ["requested", "pending", "accepted", "scheduled"].includes(status);
-  const canEditScheduled = status === "scheduled";
-  const showDoneBtn = status === "in_progress";
-  const icon = vehicleOptions.find(opt => opt.value === ride.vehicleType)?.icon || carIcon;
-  return (
-    <View style={styles.rideCard}>
-      <View style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 2}}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Image source={icon} style={{ width: 32, height: 32, marginRight: 7 }} />
-          <Text style={{ fontWeight: "bold" }}>{ride.vehicleType}</Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-          {canCancel && (
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => handleCancelRide(ride.id)}
-            >
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Cancel</Text>
-            </TouchableOpacity>
-          )}
-          {canEditScheduled && (
-            <TouchableOpacity
-              style={[styles.scheduleBtn, { backgroundColor: "#1976D2", height: 25, minWidth: 70, paddingVertical: 3 }]}
-              onPress={() => openScheduleEdit(ride)}
-            >
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Edit</Text>
-            </TouchableOpacity>
-          )}
-          {showDoneBtn && (
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => handleDoneRide(ride.id)}
-            >
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>Done</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      {/* EXPLICIT service rendering */}
-      {ride.vehicleType === "CLEANING" && ride.description && (
-        <Text style={{ color: "#1976D2" }}>
-          To Clean: {ride.description}
-        </Text>
-      )}
-      {ride.vehicleType === "SHOPPING" && ride.description && (
-        <Text style={{ color: "#1976D2" }}>
-          To Shop: {ride.description}
-        </Text>
-      )}
-      {ride.vehicleType === "BEAUTY" && ride.description && (
-        <Text style={{ color: "#1976D2" }}>
-          Beauty: {ride.subType ? ride.subType + " - " : ""}{ride.description}
-        </Text>
-      )}
-      {ride.vehicleType === "HAIR_DRESSER" && ride.description && (
-        <Text style={{ color: "#1976D2" }}>
-          Hair: {ride.subType ? ride.subType + " - " : ""}{ride.description}
-        </Text>
-      )}
+          renderItem={({ item: ride }) => {
+            const status = (ride.status ?? "").toLowerCase();
+            const showChat = (["accepted", "in_progress"].includes(status) && openChatRideId === ride.id);
+            const canCancel = ["requested", "pending", "accepted", "scheduled"].includes(status);
+            const canEditScheduled = status === "scheduled";
+            const showDoneBtn = status === "in_progress";
+            const icon = vehicleOptions.find(opt => opt.value === ride.vehicleType)?.icon || carIcon;
+            return (
+              <View style={styles.rideCard}>
+                <View style={{flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 2}}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Image source={icon} style={{ width: 32, height: 32, marginRight: 7 }} />
+                    <Text style={{ fontWeight: "bold" }}>{ride.vehicleType}</Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                    {canCancel && (
+                      <TouchableOpacity
+                        style={styles.cancelBtn}
+                        onPress={() => handleCancelRide(ride.id)}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canEditScheduled && (
+                      <TouchableOpacity
+                        style={[styles.scheduleBtn, { backgroundColor: "#1976D2", height: 25, minWidth: 70, paddingVertical: 3 }]}
+                        onPress={() => openScheduleEdit(ride)}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
+                    {showDoneBtn && (
+                      <TouchableOpacity
+                        style={styles.doneBtn}
+                        onPress={() => handleDoneRide(ride.id)}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>Done</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+                {/* EXPLICIT service rendering */}
+                {ride.vehicleType === "CLEANING" && ride.description && (
+                  <Text style={{ color: "#1976D2" }}>
+                    To Clean: {ride.description}
+                  </Text>
+                )}
+                {ride.vehicleType === "SHOPPING" && ride.description && (
+                  <Text style={{ color: "#1976D2" }}>
+                    To Shop: {ride.description}
+                  </Text>
+                )}
+                {ride.vehicleType === "BEAUTY" && ride.description && (
+                  <Text style={{ color: "#1976D2" }}>
+                    Beauty: {ride.beautyServices ? ride.beautyServices + " - " : ""}{ride.description}
+                  </Text>
+                )}
+                {ride.vehicleType === "HAIR_DRESSER" && ride.description && (
+                  <Text style={{ color: "#1976D2" }}>
+                    Hair: {ride.subType ? ride.subType + " - " : ""}{ride.description}
+                  </Text>
+                )}
                 {ride.vehicleType === "SHOPPING" && ride.imageUri && (
                   <Image source={{ uri: ride.imageUri }} style={{ width: 44, height: 44, borderRadius: 7, marginVertical: 5 }} />
                 )}
