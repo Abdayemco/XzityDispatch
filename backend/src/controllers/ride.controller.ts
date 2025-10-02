@@ -372,6 +372,14 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       return res.status(400).json({ error: "Missing or invalid customerId" });
     }
 
+    // Only return current/active rides:
+    const currentStatuses = [
+      RideStatus.PENDING,
+      RideStatus.ACCEPTED,
+      RideStatus.IN_PROGRESS,
+      RideStatus.SCHEDULED
+    ];
+
     const rides = await prisma.ride.findMany({
       where: {
         customerId,
