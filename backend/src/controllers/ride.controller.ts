@@ -225,7 +225,7 @@ export const requestRide = async (
 	  subType: ride.subType, // return these fields
       beautyServices: ride.beautyServices,
       imageUri: ride.imageUri,
-      description: ride.description,
+      // description: ride.description,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
