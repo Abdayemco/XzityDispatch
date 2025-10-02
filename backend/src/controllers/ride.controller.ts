@@ -211,7 +211,7 @@ export const requestRide = async (
 		subType: subType || null,
 		beautyServices: beautyServices || null,
         imageUri: imageUri || null,
-        description: description || null,
+        // description: description || null,
       },
     });
 
