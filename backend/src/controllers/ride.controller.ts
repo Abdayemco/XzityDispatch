@@ -425,7 +425,7 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         etaMin: etaMin ?? null,
         etaKm: etaKm ?? null,
         rated: r.rating !== null && r.rating !== undefined,
-		c
+		
       };
     });
 
