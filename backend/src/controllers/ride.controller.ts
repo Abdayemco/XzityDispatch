@@ -425,7 +425,10 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         etaMin: etaMin ?? null,
         etaKm: etaKm ?? null,
         rated: r.rating !== null && r.rating !== undefined,
-		
+		subType: r.subType ?? null,
+        beautyServices: r.beautyServices ?? null,
+        imageUri: r.imageUri ?? null,
+        // description: r.description ?? null,
       };
     });
 
