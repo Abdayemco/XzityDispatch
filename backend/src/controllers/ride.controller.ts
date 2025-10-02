@@ -161,6 +161,10 @@ export const requestRide = async (
       note,
       vehicleType,
       scheduledAt,
+	  subType,          // <-- ensure these are destructured
+      beautyServices,   // <-- ensure these are destructured
+      imageUri,
+      description, 
     } = req.body;
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
@@ -204,6 +208,10 @@ export const requestRide = async (
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
         scheduledAt: scheduledAtUTC,
+		subType: subType || null,
+		beautyServices: beautyServices || null,
+        imageUri: imageUri || null,
+        description: description || null,
       },
     });
 
@@ -214,6 +222,10 @@ export const requestRide = async (
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationName: ride.destinationName,
       note: ride.note,
+	  subType: ride.subType, // return these fields
+      beautyServices: ride.beautyServices,
+      imageUri: ride.imageUri,
+      description: ride.description,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
@@ -413,8 +425,11 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         etaMin: etaMin ?? null,
         etaKm: etaKm ?? null,
         rated: r.rating !== null && r.rating !== undefined,
+		c
       };
     });
+
+    console.log("Rides returned:", formattedRides);              
 
     res.json(formattedRides);
   } catch (error) {
