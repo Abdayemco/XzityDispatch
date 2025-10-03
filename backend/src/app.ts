@@ -15,6 +15,12 @@ import jwt from "jsonwebtoken";
 const app = express();
 
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
+    console.log("After express.json, req.body is:", req.body);
+  }
+  next();
+});
 
 // CORS setup
 const allowedOrigins = [
