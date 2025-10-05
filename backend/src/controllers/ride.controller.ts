@@ -22,6 +22,7 @@ function toLocalISOString(date: Date | string | null | undefined): string | null
     .setZone(LOCAL_TZ)
     .toISO({ suppressMilliseconds: true });
 }
+// Helper to format time for display (e.g., "yyyy-MM-dd HH:mm")
 function toLocalDisplay(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
@@ -160,7 +161,8 @@ export const requestRide = async (
       note,
       vehicleType,
       scheduledAt,
-      subType,          // <-- used for beauty and hair dresser
+	  subType,          // <-- ensure these are destructured
+      beautyServices,   // <-- ensure these are destructured
       imageUri,
       description, 
     } = req.body;
@@ -181,14 +183,6 @@ export const requestRide = async (
       return res
         .status(400)
         .json({ error: "Missing or invalid required fields" });
-    }
-
-    // Enforce subType for beauty and hair dresser
-    if (
-      (normalizedVehicleType === "BEAUTY" || normalizedVehicleType === "HAIR_DRESSER")
-      && (!subType || typeof subType !== "string" || !subType.trim())
-    ) {
-      return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
     }
 
     let scheduledAtUTC: Date | undefined = undefined;
@@ -214,7 +208,8 @@ export const requestRide = async (
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
         scheduledAt: scheduledAtUTC,
-        subType: subType || null,
+		subType: subType || null,
+		beautyServices: beautyServices || null,
         imageUri: imageUri || null,
         // description: description || null,
       },
@@ -227,7 +222,8 @@ export const requestRide = async (
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationName: ride.destinationName,
       note: ride.note,
-      subType: ride.subType,
+	  subType: ride.subType, // return these fields
+      beautyServices: ride.beautyServices,
       imageUri: ride.imageUri,
       // description: ride.description,
     });
@@ -236,10 +232,6 @@ export const requestRide = async (
     next(error);
   }
 };
-
-// ...rest of file unchanged (editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.)...
-// Just remove all references to beautyServices from all handlers for clarity.
-
 
 export const editScheduledRide = async (
   req: Request,
