@@ -14,11 +14,11 @@ import jwt from "jsonwebtoken";
 
 const app = express();
 
-// CORS setup - always first!
+// --- CORS middleware (ALWAYS FIRST) ---
 const allowedOrigins = [
   "http://localhost:5173",
   "https://www.xzity.com",
-  "https://xzity.com"
+  "https://xzity.com",
 ];
 if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
   allowedOrigins.push(process.env.CLIENT_URL);
@@ -44,10 +44,10 @@ app.options("*", cors({
   credentials: true,
 }));
 
-// Body parser - MUST be before routes
+// --- BODY PARSER (MUST BE BEFORE ROUTES!) ---
 app.use(express.json());
 
-// Debug: log the raw body for POST /api/rides/request
+// --- DEBUG: Log RAW BODY for /api/rides/request ---
 app.use((req, res, next) => {
   if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
     let raw = '';
@@ -56,8 +56,9 @@ app.use((req, res, next) => {
       if (raw) {
         console.log("RAW BODY DATA:", raw);
       }
-      // Note: req.body may be empty here if express.json() has already parsed it
+      // Don't call next() here, must always call it outside for all requests
     });
+    // Don't return early, let next() run
   }
   next();
 });
@@ -83,13 +84,13 @@ app.use((req: any, res, next) => {
   next();
 });
 
-// Routes
+// --- ROUTES ---
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
-app.use("/api/families", familyRoutes);      // <-- Added for Family endpoints
-app.use("/api/businesses", businessRoutes);  // <-- Added for Business endpoints
+app.use("/api/families", familyRoutes);
+app.use("/api/businesses", businessRoutes);
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);
