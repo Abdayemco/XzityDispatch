@@ -14,15 +14,7 @@ import jwt from "jsonwebtoken";
 
 const app = express();
 
-app.use(express.json());
-app.use((req, res, next) => {
-  if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
-    console.log("After express.json, req.body is:", req.body);
-  }
-  next();
-});
-
-// CORS setup
+// CORS setup - always first!
 const allowedOrigins = [
   "http://localhost:5173",
   "https://www.xzity.com",
@@ -51,6 +43,24 @@ app.options("*", cors({
   origin: allowedOrigins,
   credentials: true,
 }));
+
+// Body parser - MUST be before routes
+app.use(express.json());
+
+// Debug: log the raw body for POST /api/rides/request
+app.use((req, res, next) => {
+  if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
+    let raw = '';
+    req.on('data', chunk => raw += chunk);
+    req.on('end', () => {
+      if (raw) {
+        console.log("RAW BODY DATA:", raw);
+      }
+      // Note: req.body may be empty here if express.json() has already parsed it
+    });
+  }
+  next();
+});
 
 // Request logging
 app.use((req, res, next) => {
