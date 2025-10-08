@@ -184,9 +184,9 @@ export const requestRide = async (
         .json({ error: "Missing or invalid required fields" });
     }
 
-    // Enforce subType for beauty and hair dresser
+    // FIX: Use the VehicleType enum for the comparison!
     if (
-      (normalizedVehicleType === "BEAUTY" || normalizedVehicleType === "HAIR_DRESSER")
+      (normalizedVehicleType === VehicleType.BEAUTY || normalizedVehicleType === VehicleType.HAIR_DRESSER)
       && (!subType || typeof subType !== "string" || !subType.trim())
     ) {
       return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
@@ -240,6 +240,7 @@ export const requestRide = async (
 
 // ...rest of your controller remains unchanged (no references to beautyServices anywhere)...
 
+// (The rest of your file can remain unchanged as previously provided.)
 
 export const editScheduledRide = async (
   req: Request,
