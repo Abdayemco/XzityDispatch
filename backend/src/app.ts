@@ -44,10 +44,7 @@ app.options("*", cors({
   credentials: true,
 }));
 
-// Body parser - MUST be before routes
-app.use(express.json());
-
-// Debug: log the raw body for POST /api/rides/request
+// --- RAW BODY DEBUGGER (for deep debugging ONLY, remove in production) ---
 app.use((req, res, next) => {
   if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
     let raw = '';
@@ -56,11 +53,15 @@ app.use((req, res, next) => {
       if (raw) {
         console.log("RAW BODY DATA:", raw);
       }
-      // Note: req.body may be empty here if express.json() has already parsed it
+      next();
     });
+  } else {
+    next();
   }
-  next();
 });
+
+// Body parser - MUST be before routes
+app.use(express.json());
 
 // Request logging
 app.use((req, res, next) => {
@@ -88,8 +89,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
-app.use("/api/families", familyRoutes);      // <-- Added for Family endpoints
-app.use("/api/businesses", businessRoutes);  // <-- Added for Business endpoints
+app.use("/api/families", familyRoutes);
+app.use("/api/businesses", businessRoutes);
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/test", testRoutes);
