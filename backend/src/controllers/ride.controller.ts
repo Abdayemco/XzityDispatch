@@ -161,8 +161,7 @@ export const requestRide = async (
       note,
       vehicleType,
       scheduledAt,
-	  subType,          // <-- ensure these are destructured
-      beautyServices,   // <-- ensure these are destructured
+      subType,          // only subType, NOT beautyServices
       imageUri,
       description, 
     } = req.body;
@@ -183,6 +182,14 @@ export const requestRide = async (
       return res
         .status(400)
         .json({ error: "Missing or invalid required fields" });
+    }
+
+    // Enforce subType for beauty and hair dresser
+    if (
+      (normalizedVehicleType === "BEAUTY" || normalizedVehicleType === "HAIR_DRESSER")
+      && (!subType || typeof subType !== "string" || !subType.trim())
+    ) {
+      return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
     }
 
     let scheduledAtUTC: Date | undefined = undefined;
@@ -208,8 +215,7 @@ export const requestRide = async (
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
         scheduledAt: scheduledAtUTC,
-		subType: subType || null,
-		beautyServices: beautyServices || null,
+        subType: subType || null,
         imageUri: imageUri || null,
         // description: description || null,
       },
@@ -222,8 +228,7 @@ export const requestRide = async (
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationName: ride.destinationName,
       note: ride.note,
-	  subType: ride.subType, // return these fields
-      beautyServices: ride.beautyServices,
+      subType: ride.subType,
       imageUri: ride.imageUri,
       // description: ride.description,
     });
@@ -232,6 +237,9 @@ export const requestRide = async (
     next(error);
   }
 };
+
+// ...rest of your controller remains unchanged (no references to beautyServices anywhere)...
+
 
 export const editScheduledRide = async (
   req: Request,

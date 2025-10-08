@@ -44,22 +44,6 @@ app.options("*", cors({
   credentials: true,
 }));
 
-// --- RAW BODY DEBUGGER (for deep debugging ONLY, remove in production) ---
-app.use((req, res, next) => {
-  if (req.method === "POST" && req.originalUrl.startsWith("/api/rides/request")) {
-    let raw = '';
-    req.on('data', chunk => raw += chunk);
-    req.on('end', () => {
-      if (raw) {
-        console.log("RAW BODY DATA:", raw);
-      }
-      next();
-    });
-  } else {
-    next();
-  }
-});
-
 // Body parser - MUST be before routes
 app.use(express.json());
 
