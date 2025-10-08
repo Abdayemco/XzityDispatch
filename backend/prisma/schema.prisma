@@ -38,6 +38,7 @@ enum VehicleType {
   HAIR_DRESSER
   CLEANING
   INSTITUTE
+  BEAUTY
 }
 
 enum RideStatus {
