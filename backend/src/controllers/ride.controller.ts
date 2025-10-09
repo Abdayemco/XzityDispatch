@@ -161,6 +161,10 @@ export const requestRide = async (
       note,
       vehicleType,
       scheduledAt,
+	  subType,          // <-- ensure these are destructured
+      beautyServices,   // <-- ensure these are destructured
+      imageUri,
+      description, 
     } = req.body;
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
@@ -204,6 +208,10 @@ export const requestRide = async (
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         vehicleType: normalizedVehicleType,
         scheduledAt: scheduledAtUTC,
+		subType: subType || null,
+		beautyServices: beautyServices || null,
+        imageUri: imageUri || null,
+        // description: description || null,
       },
     });
 
@@ -214,6 +222,10 @@ export const requestRide = async (
       scheduledAtDisplay: toLocalDisplay(ride.scheduledAt),
       destinationName: ride.destinationName,
       note: ride.note,
+	  subType: ride.subType, // return these fields
+      beautyServices: ride.beautyServices,
+      imageUri: ride.imageUri,
+      // description: ride.description,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
@@ -348,6 +360,8 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+// ...other code above remains unchanged...
+
 export const getAllCustomerRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let customerId: number | undefined;
@@ -360,9 +374,18 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       return res.status(400).json({ error: "Missing or invalid customerId" });
     }
 
+    // Only return current/active rides:
+    const currentStatuses = [
+      RideStatus.PENDING,
+      RideStatus.ACCEPTED,
+      RideStatus.IN_PROGRESS,
+      RideStatus.SCHEDULED
+    ];
+
     const rides = await prisma.ride.findMany({
       where: {
         customerId,
+        status: { in: currentStatuses }
       },
       orderBy: { scheduledAt: "asc" },
       include: {
@@ -413,8 +436,13 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         etaMin: etaMin ?? null,
         etaKm: etaKm ?? null,
         rated: r.rating !== null && r.rating !== undefined,
+        subType: r.subType ?? null,
+        beautyServices: r.beautyServices ?? null,
+        imageUri: r.imageUri ?? null,
       };
     });
+
+    console.log("Rides returned:", formattedRides);
 
     res.json(formattedRides);
   } catch (error) {
@@ -422,6 +450,8 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
     next(error);
   }
 };
+
+// ...rest of your controller remains unchanged...
 
 export const getAllDriverRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
