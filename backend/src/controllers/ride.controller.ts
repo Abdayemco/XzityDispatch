@@ -22,7 +22,6 @@ function toLocalISOString(date: Date | string | null | undefined): string | null
     .setZone(LOCAL_TZ)
     .toISO({ suppressMilliseconds: true });
 }
-// Helper to format time for display (e.g., "yyyy-MM-dd HH:mm")
 function toLocalDisplay(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   return DateTime.fromISO(new Date(date).toISOString(), { zone: "utc" })
@@ -161,7 +160,7 @@ export const requestRide = async (
       note,
       vehicleType,
       scheduledAt,
-      subType,          // only subType, NOT beautyServices
+      subType,          // <-- used for beauty and hair dresser
       imageUri,
       description, 
     } = req.body;
@@ -184,9 +183,9 @@ export const requestRide = async (
         .json({ error: "Missing or invalid required fields" });
     }
 
-    // FIX: Use the VehicleType enum for the comparison!
+    // Enforce subType for beauty and hair dresser
     if (
-      (normalizedVehicleType === VehicleType.BEAUTY || normalizedVehicleType === VehicleType.HAIR_DRESSER)
+      (normalizedVehicleType === "BEAUTY" || normalizedVehicleType === "HAIR_DRESSER")
       && (!subType || typeof subType !== "string" || !subType.trim())
     ) {
       return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
@@ -238,9 +237,6 @@ export const requestRide = async (
   }
 };
 
-// ...rest of your controller remains unchanged (no references to beautyServices anywhere)...
-
-// (The rest of your file can remain unchanged as previously provided.)
 
 export const editScheduledRide = async (
   req: Request,
