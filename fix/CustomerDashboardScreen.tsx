@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Modal,
   Platform,
   KeyboardAvoidingView,
   FlatList,
