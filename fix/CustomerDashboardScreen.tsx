@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Modal,
   Platform,
   KeyboardAvoidingView,
   FlatList,
@@ -35,7 +34,7 @@ import hairIcon from "../assets/marker-hair.png";
 import AppHeader from "../components/AppHeader";
 import AppFooter from "../components/AppFooter";
 import AppMap from "../components/AppMap";
-import ScheduleServiceModal from "../components/ScheduleServiceModal";
+import AppUniversalModal from "../components/AppUniversalModal";
 import { useNavigation } from "@react-navigation/native";
 
 // Use ur actual API URL here!
@@ -99,38 +98,6 @@ type ChatMessage = {
   content: string;
   timestamp?: string;
 };
-
-function StarRating({
-  rating,
-  setRating,
-  disabled = false,
-  size = 30,
-}: {
-  rating: number;
-  setRating: (value: number) => void;
-  disabled?: boolean;
-  size?: number;
-}) {
-  return (
-    <View style={{ flexDirection: "row", justifyContent: "center", marginVertical: 8 }}>
-      {[1, 2, 3, 4, 5].map(star => (
-        <TouchableOpacity
-          key={star}
-          onPress={() => !disabled && setRating(star)}
-          disabled={disabled}
-        >
-          <Text style={{
-            fontSize: size,
-            color: star <= rating ? "#FFD700" : "#bbb",
-            marginHorizontal: 2,
-          }}>
-            ★
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
 
 function RideChatInline({ rideId, visible, customerName }: { rideId: number; visible: boolean; customerName: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -306,7 +273,6 @@ export default function CustomerDashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [rideList, setRideList] = useState<RideListItem[]>([]);
   const [rideListLoading, setRideListLoading] = useState(false);
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [dateTimeString, setDateTimeString] = useState("");
   const [isDateTimeValid, setIsDateTimeValid] = useState(false);
   const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
@@ -317,14 +283,13 @@ export default function CustomerDashboardScreen() {
   const [schedEditMode, setSchedEditMode] = useState(false);
   const [schedRideId, setSchedRideId] = useState<number | null>(null);
 
-  // Service modal state
-  const [serviceModalVisible, setServiceModalVisible] = useState(false);
-  const [serviceLoading, setServiceLoading] = useState(false);
+  // Universal modal state
+  const [modalType, setModalType] = useState<"service" | "schedule" | "rating" | "terms" | null>(null);
   const [serviceType, setServiceType] = useState<"CLEANING" | "SHOPPING" | "BEAUTY" | "HAIR_DRESSER" | null>(null);
+  const [serviceLoading, setServiceLoading] = useState(false);
   const [editServiceId, setEditServiceId] = useState<number | null>(null);
 
   // Rating modal state
-  const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingRideId, setRatingRideId] = useState<number | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState("");
@@ -472,7 +437,7 @@ export default function CustomerDashboardScreen() {
     } else {
       setDateTimeString("");
     }
-    setScheduleModalOpen(true);
+    setModalType("schedule");
   }
 
   // --- Dynamic modal selection for Request Now ---
@@ -486,7 +451,7 @@ export default function CustomerDashboardScreen() {
     ) {
       setServiceType(vehicleType as any);
       setEditServiceId(null);
-      setServiceModalVisible(true);
+      setModalType("service");
     } else {
       handleRequestRide();
     }
@@ -494,7 +459,7 @@ export default function CustomerDashboardScreen() {
 
   // --- Dynamic modal selection for Schedule ---
   function scheduleHandler() {
-    setScheduleModalOpen(true);
+    setModalType("schedule");
     setScheduleVehicleType(vehicleType);
     setSchedEditMode(false);
     setSchedRideId(null);
@@ -586,7 +551,7 @@ async function handleScheduleService({
       setServiceLoading(false);
       return;
     }
-    setServiceModalVisible(false);
+    setModalType(null);
     setServiceType(null);
     setEditServiceId(null);
     fetchRides();
@@ -706,7 +671,7 @@ async function handleScheduleService({
         setScheduleWaiting(false);
         return;
       }
-      setScheduleModalOpen(false);
+      setModalType(null);
       setScheduleVehicleType("");
       setScheduleNote("");
       setScheduleDate(null);
@@ -764,7 +729,7 @@ async function handleScheduleService({
       setRatingRideId(rideId);
       setRatingValue(5);
       setRatingFeedback("");
-      setShowRatingModal(true);
+      setModalType("rating");
     } catch (err) {
       setError("Network or server error.");
     } finally {
@@ -786,11 +751,11 @@ async function handleScheduleService({
         }),
       });
       const data = await res.json();
-      setShowRatingModal(false);
+      setModalType(null);
       setRatingRideId(null);
       fetchRides();
     } catch (err) {
-      setShowRatingModal(false);
+      setModalType(null);
       setRatingRideId(null);
     } finally {
       setSubmittingRating(false);
@@ -999,142 +964,43 @@ async function handleScheduleService({
           }}
           ListFooterComponent={<View style={{ height: 60 }} />}
         />
-        {/* Service Modal for Cleaning/Shopping/Beauty/Hair */}
-       <ScheduleServiceModal
-         visible={serviceModalVisible}
-         serviceType={serviceType as "CLEANING" | "SHOPPING" | "BEAUTY" | "HAIR_DRESSER"}
-         loading={serviceLoading}
-         onClose={() => { setServiceModalVisible(false); setEditServiceId(null); }}
-         onSuccess={() => {
-           setServiceModalVisible(false);
-           fetchRides();
-        }}
-        customerId={customerId}
-        userLocation={userLocation}
-        token={token}
-        // (other props if needed)
-        
-       />
-	   
-        {/* Schedule Modal for Rides */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={scheduleModalOpen}
-          onRequestClose={() => {
-            setScheduleModalOpen(false);
+        {/* Universal Modal for all modal types */}
+        <AppUniversalModal
+          visible={modalType !== null}
+          modalType={modalType}
+          onClose={() => {
+            setModalType(null);
+            setEditServiceId(null);
             setSchedEditMode(false);
             setSchedRideId(null);
           }}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalContent}>
-              <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}>
-                {schedEditMode ? "Edit Scheduled Request" : "Schedule a Request"}
-              </Text>
-              <Text style={{ fontSize: 15, marginBottom: 6 }}>Service Type</Text>
-              <View style={[styles.vehicleOptions, { marginBottom: 8 }]}>
-                {vehicleOptions.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      styles.vehicleButton,
-                      scheduleVehicleType === opt.value && styles.vehicleButtonSelected,
-                    ]}
-                    onPress={() => setScheduleVehicleType(opt.value)}
-                  >
-                    <Image source={opt.icon} style={{ width: 32, height: 32 }} />
-                    <Text style={{ fontWeight: "bold", marginTop: 2 }}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={{ fontSize: 15, marginBottom: 6 }}>Date & Time MM/DD/YYYY HH:MM</Text>
-              <MaskedTextInput
-                mask={dateTimeMask}
-                style={styles.input}
-                value={dateTimeString}
-                onChangeText={setDateTimeString}
-                placeholder={dateTimeFormat}
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {!isDateTimeValid && !!dateTimeString && (
-                <Text style={{ color: "#d32f2f", textAlign: "center", marginBottom: 6 }}>
-                  Enter a valid date & time
-                </Text>
-              )}
-              <Text style={{ fontSize: 15, marginBottom: 4, marginTop: 10 }}>Note (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Message to provider"
-                value={scheduleNote}
-                onChangeText={setScheduleNote}
-              />
-              <View style={styles.scheduleActionRow}>
-                <TouchableOpacity
-                  style={[styles.scheduleBtn, { flex: 1, marginRight: 5 }, !isDateTimeValid && { opacity: 0.5 }]}
-                  onPress={handleScheduleRide}
-                  disabled={scheduleWaiting || !isDateTimeValid}
-                >
-                  <Text style={styles.requestBtnText}>
-                    {scheduleWaiting ? (schedEditMode ? "Saving..." : "Scheduling...") : (schedEditMode ? "Save Changes" : "Confirm")}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.cancelBtn, styles.cancelBtnModal, { flex: 1, marginLeft: 5 }]}
-                  onPress={() => {
-                    setScheduleModalOpen(false);
-                    setSchedEditMode(false);
-                    setSchedRideId(null);
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "bold" }}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-        {/* Rating Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showRatingModal}
-          onRequestClose={() => setShowRatingModal(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.ratingModalContent}>
-              <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 14, textAlign: "center" }}>
-                Rate Your Provider
-              </Text>
-              <StarRating rating={ratingValue} setRating={setRatingValue} disabled={submittingRating} />
-              <TextInput
-                style={styles.input}
-                placeholder="Write feedback (optional)"
-                value={ratingFeedback}
-                onChangeText={setRatingFeedback}
-                editable={!submittingRating}
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.scheduleBtn, { marginTop: 8 }, submittingRating && { opacity: 0.7 }]}
-                onPress={handleSubmitRating}
-                disabled={submittingRating || !ratingValue}
-              >
-                <Text style={styles.requestBtnText}>
-                  {submittingRating ? "Submitting..." : "Submit"}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cancelBtn, styles.cancelBtnModal, { marginTop: 6 }]}
-                onPress={() => setShowRatingModal(false)}
-                disabled={submittingRating}
-              >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>Skip</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+          // Service modal props
+          serviceType={serviceType}
+          serviceLoading={serviceLoading}
+          onServiceSubmit={handleScheduleService}
+          // Schedule modal props
+          scheduleVehicleType={scheduleVehicleType}
+          setScheduleVehicleType={setScheduleVehicleType}
+          vehicleOptions={vehicleOptions}
+          dateTimeString={dateTimeString}
+          setDateTimeString={setDateTimeString}
+          isDateTimeValid={isDateTimeValid}
+          dateTimeMask={dateTimeMask}
+          dateTimeFormat={dateTimeFormat}
+          scheduleNote={scheduleNote}
+          setScheduleNote={setScheduleNote}
+          scheduleWaiting={scheduleWaiting}
+          onScheduleSubmit={handleScheduleRide}
+          schedEditMode={schedEditMode}
+          // Rating modal props
+          ratingValue={ratingValue}
+          setRatingValue={setRatingValue}
+          ratingFeedback={ratingFeedback}
+          setRatingFeedback={setRatingFeedback}
+          submittingRating={submittingRating}
+          onRatingSubmit={handleSubmitRating}
+          onRatingSkip={() => setModalType(null)}
+        />
         <AppFooter />
       </KeyboardAvoidingView>
     </View>
