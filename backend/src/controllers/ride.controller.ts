@@ -717,6 +717,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
       destinationName: ride.destinationName,
       note: ride.note,
       status: ride.status,
+	  vehicleType: ride.vehicleType,
     }));
 
     res.json(mappedRides);
