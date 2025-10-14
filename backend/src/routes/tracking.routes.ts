@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getFamilyLocations, getBusinessLocations } from "../controllers/tracking.controller";
-import { authGroupAdmin } from "../middleware/authGroupAdmin";
+import { authGroupAdmin } from "../middlewares/authGroupAdmin";
 
 const router = Router();
 
