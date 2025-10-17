@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../prisma"; // Adjust path as needed
+import { prisma } from "../utils/prisma";
 
 // GET /families/:familyId/members - List members in a family
 export const listFamilyMembers = async (req: Request, res: Response) => {

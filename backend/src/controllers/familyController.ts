@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../prisma"; // Adjust this import if your Prisma client is elsewhere
+import { prisma } from "../utils/prisma";
 
 // GET /families - get all families/groups for current user
 export const getFamilies = async (req: Request, res: Response) => {
