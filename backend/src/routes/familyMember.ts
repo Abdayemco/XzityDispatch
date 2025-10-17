@@ -4,23 +4,21 @@ import {
   addFamilyMember,
   updateFamilyMember,
   deleteFamilyMember,
+  acceptFamilyInvite // <-- Import the new controller
 } from "../controllers/familyMemberController";
-import authenticate from "../middlewares/authenticate"; // Your JWT/auth middleware
+import authenticate from "../middlewares/authenticate"; // Your auth middleware
 
 const router = Router();
 
+// All member management endpoints (protected)
 router.use(authenticate);
 
-// List members in a family
 router.get("/:familyId/members", listFamilyMembers);
-
-// Add member to a family
 router.post("/:familyId/members", addFamilyMember);
-
-// Edit member info
 router.patch("/user-roles/:id", updateFamilyMember);
-
-// Delete member
 router.delete("/user-roles/:id", deleteFamilyMember);
+
+// Add the invite acceptance endpoint (public or protected, depending on your needs)
+router.post("/invite/accept", acceptFamilyInvite);
 
 export default router;
