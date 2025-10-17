@@ -5,7 +5,7 @@ import {
   updateFamilyMember,
   deleteFamilyMember,
 } from "../controllers/familyMemberController";
-import authenticate from "../middleware/authenticate"; // Your JWT/auth middleware
+import authenticate from "../middlewares/authenticate"; // Your JWT/auth middleware
 
 const router = Router();
 
