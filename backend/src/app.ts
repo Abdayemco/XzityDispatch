@@ -10,7 +10,7 @@ import chatRoutes from "./routes/chat";
 import driverRoutes from "./routes/driver.routes";
 import familyRoutes from "./routes/family";              // <- use ./'family'
 import familyMemberRoutes from "./routes/familyMember";   // <- use ./'familyMember'
-import trackingRoutes from "./routes/tracking";
+import trackingRoutes from "./routes/tracking.routes";
 import jwt from "jsonwebtoken";
 
 const app = express();
