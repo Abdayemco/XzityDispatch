@@ -10,7 +10,8 @@ import chatRoutes from "./routes/chat";
 import driverRoutes from "./routes/driver.routes";
 import familyRoutes from "./routes/family.routes";
 import businessRoutes from "./routes/business.routes";
-import trackingRoutes from "./routes/tracking.routes"; // <-- Add this import
+import trackingRoutes from "./routes/tracking.routes";
+import familyMemberRoutes from "./routes/familyMember";
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -62,9 +63,14 @@ app.use((req: any, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!);
       req.user = decoded;
+      // Debug log for decoded user:
+      console.log("Decoded JWT user:", req.user);
     } catch (err) {
       req.user = undefined;
+      console.log("JWT decode error:", err);
     }
+  } else {
+    req.user = undefined;
   }
   next();
 });
@@ -75,10 +81,11 @@ app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
 app.use("/api/families", familyRoutes);
+app.use("/api/families", familyMemberRoutes);
 app.use("/api/businesses", businessRoutes);
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
-app.use("/api", trackingRoutes); // <-- Add this line
+app.use("/api", trackingRoutes);
 app.use("/test", testRoutes);
 
 // 404 handler

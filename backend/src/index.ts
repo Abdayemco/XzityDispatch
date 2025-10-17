@@ -4,7 +4,7 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { getRideById } from "./models/ride";
 import { saveMessage } from "./models/messageStore";
-import { cleanupStuckRides, cleanupUnacceptedRides } from "./controllers/ride.controller"; // <-- Add this import
+import { cleanupStuckRides, cleanupUnacceptedRides } from "./controllers/ride.controller";
 
 const port = Number(process.env.PORT) || 5000;
 
