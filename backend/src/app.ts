@@ -8,11 +8,9 @@ import adminRoutes from "./routes/admin.routes";
 import contactRouter from "./routes/contact";
 import chatRoutes from "./routes/chat";
 import driverRoutes from "./routes/driver.routes";
-//import familyRoutes from "./routes/family.routes";
-//import businessRoutes from "./routes/business.routes";
-import trackingRoutes from "./routes/tracking.routes";
-import familyRoutes from "./routes/family";
-import familyMemberRoutes from "./routes/familyMember";
+import familyRoutes from "./routes/family";              // <- use ./'family'
+import familyMemberRoutes from "./routes/familyMember";   // <- use ./'familyMember'
+import trackingRoutes from "./routes/tracking";
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -29,7 +27,6 @@ if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -41,16 +38,13 @@ app.use(
   })
 );
 
-// Handle preflight requests for all routes.
 app.options("*", cors({
   origin: allowedOrigins,
   credentials: true,
 }));
 
-// Body parser - MUST be before routes
 app.use(express.json());
 
-// Request logging
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl}`);
   next();
@@ -64,8 +58,7 @@ app.use((req: any, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!);
       req.user = decoded;
-      // Debug log for decoded user:
-      console.log("Decoded JWT user:", req.user);
+      console.log("Decoded JWT user:", req.user); // Debug log
     } catch (err) {
       req.user = undefined;
       console.log("JWT decode error:", err);
@@ -81,20 +74,17 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
-app.use("/api/families", familyRoutes);
-app.use("/api/families", familyMemberRoutes);
-app.use("/api/businesses", businessRoutes);
+app.use("/api/families", familyRoutes);          // <--- use this for group CRUD
+app.use("/api/families", familyMemberRoutes);    // <--- use this for group member management
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
-app.use("/api", trackingRoutes);
+app.use("/api", trackingRoutes);                 // <--- tracking for both types
 app.use("/test", testRoutes);
 
-// 404 handler
 app.use((req, res, next) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// Global error handler
 app.use(errorHandler);
 
 export default app;
