@@ -229,7 +229,7 @@ export default function RegisterPage() {
           <label htmlFor="agreement" style={{ fontSize: 14 }}>
             I agree to the{" "}
             <a
-              href="https://xzity.com/privacy-policy"
+              href="https://www.xzity.com/privacy-policy"
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: "#1976D2", textDecoration: "underline" }}
