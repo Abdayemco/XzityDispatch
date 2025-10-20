@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
-import TermsModal from "../components/TermsModal"; // adjust path as needed
 
 const vehicleOptions = [
   { value: "", label: "Select vehicle type" },
@@ -13,12 +12,11 @@ const vehicleOptions = [
   { value: "water_truck", label: "Water Truck" },
   { value: "tow_truck", label: "Tow Truck" },
   { value: "wheelchair", label: "Wheelchair / Special Needs" },
-  { value: "limo", label: "Limo" }, // <-- Added Limo option
+  { value: "limo", label: "Limo" },
 ];
 
 // Utility: guess country from browser or IP
 async function getDefaultCountry() {
-  // Try IP-based detection for more accuracy
   try {
     const res = await fetch("https://ipapi.co/json/");
     const data = await res.json();
@@ -41,7 +39,6 @@ export default function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [showPolicy, setShowPolicy] = useState(false);
   const [phoneValid, setPhoneValid] = useState(false);
   const [rawPhone, setRawPhone] = useState("");
   const [defaultCountry, setDefaultCountry] = useState(undefined);
@@ -77,7 +74,6 @@ export default function RegisterPage() {
       submitData.phone = form.phone;
       delete submitData.agreed;
 
-      // Use environment variable for API URL
       const API_URL = import.meta.env.VITE_API_URL;
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
@@ -232,9 +228,14 @@ export default function RegisterPage() {
           />
           <label htmlFor="agreement" style={{ fontSize: 14 }}>
             I agree to the{" "}
-            <button type="button" style={{ background: "none", border: "none", color: "#1976D2", textDecoration: "underline", cursor: "pointer", padding: 0 }} onClick={() => setShowPolicy(true)}>
+            <a
+              href="https://xzity.com/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#1976D2", textDecoration: "underline" }}
+            >
               terms and privacy policy
-            </button>
+            </a>
           </label>
         </div>
         <button type="submit" disabled={registerDisabled} style={{ width: "100%", background: "#1976D2", color: "#fff", border: "none", padding: "0.8em", borderRadius: 6 }}>
@@ -247,7 +248,6 @@ export default function RegisterPage() {
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <Link to="/login">Already have an account? Login</Link>
       </div>
-      {showPolicy && <TermsModal onClose={() => setShowPolicy(false)} />}
     </div>
   );
 }

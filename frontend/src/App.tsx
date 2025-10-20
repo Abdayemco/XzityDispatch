@@ -7,6 +7,7 @@ import AdminLiveMap from "./pages/AdminLiveMap";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyCodePage from "./pages/VerifyCodePage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage"; // <-- Import your privacy policy page
 import ContactAdminButton from "./components/ContactAdminButton";
 import ShareButton from "./components/ShareButton";
 import logo from "./assets/logo.png"; // <-- import your logo
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify" element={<VerifyCodePage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} /> {/* <-- Privacy Policy page */}
 
         <Route
           path="/driver"
@@ -77,8 +79,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* New Admin Live Map Route */}
         <Route
           path="/admin/live-map"
           element={
