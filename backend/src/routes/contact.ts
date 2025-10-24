@@ -1,6 +1,21 @@
 import { Router } from "express";
 import transporter from "../config/email"; // adjust if needed
 
+// TEMPORARY TEST CODE
+transporter.sendMail({
+  from: process.env.GMAIL_USER,
+  to: process.env.ADMIN_EMAIL,
+  subject: "Test email from backend",
+  text: "If you receive this, your transporter works!"
+}, (err, info) => {
+  if (err) {
+    console.error("Email test failed:", err);
+  } else {
+    console.log("Email test succeeded:", info);
+  }
+});
+
+// ...rest of your contact router code...
 const router = Router();
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "admin@email.com";
