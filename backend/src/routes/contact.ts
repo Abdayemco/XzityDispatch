@@ -1,25 +1,12 @@
 import { Router } from "express";
-import transporter from "../config/email"; // adjust if needed
+import { Resend } from "resend";
 
-// TEMPORARY TEST CODE
-transporter.sendMail({
-  from: process.env.GMAIL_USER,
-  to: process.env.ADMIN_EMAIL,
-  subject: "Test email from backend",
-  text: "If you receive this, your transporter works!"
-}, (err, info) => {
-  if (err) {
-    console.error("Email test failed:", err);
-  } else {
-    console.log("Email test succeeded:", info);
-  }
-});
-
-// ...rest of your contact router code...
 const router = Router();
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "admin@email.com";
+const resend = new Resend(process.env.RESEND_API_KEY);
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@email.com";
 
+// POST /contact-admin route
 router.post("/contact-admin", async (req, res) => {
   const { name, tel, message } = req.body;
   if (!name || !tel || !message) {
@@ -27,13 +14,13 @@ router.post("/contact-admin", async (req, res) => {
   }
 
   try {
-    await transporter.sendMail({
-      from: `"Blocked User Contact" <${ADMIN_EMAIL}>`,
+    const result = await resend.emails.send({
+      from: "info@xzity.com", // Use your verified sender domain from Resend
       to: ADMIN_EMAIL,
       subject: "Blocked User Contact Request",
       text: `Name: ${name}\nTel: ${tel}\nMessage: ${message}`,
     });
-    res.json({ success: true });
+    res.json({ success: true, result });
   } catch (err: any) {
     console.error("Failed to send contact-admin email:", err.message, err);
     res.status(500).json({ error: "Failed to send message" });
