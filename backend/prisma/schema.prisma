@@ -14,7 +14,20 @@ enum Role {
   SHOPPER
   HAIR_DRESSER
   INSTITUTE
-  CLEANING  // <-- ADDED for Cleaning job accounts
+  CLEANER
+  GARDENER
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PRIVATE_TRAINER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  FUTURE1
+  FUTURE2
+  FUTURE3
 }
 
 enum UserRoleType {
@@ -34,11 +47,24 @@ enum VehicleType {
   TRUCK
   WATER_TRUCK
   TOW_TRUCK
-  SHOPPING
+  SHOPPER
   HAIR_DRESSER
-  CLEANING
+  CLEANER
+  GARDENER
   INSTITUTE
   BEAUTY
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PRIVATE_TRAINER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  FUTURE1
+  FUTURE2
+  FUTURE3
 }
 
 enum RideStatus {
@@ -99,9 +125,12 @@ model User {
   // NEW: User Roles (families/businesses)
   roles          UserRole[]
 
-  // Provider extensions
-  hairType       String?      // For Hair Dresser role: "Male", "Female", "Both"
-  beautyServices String?      // For Institute/Beauty: comma-separated e.g. "Makeup,Nails,Spa"
+  // Generic Provider Profile Info: JSON for all services/crafts/professions
+  serviceProfile Json?   // <-- Flexible service data per job/category
+
+  // DEPRECATED: Legacy provider fields (can be removed after frontend switch)
+  hairType       String?    
+  beautyServices String?    
 }
 
 model Ride {
@@ -114,8 +143,8 @@ model Ride {
   originLng         Float
   destLat           Float
   destLng           Float
-  destinationName   String?     // e.g. "Airport", "Mall", "Home"
-  note              String?     // customer instructions
+  destinationName   String?
+  note              String?
   requestedAt       DateTime    @default(now())
   acceptedAt        DateTime?
   startedAt         DateTime?
@@ -126,13 +155,11 @@ model Ride {
   rating            Int?
   feedback          String?
   chat              Chat?
-  scheduledAt       DateTime?   // For scheduled rides
-  noShowReportedAt  DateTime?   // When "No Show" is marked
+  scheduledAt       DateTime?
+  noShowReportedAt  DateTime?
 
-  // --- EXTENSIONS for beauty, cleaning, shopping, etc ---
-  beautyServices    String?     // For multi-select beauty/institute jobs
-  imageUri          String?     // For shopping jobs with photo
-  subType           String?     // For hairdresser, etc.
+  // Service-specific data for custom jobs
+  jobDetails        Json?      // <-- For generic/custom job fields
 
   @@index([customerId])
   @@index([driverId])
@@ -175,15 +202,13 @@ model Message {
   sentAt    DateTime @default(now())
 }
 
-// --- NEW FAMILY/BUSINESS MODELS ---
-
 model Family {
   id           Int                @id @default(autoincrement())
   name         String
   adminId      Int
   users        UserRole[]
   vehicles     Vehicle[]
-  invitations  FamilyInvitation[]  // <--- Added this line
+  invitations  FamilyInvitation[]
   createdAt    DateTime           @default(now())
 }
 
@@ -193,7 +218,7 @@ model Business {
   adminId      Int
   users        UserRole[]
   vehicles     Vehicle[]
-  invitations  BusinessInvitation[]  // <--- Added this line
+  invitations  BusinessInvitation[]
   createdAt    DateTime              @default(now())
 }
 
@@ -207,7 +232,6 @@ model UserRole {
   businessId Int?
   role       UserRoleType
   invitedBy  Int?
-  verified   Boolean       @default(false)
   phone      String?
   name       String?
   createdAt  DateTime      @default(now())
@@ -217,7 +241,6 @@ model UserRole {
   @@index([businessId])
 }
 
-// Vehicles can belong to a family or business
 model Vehicle {
   id         Int        @id @default(autoincrement())
   type       VehicleType
@@ -225,10 +248,8 @@ model Vehicle {
   familyId   Int?
   business   Business?  @relation(fields: [businessId], references: [id])
   businessId Int?
-  // Add other fields as needed (plate, model, etc)
 }
 
-// --- For onboarding/invitation flows (optional) ---
 model FamilyInvitation {
   id        Int      @id @default(autoincrement())
   family    Family   @relation(fields: [familyId], references: [id])
