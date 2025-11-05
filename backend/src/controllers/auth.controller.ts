@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
-import { sendVerificationEmail } from "../services/email.service";
+import { sendAdminVerificationEmail } from "../services/email.service";
 import jwt from "jsonwebtoken";
 import parsePhoneNumber from "libphonenumber-js";
 import { getName } from "country-list";
@@ -68,7 +68,6 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
     const hashedPassword = password; // Reminder: hash passwords in production!
 
     // --- Free Trial Logic for Drivers ---
@@ -117,8 +116,14 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       data: userData,
     });
 
-    // Send verification email to admin
-    await sendVerificationEmail(ADMIN_EMAIL, verificationCode);
+    // Send admin verification email with full user info
+    await sendAdminVerificationEmail({
+      to: ADMIN_EMAIL,
+      code: verificationCode,
+      name: user.name,
+      phone: user.phone,
+      role: user.role
+    });
 
     return res.status(201).json({
       user: {
@@ -167,8 +172,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         data: { verificationCode }
       });
 
-      // Send verification email to admin
-      await sendVerificationEmail(ADMIN_EMAIL, verificationCode);
+      await sendAdminVerificationEmail({
+        to: ADMIN_EMAIL,
+        code: verificationCode,
+        name: user.name,
+        phone: user.phone,
+        role: user.role
+      });
 
       return res.status(202).json({
         action: "verification_required",
@@ -215,8 +225,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       data: { verificationCode }
     });
 
-    // Send verification email to admin
-    await sendVerificationEmail(ADMIN_EMAIL, verificationCode);
+    await sendAdminVerificationEmail({
+      to: ADMIN_EMAIL,
+      code: verificationCode,
+      name: user.name,
+      phone: user.phone,
+      role: user.role
+    });
 
     return res.status(202).json({
       action: "verification_required",
