@@ -45,10 +45,10 @@ export const addFamilyMember = async (req: Request, res: Response) => {
           userId: existingUser.id,
           familyId,
           role: "FAMILY_MEMBER",
-          verified: true,
           invitedBy: userId,
           name: existingUser.name,
           phone: existingUser.phone,
+          // verified: true,  // removed! (verified does not exist on UserRole)
         },
       });
       return res.status(201).json({
@@ -179,10 +179,10 @@ export const acceptFamilyInvite = async (req: Request, res: Response) => {
         userId: user.id,
         familyId: invitation.familyId,
         role: "FAMILY_MEMBER",
-        verified: true,
         invitedBy: null, // Or invitation.invitedBy if you store it
         name,
         phone,
+        // verified: true, // REMOVED
       },
     });
 
