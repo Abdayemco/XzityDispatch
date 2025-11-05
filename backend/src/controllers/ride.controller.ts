@@ -540,25 +540,25 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
       let rideTypes: VehicleType[] = [];
       switch (provider.vehicleType) {
         case "CAR":
-          rideTypes = ["CAR", "TUKTUK", "DELIVERY", "SHOPPING"];
+          rideTypes = ["CAR", "TUKTUK", "DELIVERY", "SHOPPER"];
           break;
         case "TUKTUK":
-          rideTypes = ["TUKTUK", "DELIVERY", "SHOPPING"];
+          rideTypes = ["TUKTUK", "DELIVERY", "SHOPPER"];
           break;
         case "DELIVERY":
-          rideTypes = ["DELIVERY", "SHOPPING"];
+          rideTypes = ["DELIVERY", "SHOPPER"];
           break;
-        case "SHOPPING":
-          rideTypes = ["SHOPPING", "DELIVERY"];
+        case "SHOPPER":
+          rideTypes = ["SHOPPER", "DELIVERY"];
           break;
         case "TOW_TRUCK":
           rideTypes = ["TOW_TRUCK", "TRUCK"];
           break;
         case "WHEELCHAIR":
-          rideTypes = ["WHEELCHAIR", "CAR", "TUKTUK", "DELIVERY", "SHOPPING"];
+          rideTypes = ["WHEELCHAIR", "CAR", "TUKTUK", "DELIVERY", "SHOPPER"];
           break;
-        case "CLEANING":
-          rideTypes = ["CLEANING"];
+        case "CLEANER":
+          rideTypes = ["CLEANER"];
           break;
         case "HAIR_DRESSER":
           rideTypes = ["HAIR_DRESSER"];
