@@ -36,8 +36,8 @@ export const createFamily = async (req: Request, res: Response) => {
         users: {
           create: {
             userId,
-            role: "FAMILY_ADMIN",
-            verified: true,
+            role: "FAMILY_ADMIN"
+            // 'verified' removed, not in schema
           }
         }
       }
