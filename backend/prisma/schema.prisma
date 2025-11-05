@@ -129,8 +129,8 @@ model User {
   serviceProfile Json?   // <-- Flexible service data per job/category
 
   // DEPRECATED: Legacy provider fields (can be removed after frontend switch)
-  hairType       String?    
-  beautyServices String?    
+  hairType       String?
+  beautyServices String?
 }
 
 model Ride {
@@ -157,9 +157,9 @@ model Ride {
   chat              Chat?
   scheduledAt       DateTime?
   noShowReportedAt  DateTime?
-
-  // Service-specific data for custom jobs
-  jobDetails        Json?      // <-- For generic/custom job fields
+  imageUri          String?      // <-- (Restored) for customer-uploaded image
+  subType           String?      // <-- (Restored) for job subtype, e.g., male/female hairdresser
+  jobDetails        Json?        // for additional/extendable job info
 
   @@index([customerId])
   @@index([driverId])
