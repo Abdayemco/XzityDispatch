@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../utils/prisma";
-import transporter from "../config/email";
+import resend from "../config/email"; // <-- use Resend SDK, not nodemailer transporter
 import jwt from "jsonwebtoken";
 import parsePhoneNumber from "libphonenumber-js";
 import { getName } from "country-list";
 
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_secret_key";
+const EMAIL_FROM = "info@xzity.com"; // Use your verified sender address
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
 
 // --- Helper function to get country and area from phone ---
 function detectCountryArea(phone: string) {
@@ -116,10 +118,24 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       data: userData,
     });
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER,
-      to: process.env.ADMIN_EMAIL,
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: ADMIN_EMAIL,
       subject: `New ${role} Registration – Verification Code`,
+      html: [
+        `<p>A new ${role} has registered.</p>`,
+        `<ul>`,
+        `<li>Name: ${name}</li>`,
+        `<li>Phone: ${phone}</li>`,
+        `<li>User Email: ${email?.trim() || "N/A"}</li>`,
+        `<li>Country: ${countryName || country || "N/A"}</li>`,
+        `<li>Area: ${area || "N/A"}</li>`,
+        `<li>Verification Code: <b>${verificationCode}</b></li>`,
+        upperRole === "HAIR_DRESSER" ? `<li>Hair Type: ${hairType}</li>` : "",
+        upperRole === "INSTITUTE" ? `<li>Beauty Services: ${(beautyServices || []).join(", ")}</li>` : "",
+        `</ul>`,
+        `<p>Please send the verification code to the user via SMS or WhatsApp.</p>`
+      ].join(""),
       text: [
         `A new ${role} has registered.`,
         "",
@@ -183,10 +199,19 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         data: { verificationCode }
       });
 
-      await transporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to: process.env.ADMIN_EMAIL,
+      await resend.emails.send({
+        from: EMAIL_FROM,
+        to: ADMIN_EMAIL,
         subject: `Account Verification Required – ${user.phone}`,
+        html: [
+          `<p>Verification code for account activation:</p>`,
+          `<ul>`,
+          `<li>Name: ${user.name}</li>`,
+          `<li>Phone: ${user.phone}</li>`,
+          `<li>Code: <b>${verificationCode}</b></li>`,
+          `</ul>`,
+          `<p>Send this code to the user via SMS/WhatsApp.</p>`
+        ].join(""),
         text: [
           `Verification code for account activation:`,
           "",
@@ -243,10 +268,19 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       data: { verificationCode }
     });
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER,
-      to: process.env.ADMIN_EMAIL,
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: ADMIN_EMAIL,
       subject: `Device Verification Required – ${user.phone}`,
+      html: [
+        `<p>Verification code for new device login:</p>`,
+        `<ul>`,
+        `<li>Name: ${user.name}</li>`,
+        `<li>Phone: ${user.phone}</li>`,
+        `<li>Code: <b>${verificationCode}</b></li>`,
+        `</ul>`,
+        `<p>Send this code to the user via SMS/WhatsApp.</p>`
+      ].join(""),
       text: [
         `Verification code for new device login:`,
         "",
