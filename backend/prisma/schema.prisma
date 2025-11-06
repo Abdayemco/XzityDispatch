@@ -25,10 +25,10 @@ enum Role {
   PAINTER
   PHYSIOTHERAPIST
   ELDER_CARE
-  FUTURE1
-  FUTURE2
-  FUTURE3
-  FUTURE4
+  JOB1
+  JOB2
+  JOB3
+  JOB4
 }
 
 enum UserRoleType {
@@ -63,10 +63,10 @@ enum VehicleType {
   PAINTER
   PHYSIOTHERAPIST
   ELDER_CARE
-  FUTURE1
-  FUTURE2
-  FUTURE3
-  FUTURE4
+  JOB1
+  JOB2
+  JOB3
+  JOB4
 }
 
 enum RideStatus {
