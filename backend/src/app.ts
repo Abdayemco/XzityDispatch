@@ -11,6 +11,7 @@ import driverRoutes from "./routes/driver.routes";
 import familyRoutes from "./routes/family";              // <- use ./'family'
 import familyMemberRoutes from "./routes/familyMember";   // <- use ./'familyMember'
 import trackingRoutes from "./routes/tracking.routes";
+import enumsRoutes from "./routes/enums.routes";          // <-- ADDED: enums API
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -79,6 +80,7 @@ app.use("/api/families", familyMemberRoutes);    // <--- use this for group memb
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/api", trackingRoutes);                 // <--- tracking for both types
+app.use("/api/enums", enumsRoutes);              // <-- MOUNTED: enums endpoint
 app.use("/test", testRoutes);
 
 app.use((req, res, next) => {
