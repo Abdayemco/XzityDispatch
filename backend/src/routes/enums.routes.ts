@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getRoles, getVehicleTypes, getRideStatuses } from "./enums.controller";
+import { getRoles, getVehicleTypes, getRideStatuses } from "../controllers/enums.controller";
 
 const router = Router();
 
