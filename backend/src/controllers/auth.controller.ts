@@ -55,9 +55,11 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return res.status(400).json({ error: "beautyServices required for institute registration" });
     }
 
+    // --- Prevent double registration emails ---
     const existing = await prisma.user.findUnique({ where: { phone } });
     if (existing) {
       if (!existing.phoneVerified) {
+        // DO NOT send verification code here; let login trigger it.
         return res.status(202).json({
           action: "verification_required",
           message: "You are already registered. Please verify your phone.",
@@ -68,7 +70,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedPassword = password; // Reminder: hash passwords in production!
+    const hashedPassword = password; // Reminder: hash passwords in production! (use bcrypt etc.)
 
     // --- Free Trial Logic for Drivers ---
     let trialStart: Date | null = null;
@@ -166,6 +168,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     // Require phone verification
     if (!user.phoneVerified) {
+      // --- ONLY send verification email here! ---
       const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
       await prisma.user.update({
         where: { id: user.id },
