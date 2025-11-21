@@ -162,12 +162,21 @@ export const requestRide = async (
       scheduledAt,
       subType,
       imageUri,
-      description, 
+      description,
+      serviceType,
     } = req.body;
+
+    // Detect if it's a SHOPPING (or general "service") request
+    const isShopping = serviceType === "SHOPPING";
+    const isBeauty = serviceType === "BEAUTY";
+    const isHairDresser = serviceType === "HAIR_DRESSER";
+    const isCleaning = serviceType === "CLEANING";
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
 
     const numericCustomerId = Number(customerId);
+
+    // Validation (allow: vehicleType for rides, OR a recognized serviceType for jobs)
     if (
       !numericCustomerId ||
       typeof numericCustomerId !== "number" ||
@@ -176,17 +185,20 @@ export const requestRide = async (
       typeof originLng !== "number" ||
       typeof destLat !== "number" ||
       typeof destLng !== "number" ||
-      !normalizedVehicleType
+      (
+        // Require EITHER a vehicleType (ride) OR a recognized serviceType (job)
+        !(normalizedVehicleType || isShopping || isBeauty || isHairDresser || isCleaning)
+      )
     ) {
       return res
         .status(400)
         .json({ error: "Missing or invalid required fields" });
     }
 
-    // Require subType for beauty and hair dresser
+    // Require subType for beauty/hair dresser
     if (
-      (normalizedVehicleType === VehicleType.BEAUTY || normalizedVehicleType === VehicleType.HAIR_DRESSER)
-      && (!subType || typeof subType !== "string" || !subType.trim())
+      (isBeauty || isHairDresser) &&
+      (!subType || typeof subType !== "string" || !subType.trim())
     ) {
       return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
     }
@@ -199,25 +211,41 @@ export const requestRide = async (
       }
     }
 
+    // Prepare data according to type
+    const baseData: any = {
+      customer: { connect: { id: numericCustomerId } },
+      status: scheduledAt ? RideStatus.SCHEDULED : RideStatus.PENDING,
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+      destinationName:
+        typeof destinationName === "string" && destinationName.trim()
+          ? destinationName.trim()
+          : null,
+      note: typeof note === "string" && note.trim() ? note.trim() : null,
+      scheduledAt: scheduledAtUTC,
+      subType: subType || null,
+      imageUri: imageUri || null,
+      // description: description || null, // Add if you want to keep
+    };
+
+    // Assign vehicleType or serviceType depending on request type
+    if (normalizedVehicleType) {
+      baseData.vehicleType = normalizedVehicleType;
+    } else if (isShopping) {
+      baseData.vehicleType = "SHOPPER"; // Or any string value/prisma enum for shopping/delivery jobs
+    } else if (isBeauty) {
+      baseData.vehicleType = "BEAUTY";
+    } else if (isHairDresser) {
+      baseData.vehicleType = "HAIR_DRESSER";
+    } else if (isCleaning) {
+      baseData.vehicleType = "CLEANER";
+    }
+    // You can also store `serviceType` as-is, or as a custom field if your schema has it
+
     const ride = await prisma.ride.create({
-      data: {
-        customer: { connect: { id: numericCustomerId } },
-        status: scheduledAt ? RideStatus.SCHEDULED : RideStatus.PENDING,
-        originLat,
-        originLng,
-        destLat,
-        destLng,
-        destinationName:
-          typeof destinationName === "string" && destinationName.trim()
-            ? destinationName.trim()
-            : null,
-        note: typeof note === "string" && note.trim() ? note.trim() : null,
-        vehicleType: normalizedVehicleType,
-        scheduledAt: scheduledAtUTC,
-        subType: subType || null,
-        imageUri: imageUri || null,
-        // description: description || null,
-      },
+      data: baseData,
     });
 
     res.json({
@@ -229,13 +257,15 @@ export const requestRide = async (
       note: ride.note,
       subType: ride.subType,
       imageUri: ride.imageUri,
-      // description: ride.description,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
     next(error);
   }
 };
+
+// ...ALL REMAINING CONTROLLER FUNCTIONS UNCHANGED...
+// (editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.)
 
 export const editScheduledRide = async (
   req: Request,
