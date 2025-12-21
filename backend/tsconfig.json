@@ -10,5 +10,8 @@
     "skipLibCheck": true,
     "typeRoots": ["./src/types", "./node_modules/@types"]
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "prisma.config.ts"  // <-- Add this for best editor/linting experience
+  ]
 }
