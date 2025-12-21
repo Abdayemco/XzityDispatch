@@ -7,6 +7,76 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  DRIVER
+  CUSTOMER
+  SHOPPER
+  HAIR_DRESSER
+  INSTITUTE
+  CLEANER
+  GARDENER
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PAINTER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  CARPENTER
+  HANDYMAN
+  ROOFER
+  FENCER
+  JOB1
+  JOB2
+  JOB3
+  JOB4
+}
+
+enum UserRoleType {
+  FAMILY_ADMIN
+  FAMILY_MEMBER
+  BUSINESS_ADMIN
+  EMPLOYEE
+  CUSTOMER
+}
+
+enum VehicleType {
+  CAR
+  TUKTUK
+  DELIVERY
+  LIMO
+  WHEELCHAIR
+  TRUCK
+  WATER_TRUCK
+  TOW_TRUCK
+  SHOPPER
+  HAIR_DRESSER
+  CLEANER
+  GARDENER
+  INSTITUTE
+  BEAUTY
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PAINTER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  CARPENTER
+  HANDYMAN
+  ROOFER
+  FENCER
+  JOB1
+  JOB2
+  JOB3
+  JOB4
+}
+
 enum RideStatus {
   PENDING
   ACCEPTED
@@ -17,22 +87,12 @@ enum RideStatus {
   NO_SHOW
 }
 
-enum VehicleType {
-  CAR
-  DELIVERY
-  TUKTUK
-  LIMO
-  TRUCK
-  WATER_TRUCK
-  TOW_TRUCK
-  WHEELCHAIR
-  SHOPPER
-}
-
+// 🟢 New dynamic job category tables
 model ServiceCategory {
   id        Int              @id @default(autoincrement())
   name      String           @unique
   subTypes  ServiceSubType[]
+  rides     Ride[]           @relation("CategoryRides")
   createdAt DateTime         @default(now())
 }
 
@@ -40,9 +100,9 @@ model ServiceSubType {
   id           Int             @id @default(autoincrement())
   name         String
   categoryId   Int
-  category     ServiceCategory  @relation(fields: [categoryId], references: [id])
-  rides        Ride[]           // all rides/jobs of this subtype
-  createdAt    DateTime         @default(now())
+  category     ServiceCategory @relation(fields: [categoryId], references: [id])
+  rides        Ride[]          @relation("SubTypeRides")
+  createdAt    DateTime        @default(now())
   @@unique([name, categoryId])
 }
 
@@ -52,11 +112,54 @@ model User {
   phone            String          @unique
   email            String?         @unique
   password         String
-  isBusy           Boolean         @default(false)
+  role             Role
   vehicleType      VehicleType?
+  isBusy           Boolean         @default(false)
   ridesAsDriver    Ride[]          @relation("DriverRides")
   ridesAsCustomer  Ride[]          @relation("CustomerRides")
-  // ... keep your other user fields unchanged ...
+  verificationCode String?
+  phoneVerified    Boolean         @default(false)
+  disabled         Boolean         @default(false)
+  trustedDevices   TrustedDevice[]
+  avatar           String?
+
+  // Chat relations
+  chatsAsCustomer  Chat[]          @relation("ChatCustomer")
+  chatsAsDriver    Chat[]          @relation("ChatDriver")
+  messages         Message[]
+
+  // Subscription & Free Trial Fields for DRIVERS only
+  trialStart             DateTime?      @map("trial_start")
+  trialEnd               DateTime?      @map("trial_end")
+  subscriptionStatus     String?        @default("trial")
+  subscriptionFee        Float?         @default(0)
+  paymentMethod          String?
+  isSubscriptionDisabled Boolean?       @default(false)
+
+  // Location fields for map display
+  lat         Float?
+  lng         Float?
+  online      Boolean?      @default(false)
+  
+  // New fields for phone-based location
+  country         String?   // ISO country code, e.g. "LB"
+  countryName     String?   // Human readable, e.g. "Lebanon"
+  area            String?   // Area/prefix, e.g. "70" or "212"
+
+  // Last known location tracking
+  lastKnownLat   Float?
+  lastKnownLng   Float?
+  lastLocationAt DateTime?
+
+  // NEW: User Roles (families/businesses)
+  roles          UserRole[]
+
+  // Generic Provider Profile Info: JSON for all services/crafts/professions
+  serviceProfile Json?   // <-- Flexible service data per job/category
+
+  // DEPRECATED: Legacy provider fields (can be removed after frontend switch)
+  hairType       String?
+  beautyServices String?
 }
 
 model Ride {
@@ -77,17 +180,21 @@ model Ride {
   completedAt       DateTime?
   cancelledAt       DateTime?
   status            RideStatus  @default(PENDING)
-  vehicleType       VehicleType?
-  serviceCategoryId Int?        // FK to ServiceCategory
-  serviceSubTypeId  Int?        // FK to ServiceSubType
-  serviceCategory   ServiceCategory? @relation(fields: [serviceCategoryId], references: [id])
-  serviceSubType    ServiceSubType?  @relation(fields: [serviceSubTypeId], references: [id])
+  vehicleType       VehicleType
   rating            Int?
   feedback          String?
+  chat              Chat?
   scheduledAt       DateTime?
   noShowReportedAt  DateTime?
-  imageUri          String?
-  jobDetails        Json?
+  imageUri          String?      // <-- (Restored) for customer-uploaded image
+  subType           String?      // <-- (Restored) for job subtype, e.g., male/female hairdresser
+  jobDetails        Json?        // for additional/extendable job info
+
+  // New relations for dynamic category/subtype support:
+  serviceCategoryId Int?        
+  serviceCategory   ServiceCategory? @relation("CategoryRides", fields: [serviceCategoryId], references: [id])
+  serviceSubTypeId  Int?
+  serviceSubType    ServiceSubType?  @relation("SubTypeRides", fields: [serviceSubTypeId], references: [id])
 
   @@index([customerId])
   @@index([driverId])
@@ -95,7 +202,6 @@ model Ride {
   @@index([scheduledAt])
 }
 
-// keep TrustedDevice, Chat, Message, Group, etc. unchanged in your schema if they're already present.
 model TrustedDevice {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])

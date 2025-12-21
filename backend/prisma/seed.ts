@@ -68,8 +68,8 @@ const categoriesWithSubtypes = [
   {
     name: "TUTOR",
     subTypes: [
-      "Math", "Science", "Physics", "Chemistry", "History",
-      "Geography", "Coding", "Language", "Grammar", "Art", "Music"
+      "MATH", "SCIENCE", "PHYSICS", "CHEMISTRY", "HISTORY",
+      "GEOGRAPHY", "CODING", "LANGUAGE", "GRAMMAR", "ART", "MUSIC"
     ]
   },
   {
@@ -89,15 +89,17 @@ const categoriesWithSubtypes = [
 
 async function main() {
   for (const cat of categoriesWithSubtypes) {
-    const created = await prisma.serviceCategory.create({
-      data: {
+    await prisma.serviceCategory.upsert({
+      where: { name: cat.name },
+      update: {},
+      create: {
         name: cat.name,
         subTypes: {
           create: cat.subTypes.map(st => ({ name: st }))
         }
       }
     });
-    console.log(`Created category: ${created.name}`);
+    console.log(`Seeded category: ${cat.name}`);
   }
 }
 
