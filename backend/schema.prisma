@@ -1,0 +1,309 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  DRIVER
+  CUSTOMER
+  SHOPPER
+  HAIR_DRESSER
+  INSTITUTE
+  CLEANER
+  GARDENER
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PAINTER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  CARPENTER
+  HANDYMAN
+  ROOFER
+  FENCER
+  JOB1
+  JOB2
+  JOB3
+  JOB4
+}
+
+enum UserRoleType {
+  FAMILY_ADMIN
+  FAMILY_MEMBER
+  BUSINESS_ADMIN
+  EMPLOYEE
+  CUSTOMER
+}
+
+enum VehicleType {
+  CAR
+  TUKTUK
+  DELIVERY
+  LIMO
+  WHEELCHAIR
+  TRUCK
+  WATER_TRUCK
+  TOW_TRUCK
+  SHOPPER
+  HAIR_DRESSER
+  CLEANER
+  GARDENER
+  INSTITUTE
+  BEAUTY
+  PLUMBER
+  ELECTRICIAN
+  ERRAND_RUNNER
+  BABYSITTER
+  TUTOR
+  LAUNDRY
+  PAINTER
+  PHYSIOTHERAPIST
+  ELDER_CARE
+  CARPENTER
+  HANDYMAN
+  ROOFER
+  FENCER
+  JOB1
+  JOB2
+  JOB3
+  JOB4
+}
+
+enum RideStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  SCHEDULED
+  NO_SHOW
+}
+
+// 🟢 New dynamic job category tables
+model ServiceCategory {
+  id        Int              @id @default(autoincrement())
+  name      String           @unique
+  subTypes  ServiceSubType[]
+  rides     Ride[]           @relation("CategoryRides")
+  createdAt DateTime         @default(now())
+}
+
+model ServiceSubType {
+  id           Int             @id @default(autoincrement())
+  name         String
+  categoryId   Int
+  category     ServiceCategory @relation(fields: [categoryId], references: [id])
+  rides        Ride[]          @relation("SubTypeRides")
+  createdAt    DateTime        @default(now())
+  @@unique([name, categoryId])
+}
+
+model User {
+  id               Int             @id @default(autoincrement())
+  name             String
+  phone            String          @unique
+  email            String?         @unique
+  password         String
+  role             Role
+  vehicleType      VehicleType?
+  isBusy           Boolean         @default(false)
+  ridesAsDriver    Ride[]          @relation("DriverRides")
+  ridesAsCustomer  Ride[]          @relation("CustomerRides")
+  verificationCode String?
+  phoneVerified    Boolean         @default(false)
+  disabled         Boolean         @default(false)
+  trustedDevices   TrustedDevice[]
+  avatar           String?
+
+  // Chat relations
+  chatsAsCustomer  Chat[]          @relation("ChatCustomer")
+  chatsAsDriver    Chat[]          @relation("ChatDriver")
+  messages         Message[]
+
+  // Subscription & Free Trial Fields for DRIVERS only
+  trialStart             DateTime?      @map("trial_start")
+  trialEnd               DateTime?      @map("trial_end")
+  subscriptionStatus     String?        @default("trial")
+  subscriptionFee        Float?         @default(0)
+  paymentMethod          String?
+  isSubscriptionDisabled Boolean?       @default(false)
+
+  // Location fields for map display
+  lat         Float?
+  lng         Float?
+  online      Boolean?      @default(false)
+  
+  // New fields for phone-based location
+  country         String?   // ISO country code, e.g. "LB"
+  countryName     String?   // Human readable, e.g. "Lebanon"
+  area            String?   // Area/prefix, e.g. "70" or "212"
+
+  // Last known location tracking
+  lastKnownLat   Float?
+  lastKnownLng   Float?
+  lastLocationAt DateTime?
+
+  // NEW: User Roles (families/businesses)
+  roles          UserRole[]
+
+  // Generic Provider Profile Info: JSON for all services/crafts/professions
+  serviceProfile Json?   // <-- Flexible service data per job/category
+
+  // DEPRECATED: Legacy provider fields (can be removed after frontend switch)
+  hairType       String?
+  beautyServices String?
+}
+
+model Ride {
+  id                Int         @id @default(autoincrement())
+  customer          User        @relation("CustomerRides", fields: [customerId], references: [id])
+  customerId        Int
+  driver            User?       @relation("DriverRides", fields: [driverId], references: [id])
+  driverId          Int?
+  originLat         Float
+  originLng         Float
+  destLat           Float
+  destLng           Float
+  destinationName   String?
+  note              String?
+  requestedAt       DateTime    @default(now())
+  acceptedAt        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  status            RideStatus  @default(PENDING)
+  vehicleType       VehicleType
+  rating            Int?
+  feedback          String?
+  chat              Chat?
+  scheduledAt       DateTime?
+  noShowReportedAt  DateTime?
+  imageUri          String?      // <-- (Restored) for customer-uploaded image
+  subType           String?      // <-- (Restored) for job subtype, e.g., male/female hairdresser
+  jobDetails        Json?        // for additional/extendable job info
+
+  // New relations for dynamic category/subtype support:
+  serviceCategoryId Int?        
+  serviceCategory   ServiceCategory? @relation("CategoryRides", fields: [serviceCategoryId], references: [id])
+  serviceSubTypeId  Int?
+  serviceSubType    ServiceSubType?  @relation("SubTypeRides", fields: [serviceSubTypeId], references: [id])
+
+  @@index([customerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model TrustedDevice {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  deviceId  String
+  addedAt   DateTime @default(now())
+  @@unique([userId, deviceId])
+}
+
+model Chat {
+  id          Int       @id @default(autoincrement())
+  ride        Ride      @relation(fields: [rideId], references: [id])
+  rideId      Int       @unique
+  customer    User      @relation("ChatCustomer", fields: [customerId], references: [id])
+  customerId  Int
+  driver      User      @relation("ChatDriver", fields: [driverId], references: [id])
+  driverId    Int
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([driverId])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  chatId    Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  Int
+  content   String
+  sentAt    DateTime @default(now())
+}
+
+model Family {
+  id           Int                @id @default(autoincrement())
+  name         String
+  adminId      Int
+  users        UserRole[]
+  vehicles     Vehicle[]
+  invitations  FamilyInvitation[]
+  createdAt    DateTime           @default(now())
+}
+
+model Business {
+  id           Int                   @id @default(autoincrement())
+  name         String
+  adminId      Int
+  users        UserRole[]
+  vehicles     Vehicle[]
+  invitations  BusinessInvitation[]
+  createdAt    DateTime              @default(now())
+}
+
+model UserRole {
+  id         Int           @id @default(autoincrement())
+  user       User          @relation(fields: [userId], references: [id])
+  userId     Int
+  family     Family?       @relation(fields: [familyId], references: [id])
+  familyId   Int?
+  business   Business?     @relation(fields: [businessId], references: [id])
+  businessId Int?
+  role       UserRoleType
+  invitedBy  Int?
+  phone      String?
+  name       String?
+  createdAt  DateTime      @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([businessId])
+}
+
+model Vehicle {
+  id         Int        @id @default(autoincrement())
+  type       VehicleType
+  family     Family?    @relation(fields: [familyId], references: [id])
+  familyId   Int?
+  business   Business?  @relation(fields: [businessId], references: [id])
+  businessId Int?
+}
+
+model FamilyInvitation {
+  id        Int      @id @default(autoincrement())
+  family    Family   @relation(fields: [familyId], references: [id])
+  familyId  Int
+  phone     String
+  name      String
+  code      String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model BusinessInvitation {
+  id         Int      @id @default(autoincrement())
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId Int
+  phone      String
+  name       String
+  code       String
+  expiresAt  DateTime
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
