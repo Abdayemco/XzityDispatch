@@ -8,10 +8,13 @@ import adminRoutes from "./routes/admin.routes";
 import contactRouter from "./routes/contact";
 import chatRoutes from "./routes/chat";
 import driverRoutes from "./routes/driver.routes";
-import familyRoutes from "./routes/family";              // <- use ./'family'
-import familyMemberRoutes from "./routes/familyMember";   // <- use ./'familyMember'
+import familyRoutes from "./routes/family";
+import familyMemberRoutes from "./routes/familyMember";
 import trackingRoutes from "./routes/tracking.routes";
-import enumsRoutes from "./routes/enums.routes";          // <-- ADDED: enums API
+import enumsRoutes from "./routes/enums.routes";
+import categoryRoutes from "./routes/category.routes"; // 🟢 ADD THIS LINE
+import subcategoryRoutes from "./routes/subcategory.routes";
+import jobRoutes from "./routes/job.routes";
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -75,12 +78,15 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/driver", driverRoutes);
-app.use("/api/families", familyRoutes);          // <--- use this for group CRUD
-app.use("/api/families", familyMemberRoutes);    // <--- use this for group member management
+app.use("/api/families", familyRoutes);
+app.use("/api/families", familyMemberRoutes);
 app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
-app.use("/api", trackingRoutes);                 // <--- tracking for both types
-app.use("/api/enums", enumsRoutes);              // <-- MOUNTED: enums endpoint
+app.use("/api", trackingRoutes);
+app.use("/api/enums", enumsRoutes);
+app.use("/api/categories", categoryRoutes);   // 🟢 ADD THIS LINE
+app.use("/api/subcategories", subcategoryRoutes);
+app.use("/api/jobs", jobRoutes);
 app.use("/test", testRoutes);
 
 app.use((req, res, next) => {
