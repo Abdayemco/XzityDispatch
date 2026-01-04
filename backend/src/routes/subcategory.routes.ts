@@ -77,6 +77,9 @@ router.post("/", async (req, res, next) => {
       where: { id: subType.id },
       include: { acceptedRoles: true }
     });
+    if (!result) {
+      return res.status(404).json({ error: "Subcategory not found after creation." });
+    }
     res.status(201).json({
       ...result,
       acceptedRoles: result.acceptedRoles.map(r => r.role)
@@ -119,6 +122,9 @@ router.put("/:id", async (req, res, next) => {
       where: { id: subType.id },
       include: { acceptedRoles: true }
     });
+    if (!result) {
+      return res.status(404).json({ error: "Subcategory not found after update." });
+    }
     res.json({
       ...result,
       acceptedRoles: result.acceptedRoles.map(r => r.role)
