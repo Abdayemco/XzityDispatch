@@ -89,21 +89,35 @@ enum RideStatus {
 
 // 🟢 New dynamic job category tables
 model ServiceCategory {
-  id        Int              @id @default(autoincrement())
-  name      String           @unique
+  id        Int               @id @default(autoincrement())
+  name      String            @unique
+  icon      String?           // New: icon URL or filename
   subTypes  ServiceSubType[]
-  rides     Ride[]           @relation("CategoryRides")
-  createdAt DateTime         @default(now())
+  rides     Ride[]            @relation("CategoryRides")
+  createdAt DateTime          @default(now())
 }
 
 model ServiceSubType {
-  id           Int             @id @default(autoincrement())
+  id           Int                 @id @default(autoincrement())
   name         String
+  icon         String?             // New: icon URL or filename
   categoryId   Int
-  category     ServiceCategory @relation(fields: [categoryId], references: [id])
-  rides        Ride[]          @relation("SubTypeRides")
-  createdAt    DateTime        @default(now())
+  category     ServiceCategory     @relation(fields: [categoryId], references: [id])
+  rides        Ride[]              @relation("SubTypeRides")
+  acceptedRoles ServiceSubTypeRole[]   // <--- New: join table for accepted roles
+  createdAt    DateTime            @default(now())
   @@unique([name, categoryId])
+}
+
+// NEW: Join table for ServiceSubType accepted roles
+model ServiceSubTypeRole {
+  id             Int           @id @default(autoincrement())
+  subType        ServiceSubType @relation(fields: [subTypeId], references: [id])
+  subTypeId      Int
+  role           Role
+
+  @@unique([subTypeId, role])
+  @@index([role])
 }
 
 model User {
@@ -201,6 +215,8 @@ model Ride {
   @@index([status])
   @@index([scheduledAt])
 }
+
+// ...[remaining models unchanged, omitted for brevity]...
 
 model TrustedDevice {
   id        Int      @id @default(autoincrement())

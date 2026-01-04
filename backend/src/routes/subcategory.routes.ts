@@ -1,82 +1,128 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import { isAdmin } from "../middlewares/isAdmin";
 
 const prisma = new PrismaClient();
 const router = express.Router();
 
-// Protect all subcategory routes with isAdmin middleware
 router.use(isAdmin);
 
-// GET all subcategories (optionally filter by categoryId)
+// GET all subcategories (optionally filter by categoryId, includes icon & acceptedRoles)
 router.get("/", async (req, res, next) => {
   try {
     const { categoryId } = req.query;
-    let subTypes = [];
-    if (categoryId) {
-      subTypes = await prisma.serviceSubType.findMany({
-        where: { categoryId: Number(categoryId) },
-        orderBy: { id: "asc" },
-      });
-    } else {
-      subTypes = await prisma.serviceSubType.findMany({ orderBy: { id: "asc" } });
-    }
-    res.json(subTypes);
+    let where = {};
+    if (categoryId) where = { categoryId: Number(categoryId) };
+    const subTypes = await prisma.serviceSubType.findMany({
+      where,
+      include: { acceptedRoles: true },
+      orderBy: { id: "asc" },
+    });
+    const mapped = subTypes.map(sub => ({
+      ...sub,
+      acceptedRoles: sub.acceptedRoles.map(r => r.role)
+    }));
+    res.json(mapped);
   } catch (err) {
     next(err);
   }
 });
 
-// GET a single subcategory by ID
+// GET a single subcategory by ID (include icon & acceptedRoles)
 router.get("/:id", async (req, res, next) => {
   try {
     const subType = await prisma.serviceSubType.findUnique({
       where: { id: Number(req.params.id) },
-      include: { category: true, rides: true },
+      include: { category: true, rides: true, acceptedRoles: true },
     });
     if (!subType) {
       return res.status(404).json({ error: "Subcategory not found" });
     }
-    res.json(subType);
+    const mapped = {
+      ...subType,
+      acceptedRoles: subType.acceptedRoles.map(r => r.role)
+    };
+    res.json(mapped);
   } catch (err) {
     next(err);
   }
 });
 
-// CREATE a new subcategory
+// CREATE a new subcategory (accept icon & acceptedRoles)
 router.post("/", async (req, res, next) => {
   try {
-    const { name, categoryId } = req.body;
+    const { name, icon, categoryId, acceptedRoles } = req.body;
     if (!name || typeof name !== "string" || !categoryId) {
       return res.status(400).json({ error: "Name and categoryId are required" });
     }
+    // Create subType
     const subType = await prisma.serviceSubType.create({
-      data: {
-        name,
-        categoryId: Number(categoryId),
-      },
+      data: { name, icon, categoryId: Number(categoryId) },
     });
-    res.status(201).json(subType);
+
+    // Add acceptedRoles (join table)
+    if (acceptedRoles && Array.isArray(acceptedRoles)) {
+      await prisma.$transaction(
+        acceptedRoles.map(role =>
+          prisma.serviceSubTypeRole.create({
+            data: {
+              subTypeId: subType.id,
+              role: role as Role,
+            }
+          })
+        )
+      );
+    }
+    const result = await prisma.serviceSubType.findUnique({
+      where: { id: subType.id },
+      include: { acceptedRoles: true }
+    });
+    res.status(201).json({
+      ...result,
+      acceptedRoles: result.acceptedRoles.map(r => r.role)
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// UPDATE a subcategory
+// UPDATE a subcategory (accept icon & acceptedRoles)
 router.put("/:id", async (req, res, next) => {
   try {
-    const { name, categoryId } = req.body;
+    const { name, icon, categoryId, acceptedRoles } = req.body;
     if (!name || typeof name !== "string" || !categoryId) {
       return res.status(400).json({ error: "Name and categoryId are required" });
     }
+    // Update subType
     const subType = await prisma.serviceSubType.update({
       where: { id: Number(req.params.id) },
-      data: {
-        name,
-        categoryId: Number(categoryId),
-      },
+      data: { name, icon, categoryId: Number(categoryId) },
     });
-    res.json(subType);
+
+    // Update acceptedRoles - remove old, add new
+    if (acceptedRoles && Array.isArray(acceptedRoles)) {
+      await prisma.serviceSubTypeRole.deleteMany({
+        where: { subTypeId: subType.id }
+      });
+      await prisma.$transaction(
+        acceptedRoles.map(role =>
+          prisma.serviceSubTypeRole.create({
+            data: {
+              subTypeId: subType.id,
+              role: role as Role,
+            }
+          })
+        )
+      );
+    }
+    const result = await prisma.serviceSubType.findUnique({
+      where: { id: subType.id },
+      include: { acceptedRoles: true }
+    });
+    res.json({
+      ...result,
+      acceptedRoles: result.acceptedRoles.map(r => r.role)
+    });
   } catch (err) {
     next(err);
   }
@@ -85,6 +131,9 @@ router.put("/:id", async (req, res, next) => {
 // DELETE a subcategory
 router.delete("/:id", async (req, res, next) => {
   try {
+    await prisma.serviceSubTypeRole.deleteMany({
+      where: { subTypeId: Number(req.params.id) }
+    });
     await prisma.serviceSubType.delete({
       where: { id: Number(req.params.id) },
     });
