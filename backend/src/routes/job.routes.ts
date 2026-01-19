@@ -74,6 +74,7 @@ router.post("/", async (req, res, next) => {
       jobDetails,
       subType,
       destinationName,
+      categoryName // <--- Accept from client
     } = req.body;
 
     // You can adjust required fields as needed
@@ -81,11 +82,12 @@ router.post("/", async (req, res, next) => {
       !customerId ||
       !vehicleType ||
       !serviceCategoryId ||
-      !serviceSubTypeId
+      !serviceSubTypeId ||
+      !categoryName
     ) {
       return res
         .status(400)
-        .json({ error: "customerId, vehicleType, serviceCategoryId, serviceSubTypeId are required" });
+        .json({ error: "customerId, vehicleType, serviceCategoryId, serviceSubTypeId, categoryName are required" });
     }
 
     const job = await prisma.ride.create({
@@ -106,6 +108,7 @@ router.post("/", async (req, res, next) => {
         jobDetails,
         subType,
         destinationName,
+        categoryName: String(categoryName).trim(), // 🟢 Add required field
       }
     });
 
@@ -135,6 +138,7 @@ router.put("/:id", async (req, res, next) => {
       jobDetails,
       subType,
       destinationName,
+      categoryName // <--- Accept from client
     } = req.body;
 
     const job = await prisma.ride.update({
@@ -156,6 +160,7 @@ router.put("/:id", async (req, res, next) => {
         jobDetails,
         subType,
         destinationName,
+        categoryName: categoryName ? String(categoryName).trim() : undefined, // 🟢 Add required field
       }
     });
 
