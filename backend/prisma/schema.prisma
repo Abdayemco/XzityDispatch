@@ -87,11 +87,11 @@ enum RideStatus {
   NO_SHOW
 }
 
-// 🟢 New dynamic job category tables
+// 🟢 Dynamic Categories & Subtypes
 model ServiceCategory {
   id        Int               @id @default(autoincrement())
-  name      String            @unique
-  icon      String?           // New: icon URL or filename
+  name      String            @unique                  // e.g. "TRANSPORTATION", "CLEANER"
+  icon      String?           // icon URL or filename
   subTypes  ServiceSubType[]
   rides     Ride[]            @relation("CategoryRides")
   createdAt DateTime          @default(now())
@@ -99,17 +99,16 @@ model ServiceCategory {
 
 model ServiceSubType {
   id           Int                 @id @default(autoincrement())
-  name         String
-  icon         String?             // New: icon URL or filename
+  name         String                                     // e.g. "CAR", "DELIVERY", "LIMO", etc.
+  icon         String?             // icon URL or filename
   categoryId   Int
   category     ServiceCategory     @relation(fields: [categoryId], references: [id])
   rides        Ride[]              @relation("SubTypeRides")
-  acceptedRoles ServiceSubTypeRole[]   // <--- New: join table for accepted roles
+  acceptedRoles ServiceSubTypeRole[]   // Join table for accepted roles
   createdAt    DateTime            @default(now())
   @@unique([name, categoryId])
 }
 
-// NEW: Join table for ServiceSubType accepted roles
 model ServiceSubTypeRole {
   id             Int           @id @default(autoincrement())
   subType        ServiceSubType @relation(fields: [subTypeId], references: [id])
@@ -137,12 +136,10 @@ model User {
   trustedDevices   TrustedDevice[]
   avatar           String?
 
-  // Chat relations
   chatsAsCustomer  Chat[]          @relation("ChatCustomer")
   chatsAsDriver    Chat[]          @relation("ChatDriver")
   messages         Message[]
 
-  // Subscription & Free Trial Fields for DRIVERS only
   trialStart             DateTime?      @map("trial_start")
   trialEnd               DateTime?      @map("trial_end")
   subscriptionStatus     String?        @default("trial")
@@ -150,28 +147,20 @@ model User {
   paymentMethod          String?
   isSubscriptionDisabled Boolean?       @default(false)
 
-  // Location fields for map display
   lat         Float?
   lng         Float?
   online      Boolean?      @default(false)
-  
-  // New fields for phone-based location
-  country         String?   // ISO country code, e.g. "LB"
-  countryName     String?   // Human readable, e.g. "Lebanon"
-  area            String?   // Area/prefix, e.g. "70" or "212"
+  country         String?   // ISO country code
+  countryName     String?
+  area            String?   // Area/prefix
 
-  // Last known location tracking
   lastKnownLat   Float?
   lastKnownLng   Float?
   lastLocationAt DateTime?
 
-  // NEW: User Roles (families/businesses)
   roles          UserRole[]
+  serviceProfile Json?   // Flexible service data per job/category
 
-  // Generic Provider Profile Info: JSON for all services/crafts/professions
-  serviceProfile Json?   // <-- Flexible service data per job/category
-
-  // DEPRECATED: Legacy provider fields (can be removed after frontend switch)
   hairType       String?
   beautyServices String?
 }
@@ -194,17 +183,20 @@ model Ride {
   completedAt       DateTime?
   cancelledAt       DateTime?
   status            RideStatus  @default(PENDING)
-  vehicleType       VehicleType
+  vehicleType       VehicleType?  // Only for rides/transport—can be null for other services
+
+  // 🟢 Dynamic Category and Subtype Fields:
+  categoryName      String        // e.g. "TRANSPORTATION", "CLEANER", matches ServiceCategory.name
+  subType           String?       // e.g. "CAR", "DELIVERY", from ServiceSubType.name
+
   rating            Int?
   feedback          String?
   chat              Chat?
   scheduledAt       DateTime?
   noShowReportedAt  DateTime?
-  imageUri          String?      // <-- (Restored) for customer-uploaded image
-  subType           String?      // <-- (Restored) for job subtype, e.g., male/female hairdresser
-  jobDetails        Json?        // for additional/extendable job info
+  imageUri          String?
+  jobDetails        Json?        
 
-  // New relations for dynamic category/subtype support:
   serviceCategoryId Int?        
   serviceCategory   ServiceCategory? @relation("CategoryRides", fields: [serviceCategoryId], references: [id])
   serviceSubTypeId  Int?
@@ -213,10 +205,9 @@ model Ride {
   @@index([customerId])
   @@index([driverId])
   @@index([status])
-  @@index([scheduledAt])
+  @@index([categoryName])
+  @@index([subType])
 }
-
-// ...[remaining models unchanged, omitted for brevity]...
 
 model TrustedDevice {
   id        Int      @id @default(autoincrement())
