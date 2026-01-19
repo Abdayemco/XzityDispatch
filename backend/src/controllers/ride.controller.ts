@@ -151,6 +151,7 @@ export const requestRide = async (
   try {
     console.log("Incoming ride request:", req.body);
     const {
+      categoryName,
       customerId,
       originLat,
       originLng,
@@ -164,9 +165,11 @@ export const requestRide = async (
       imageUri,
       description,
       serviceType,
+      serviceCategoryId,
+      serviceSubTypeId,
+      jobDetails,
     } = req.body;
 
-    // Detect if it's a SHOPPING (or general "service") request
     const isShopping = serviceType === "SHOPPING";
     const isBeauty = serviceType === "BEAUTY";
     const isHairDresser = serviceType === "HAIR_DRESSER";
@@ -176,7 +179,6 @@ export const requestRide = async (
 
     const numericCustomerId = Number(customerId);
 
-    // Validation (allow: vehicleType for rides, OR a recognized serviceType for jobs)
     if (
       !numericCustomerId ||
       typeof numericCustomerId !== "number" ||
@@ -185,17 +187,13 @@ export const requestRide = async (
       typeof originLng !== "number" ||
       typeof destLat !== "number" ||
       typeof destLng !== "number" ||
-      (
-        // Require EITHER a vehicleType (ride) OR a recognized serviceType (job)
-        !(normalizedVehicleType || isShopping || isBeauty || isHairDresser || isCleaning)
-      )
+      !categoryName || typeof categoryName !== "string" || !categoryName.trim()
     ) {
       return res
         .status(400)
         .json({ error: "Missing or invalid required fields" });
     }
 
-    // Require subType for beauty/hair dresser
     if (
       (isBeauty || isHairDresser) &&
       (!subType || typeof subType !== "string" || !subType.trim())
@@ -211,14 +209,20 @@ export const requestRide = async (
       }
     }
 
-    // Prepare data according to type
-    const baseData: any = {
-      customer: { connect: { id: numericCustomerId } },
-      status: scheduledAt ? RideStatus.SCHEDULED : RideStatus.PENDING,
+    const baseData: Prisma.RideUncheckedCreateInput = {
+      customerId: numericCustomerId,
+      driverId: undefined,
       originLat,
       originLng,
       destLat,
       destLng,
+      vehicleType: normalizedVehicleType ?? null,
+      status: scheduledAt ? RideStatus.SCHEDULED : RideStatus.PENDING,
+      requestedAt: undefined,
+      acceptedAt: undefined,
+      startedAt: undefined,
+      completedAt: undefined,
+      cancelledAt: undefined,
       destinationName:
         typeof destinationName === "string" && destinationName.trim()
           ? destinationName.trim()
@@ -227,22 +231,15 @@ export const requestRide = async (
       scheduledAt: scheduledAtUTC,
       subType: subType || null,
       imageUri: imageUri || null,
-      // description: description || null, // Add if you want to keep
+      jobDetails: jobDetails || undefined,
+      categoryName: categoryName.trim(),
+      serviceCategoryId: serviceCategoryId ?? null,
+      serviceSubTypeId: serviceSubTypeId ?? null,
     };
 
-    // Assign vehicleType or serviceType depending on request type
-    if (normalizedVehicleType) {
-      baseData.vehicleType = normalizedVehicleType;
-    } else if (isShopping) {
-      baseData.vehicleType = "SHOPPER"; // Or any string value/prisma enum for shopping/delivery jobs
-    } else if (isBeauty) {
-      baseData.vehicleType = "BEAUTY";
-    } else if (isHairDresser) {
-      baseData.vehicleType = "HAIR_DRESSER";
-    } else if (isCleaning) {
-      baseData.vehicleType = "CLEANER";
+    if (description) {
+      (baseData as any).description = description;
     }
-    // You can also store `serviceType` as-is, or as a custom field if your schema has it
 
     const ride = await prisma.ride.create({
       data: baseData,
@@ -257,12 +254,17 @@ export const requestRide = async (
       note: ride.note,
       subType: ride.subType,
       imageUri: ride.imageUri,
+      categoryName: ride.categoryName,
     });
   } catch (error) {
     console.error("Error creating ride:", error);
     next(error);
   }
 };
+
+// All other controller functions unchanged; just ensure that if you use prisma.ride.create elsewhere, you also provide categoryName as above
+// e.g., editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.
+// For brevity, not duplicating (they do NOT need categoryName unless re-creating a Ride)
 
 // ...ALL REMAINING CONTROLLER FUNCTIONS UNCHANGED...
 // (editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.)
