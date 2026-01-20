@@ -30,7 +30,7 @@ router.get("/", async (req, res, next) => {
 
     res.json(mapped);
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -59,7 +59,7 @@ router.get("/:id", async (req, res, next) => {
     };
     res.json(mapped);
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -74,12 +74,12 @@ router.post("/", isAdmin, async (req, res, next) => {
       data: { name, icon },
     });
     res.status(201).json(category);
-  } catch (err) {
+  } catch (err: any) {
     // Unique constraint error
     if (err.code === "P2002") {
       return res.status(409).json({ error: "Category already exists." });
     }
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -96,7 +96,7 @@ router.put("/:id", isAdmin, async (req, res, next) => {
     });
     res.json(category);
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -107,12 +107,12 @@ router.delete("/:id", isAdmin, async (req, res, next) => {
       where: { id: Number(req.params.id) },
     });
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     // Foreign key constraint error handling (category in use)
     if (err.code === "P2003") {
       return res.status(400).json({ error: "Cannot delete category: It is in use by rides or subtypes." });
     }
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
