@@ -8,7 +8,7 @@ const router = express.Router();
 // Require admin for all subcategory operations
 router.use(isAdmin);
 
-// GET all subcategories (optionally filter by categoryId, include icon/acceptedRoles)
+// GET all subcategories (optionally filter by categoryId, includes icon & acceptedRoles)
 router.get("/", async (req, res, next) => {
   try {
     const { categoryId } = req.query;
@@ -24,7 +24,7 @@ router.get("/", async (req, res, next) => {
     }));
     res.json(mapped);
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -42,7 +42,7 @@ router.get("/:id", async (req, res, next) => {
     };
     res.json(mapped);
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -88,7 +88,7 @@ router.post("/", async (req, res, next) => {
       acceptedRoles: result.acceptedRoles.map(r => r.role)
     });
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -131,7 +131,7 @@ router.put("/:id", async (req, res, next) => {
       acceptedRoles: result.acceptedRoles.map(r => r.role)
     });
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
@@ -140,11 +140,13 @@ router.delete("/:id", async (req, res, next) => {
   try {
     const subTypeId = Number(req.params.id);
     // Prevent delete if rides exist for this subType
-    const rideCount = await prisma.ride.count({ where: { subType: (await prisma.serviceSubType.findUnique({ where: { id: subTypeId } }))?.name } });
+    const subTypeObj = await prisma.serviceSubType.findUnique({ where: { id: subTypeId } });
+    if (!subTypeObj)
+      return res.status(404).json({ error: "Subcategory not found" });
+    const rideCount = await prisma.ride.count({ where: { subType: subTypeObj.name } });
     if (rideCount > 0) {
       return res.status(400).json({ error: "Cannot delete subcategory: It is in use by existing rides." });
     }
-    // Delete all ServiceSubTypeRole relations (join table)
     await prisma.serviceSubTypeRole.deleteMany({
       where: { subTypeId }
     });
@@ -153,7 +155,7 @@ router.delete("/:id", async (req, res, next) => {
     });
     res.json({ success: true });
   } catch (err) {
-    next(err);
+    next(err instanceof Error ? err : new Error(String(err)));
   }
 });
 
