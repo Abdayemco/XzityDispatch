@@ -184,9 +184,10 @@ model Ride {
   cancelledAt       DateTime?
   status            RideStatus  @default(PENDING)
   vehicleType       VehicleType?  // Only for rides/transport—can be null for other services
+  
 
   // 🟢 Dynamic Category and Subtype Fields:
-  categoryName      String        // e.g. "TRANSPORTATION", "CLEANER", matches ServiceCategory.name
+  categoryName      String?        // e.g. "TRANSPORTATION", "CLEANER", matches ServiceCategory.name
   subType           String?       // e.g. "CAR", "DELIVERY", from ServiceSubType.name
 
   rating            Int?
