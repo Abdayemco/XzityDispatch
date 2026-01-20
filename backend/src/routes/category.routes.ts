@@ -5,17 +5,15 @@ import { isAdmin } from "../middlewares/isAdmin";
 const prisma = new PrismaClient();
 const router = express.Router();
 
-router.use(isAdmin);
-
-// GET all categories (with subTypes and icon)
+// 🟢 GET all categories (with subTypes and icon) - open to all
 router.get("/", async (req, res, next) => {
   try {
     const categories = await prisma.serviceCategory.findMany({
       include: {
         subTypes: {
           include: {
-            acceptedRoles: true
-          }
+            acceptedRoles: true,
+          },
         },
       },
       orderBy: { id: "asc" },
@@ -36,7 +34,7 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// GET single category by ID (with subTypes and icon)
+// 🟢 GET single category by ID (open to all)
 router.get("/:id", async (req, res, next) => {
   try {
     const category = await prisma.serviceCategory.findUnique({
@@ -65,8 +63,8 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// CREATE new category (now supports icon)
-router.post("/", async (req, res, next) => {
+// 🛡️ CREATE new category (admin only)
+router.post("/", isAdmin, async (req, res, next) => {
   try {
     const { name, icon } = req.body;
     if (!name || typeof name !== "string") {
@@ -77,12 +75,16 @@ router.post("/", async (req, res, next) => {
     });
     res.status(201).json(category);
   } catch (err) {
+    // Unique constraint error
+    if (err.code === "P2002") {
+      return res.status(409).json({ error: "Category already exists." });
+    }
     next(err);
   }
 });
 
-// UPDATE a category (now supports icon)
-router.put("/:id", async (req, res, next) => {
+// 🛡️ UPDATE a category (admin only)
+router.put("/:id", isAdmin, async (req, res, next) => {
   try {
     const { name, icon } = req.body;
     if (!name || typeof name !== "string") {
@@ -98,14 +100,18 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
-// DELETE a category
-router.delete("/:id", async (req, res, next) => {
+// 🛡️ DELETE a category (admin only)
+router.delete("/:id", isAdmin, async (req, res, next) => {
   try {
     await prisma.serviceCategory.delete({
       where: { id: Number(req.params.id) },
     });
     res.json({ success: true });
   } catch (err) {
+    // Foreign key constraint error handling (category in use)
+    if (err.code === "P2003") {
+      return res.status(400).json({ error: "Cannot delete category: It is in use by rides or subtypes." });
+    }
     next(err);
   }
 });
