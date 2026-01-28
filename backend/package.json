@@ -10,7 +10,6 @@
     "prisma:generate": "npx prisma generate --schema=prisma/schema.prisma",
     "prisma:migrate": "npx prisma migrate dev --schema=prisma/schema.prisma",
     "migrate:deploy": "npx prisma migrate deploy --schema=prisma/schema.prisma",
-    "prisma:seed": "npx ts-node prisma/seed.ts",
     "prepare:db": "npm run migrate:deploy && npm run prisma:generate && npm run prisma:seed"
   },
   "dependencies": {
