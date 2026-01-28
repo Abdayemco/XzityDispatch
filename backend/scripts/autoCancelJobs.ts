@@ -34,13 +34,18 @@ function getReferenceTime(ride: any): DateTime | undefined {
     ride.scheduledAt &&
     ["scheduled", "pending"].includes((ride.status || "").toLowerCase())
   ) {
-    return DateTime.fromISO(ride.scheduledAt instanceof Date ? ride.scheduledAt.toISOString() : ride.scheduledAt);
+    return DateTime.fromISO(
+      ride.scheduledAt instanceof Date
+        ? ride.scheduledAt.toISOString()
+        : ride.scheduledAt
+    );
   }
   if (ride.requestedAt) {
-    return DateTime.fromISO(ride.requestedAt instanceof Date ? ride.requestedAt.toISOString() : ride.requestedAt);
-  }
-  if (ride.createdAt) {
-    return DateTime.fromISO(ride.createdAt instanceof Date ? ride.createdAt.toISOString() : ride.createdAt);
+    return DateTime.fromISO(
+      ride.requestedAt instanceof Date
+        ? ride.requestedAt.toISOString()
+        : ride.requestedAt
+    );
   }
   return undefined;
 }
@@ -64,7 +69,6 @@ async function autoCancelJobs() {
       status: true,
       scheduledAt: true,
       requestedAt: true,
-      createdAt: true,
       serviceType: true,
       vehicleType: true,
       categoryName: true,
@@ -77,10 +81,8 @@ async function autoCancelJobs() {
   for (const ride of rides) {
     const key = getCancellationKey(ride);
     const rule = cancellationRules[key] || { maxHours: 48 };
-
     const referenceTime = getReferenceTime(ride);
     if (!referenceTime || !referenceTime.isValid) continue;
-
     const expireAt = referenceTime.plus({ hours: rule.maxHours });
 
     if (now >= expireAt) {
