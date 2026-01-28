@@ -21,15 +21,13 @@ const cancellationRules: { [key: string]: { maxHours: number } } = {
 };
 
 function getCancellationKey(ride: any): string {
-  // Prefer serviceType if set, fallback to vehicleType, fallback to categoryName
-  if (ride.serviceType) return String(ride.serviceType).toUpperCase();
   if (ride.vehicleType) return String(ride.vehicleType).toUpperCase();
   if (ride.categoryName) return String(ride.categoryName).toUpperCase();
+  if (ride.serviceSubType) return String(ride.serviceSubType).toUpperCase();
   return "";
 }
 
 function getReferenceTime(ride: any): DateTime | undefined {
-  // Use scheduledAt for scheduled rides, requestedAt for others.
   if (
     ride.scheduledAt &&
     ["scheduled", "pending"].includes((ride.status || "").toLowerCase())
@@ -51,7 +49,6 @@ function getReferenceTime(ride: any): DateTime | undefined {
 }
 
 async function autoCancelJobs() {
-  // 1. Find all non-terminal jobs (not completed, not cancelled, not no_show)
   const openStatuses = [
     RideStatus.PENDING,
     RideStatus.ACCEPTED,
@@ -59,7 +56,6 @@ async function autoCancelJobs() {
     RideStatus.SCHEDULED,
   ];
 
-  // Fetch all rides that might need auto-cancel
   const rides = await prisma.ride.findMany({
     where: {
       status: { in: openStatuses },
@@ -69,10 +65,10 @@ async function autoCancelJobs() {
       status: true,
       scheduledAt: true,
       requestedAt: true,
-      serviceType: true,
       vehicleType: true,
       categoryName: true,
-      customerId: true, // for notification if needed
+      serviceSubType: true,
+      customerId: true,
     },
   });
 
@@ -104,7 +100,6 @@ async function autoCancelJobs() {
   );
 }
 
-// For direct CLI execution, e.g., `npx ts-node scripts/autoCancelJobs.ts`
 if (require.main === module) {
   autoCancelJobs()
     .catch((e) => {
