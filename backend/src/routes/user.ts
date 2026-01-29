@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { updateMainProviderCategory } from "../controllers/user.controller";
-import { authMiddleware } from "../middlewares/authMiddleware";
+import authenticate from "../middlewares/authenticate";
 
 const router = Router();
 
-// PATCH /users/:id/main-provider-category with authentication
-router.patch("/:id/main-provider-category", authMiddleware, updateMainProviderCategory);
+router.patch("/:id/main-provider-category", authenticate, updateMainProviderCategory);
 
 export default router;
