@@ -634,7 +634,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
     }
-    // PROVIDER CATEGORY MATCH LOGIC:
+    // Provider job categories (not vehicle-based roles)
     else if (
       provider.mainProviderCategory === "CLEANER" ||
       provider.mainProviderCategory === "HAIR_DRESSER" ||
@@ -661,12 +661,14 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         },
         orderBy: { scheduledAt: "asc" }
       });
+      // Subtype filtering for HAIR_DRESSER
       if (provider.mainProviderCategory === "HAIR_DRESSER" && provider.hairType) {
         rides = rides.filter(r =>
           !r.note ||
           r.note.toLowerCase().includes((provider.hairType ?? "").toLowerCase())
         );
       }
+      // Service filtering for INSTITUTE
       if (provider.mainProviderCategory === "INSTITUTE" && provider.beautyServices) {
         const serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
         rides = rides.filter(r =>
