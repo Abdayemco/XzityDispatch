@@ -262,13 +262,6 @@ export const requestRide = async (
   }
 };
 
-// All other controller functions unchanged; just ensure that if you use prisma.ride.create elsewhere, you also provide categoryName as above
-// e.g., editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.
-// For brevity, not duplicating (they do NOT need categoryName unless re-creating a Ride)
-
-// ...ALL REMAINING CONTROLLER FUNCTIONS UNCHANGED...
-// (editScheduledRide, cancelRide, markRideAsDone, getAllCustomerRides, etc.)
-
 export const editScheduledRide = async (
   req: Request,
   res: Response,
@@ -483,10 +476,6 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
   }
 };
 
-// ...rest of your controller remains unchanged, including getAllDriverRides, getAvailableRequests, acceptRide, etc.
-
-// ...rest of your controller remains unchanged...
-
 export const getAllDriverRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let driverId: number | undefined;
@@ -589,15 +578,6 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         case "WHEELCHAIR":
           rideTypes = ["WHEELCHAIR", "CAR", "TUKTUK", "DELIVERY", "SHOPPER"];
           break;
-        case "CLEANER":
-          rideTypes = ["CLEANER"];
-          break;
-        case "HAIR_DRESSER":
-          rideTypes = ["HAIR_DRESSER"];
-          break;
-        case "INSTITUTE":
-          rideTypes = ["INSTITUTE"];
-          break;
         case "LIMO":
           rideTypes = ["LIMO"];
           break;
@@ -654,15 +634,17 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
     }
-    else if (role === Role.SHOPPER) {
-      rides = [];
-    }
-    else if (role === Role.HAIR_DRESSER) {
+    // PROVIDER CATEGORY MATCH LOGIC:
+    else if (
+      provider.mainProviderCategory === "CLEANER" ||
+      provider.mainProviderCategory === "HAIR_DRESSER" ||
+      provider.mainProviderCategory === "INSTITUTE"
+    ) {
       rides = await prisma.ride.findMany({
         where: {
           status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
           driverId: null,
-          note: { contains: "hair", mode: Prisma.QueryMode.insensitive },
+          categoryName: provider.mainProviderCategory
         },
         select: {
           id: true,
@@ -679,44 +661,18 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         },
         orderBy: { scheduledAt: "asc" }
       });
-      if (provider.hairType && provider.hairType !== "") {
+      if (provider.mainProviderCategory === "HAIR_DRESSER" && provider.hairType) {
         rides = rides.filter(r =>
           !r.note ||
           r.note.toLowerCase().includes((provider.hairType ?? "").toLowerCase())
         );
       }
-    }
-    else if (role === Role.INSTITUTE) {
-      let serviceKeywords: string[] = [];
-      if (provider.beautyServices) {
-        serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
+      if (provider.mainProviderCategory === "INSTITUTE" && provider.beautyServices) {
+        const serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
+        rides = rides.filter(r =>
+          serviceKeywords.some(sk => (r.note ?? "").toLowerCase().includes(sk))
+        );
       }
-      rides = await prisma.ride.findMany({
-        where: {
-          status: { in: [RideStatus.PENDING, RideStatus.SCHEDULED] },
-          driverId: null,
-          OR: [
-            { note: { contains: "beauty", mode: Prisma.QueryMode.insensitive } },
-            ...serviceKeywords.map(sk => ({
-              note: { contains: sk, mode: Prisma.QueryMode.insensitive }
-            }))
-          ]
-        },
-        select: {
-          id: true,
-          originLat: true,
-          originLng: true,
-          requestedAt: true,
-          customer: { select: { name: true } },
-          scheduledAt: true,
-          status: true,
-          destLat: true,
-          destLng: true,
-          destinationName: true,
-          note: true,
-        },
-        orderBy: { scheduledAt: "asc" }
-      });
     }
     else {
       rides = [];
@@ -749,7 +705,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
       destinationName: ride.destinationName,
       note: ride.note,
       status: ride.status,
-	  vehicleType: ride.vehicleType,
+      vehicleType: ride.vehicleType,
     }));
 
     res.json(mappedRides);
