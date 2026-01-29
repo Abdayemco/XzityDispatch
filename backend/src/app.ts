@@ -12,10 +12,13 @@ import familyRoutes from "./routes/family";
 import familyMemberRoutes from "./routes/familyMember";
 import trackingRoutes from "./routes/tracking.routes";
 import enumsRoutes from "./routes/enums.routes";
-import categoryRoutes from "./routes/category.routes"; // 🟢 ADD THIS LINE
+import categoryRoutes from "./routes/category.routes";
 import subcategoryRoutes from "./routes/subcategory.routes";
 import jobRoutes from "./routes/job.routes";
 import jwt from "jsonwebtoken";
+
+// 🟢 ADD THIS LINE:
+import userRoutes from "./routes/user";
 
 const app = express();
 
@@ -62,7 +65,7 @@ app.use((req: any, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!);
       req.user = decoded;
-      console.log("Decoded JWT user:", req.user); // Debug log
+      console.log("Decoded JWT user:", req.user);
     } catch (err) {
       req.user = undefined;
       console.log("JWT decode error:", err);
@@ -72,6 +75,9 @@ app.use((req: any, res, next) => {
   }
   next();
 });
+
+// Register new user routes under /users
+app.use("/users", userRoutes);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -84,7 +90,7 @@ app.use("/api", contactRouter);
 app.use("/api", chatRoutes);
 app.use("/api", trackingRoutes);
 app.use("/api/enums", enumsRoutes);
-app.use("/api/categories", categoryRoutes);   // 🟢 ADD THIS LINE
+app.use("/api/categories", categoryRoutes);
 app.use("/api/subcategories", subcategoryRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/test", testRoutes);

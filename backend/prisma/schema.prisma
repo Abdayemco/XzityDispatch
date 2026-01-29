@@ -161,11 +161,10 @@ enum RideStatus {
   NO_SHOW
 }
 
-// 🟢 Dynamic Categories & Subtypes
 model ServiceCategory {
   id        Int               @id @default(autoincrement())
-  name      String            @unique                  // e.g. "TRANSPORTATION", "CLEANER"
-  icon      String?           // icon URL or filename
+  name      String            @unique
+  icon      String?
   subTypes  ServiceSubType[]
   rides     Ride[]            @relation("CategoryRides")
   createdAt DateTime          @default(now())
@@ -173,12 +172,12 @@ model ServiceCategory {
 
 model ServiceSubType {
   id           Int                 @id @default(autoincrement())
-  name         String                                     // e.g. "CAR", "DELIVERY", "LIMO", etc.
-  icon         String?             // icon URL or filename
+  name         String
+  icon         String?
   categoryId   Int
   category     ServiceCategory     @relation(fields: [categoryId], references: [id])
   rides        Ride[]              @relation("SubTypeRides")
-  acceptedRoles ServiceSubTypeRole[]   // Join table for accepted roles
+  acceptedRoles ServiceSubTypeRole[]
   createdAt    DateTime            @default(now())
   @@unique([name, categoryId])
 }
@@ -224,19 +223,21 @@ model User {
   lat         Float?
   lng         Float?
   online      Boolean?      @default(false)
-  country         String?   // ISO country code
+  country         String?
   countryName     String?
-  area            String?   // Area/prefix
+  area            String?
 
   lastKnownLat   Float?
   lastKnownLng   Float?
   lastLocationAt DateTime?
 
   roles          UserRole[]
-  serviceProfile Json?   // Flexible service data per job/category
+  serviceProfile Json?
 
   hairType       String?
   beautyServices String?
+
+  mainProviderCategory String?
 }
 
 model Ride {
@@ -257,12 +258,10 @@ model Ride {
   completedAt       DateTime?
   cancelledAt       DateTime?
   status            RideStatus  @default(PENDING)
-  vehicleType       VehicleType?  // Only for rides/transport—can be null for other services
-  
+  vehicleType       VehicleType?
 
-  // 🟢 Dynamic Category and Subtype Fields:
-  categoryName      String?        // e.g. "TRANSPORTATION", "CLEANER", matches ServiceCategory.name
-  subType           String?       // e.g. "CAR", "DELIVERY", from ServiceSubType.name
+  categoryName      String?
+  subType           String?
 
   rating            Int?
   feedback          String?
@@ -270,9 +269,9 @@ model Ride {
   scheduledAt       DateTime?
   noShowReportedAt  DateTime?
   imageUri          String?
-  jobDetails        Json?        
+  jobDetails        Json?
 
-  serviceCategoryId Int?        
+  serviceCategoryId Int?
   serviceCategory   ServiceCategory? @relation("CategoryRides", fields: [serviceCategoryId], references: [id])
   serviceSubTypeId  Int?
   serviceSubType    ServiceSubType?  @relation("SubTypeRides", fields: [serviceSubTypeId], references: [id])

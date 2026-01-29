@@ -6,7 +6,14 @@ import { getRideById } from "./models/ride";
 import { saveMessage } from "./models/messageStore";
 import { cleanupStuckRides, cleanupUnacceptedRides } from "./controllers/ride.controller";
 
+// NEW: Import user routes and add to app BEFORE creating http server!
+import userRoutes from "./routes/user";
+
 const port = Number(process.env.PORT) || 5000;
+
+// Add JSON parser and user routes to your Express app before passing to http.createServer
+app.use(require("express").json());
+app.use("/users", userRoutes);
 
 // Create HTTP server and attach Socket.IO
 const server = http.createServer(app);
@@ -43,7 +50,6 @@ io.on("connection", (socket: Socket) => {
   const user = (socket as any).user;
   console.log(`SOCKET CONNECT: user=${user?.id} role=${user?.role}`);
 
-  // Join chat: only if user is part of the ride
   socket.on("join_chat", async ({ chatId }: { chatId: string | number }) => {
     const user = (socket as any).user;
     try {
@@ -114,8 +120,8 @@ server.listen(port, () => {
 });
 
 // --- Start the cleanup jobs for stuck rides and for unaccepted rides ---
-setInterval(cleanupStuckRides, 5 * 60 * 1000); // runs every 5 minutes
-setInterval(cleanupUnacceptedRides, 5 * 60 * 1000); // runs every 5 minutes
+setInterval(cleanupStuckRides, 5 * 60 * 1000); // every 5 minutes
+setInterval(cleanupUnacceptedRides, 5 * 60 * 1000); // every 5 minutes
 
 server.on("error", (err) => {
   console.error("❌ Failed to start server:", err);
