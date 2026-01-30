@@ -451,7 +451,7 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         scheduledAt: toLocalISOString(r.scheduledAt),
         scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
         vehicleType: r.vehicleType,
-        serviceType: r.serviceType,
+        // serviceType: r.serviceType,
         categoryName: r.categoryName,
         destinationName: r.destinationName,
         note: r.note,
