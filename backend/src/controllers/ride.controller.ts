@@ -6,7 +6,6 @@ import { DateTime } from "luxon";
 
 const LOCAL_TZ = "Africa/Cairo";
 
-// Helper to normalize and validate vehicleType input (case-insensitive)
 function normalizeVehicleType(input: any): VehicleType | undefined {
   if (!input || typeof input !== "string") return undefined;
   const upper = input.trim().toUpperCase();
@@ -389,6 +388,7 @@ export const markRideAsDone = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+// --------------- UPDATED HERE: getAllCustomerRides ---------------
 export const getAllCustomerRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let customerId: number | undefined;
@@ -401,7 +401,6 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       return res.status(400).json({ error: "Missing or invalid customerId" });
     }
 
-    // Only return current/active rides:
     const currentStatuses = [
       RideStatus.PENDING,
       RideStatus.ACCEPTED,
@@ -414,13 +413,20 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         customerId,
         status: { in: currentStatuses }
       },
-      orderBy: { scheduledAt: "asc" },
-      include: {
-        driver: true,
-      },
+      include: { driver: true },
     });
 
-    const formattedRides = rides.map(r => {
+    const sortedRides = rides.sort((a, b) => {
+      const a_expiry = a.scheduledAt
+        ? new Date(a.scheduledAt).getTime()
+        : (a.requestedAt ? new Date(a.requestedAt).getTime() : 0);
+      const b_expiry = b.scheduledAt
+        ? new Date(b.scheduledAt).getTime()
+        : (b.requestedAt ? new Date(b.requestedAt).getTime() : 0);
+      return a_expiry - b_expiry;
+    });
+
+    const formattedRides = sortedRides.map(r => {
       const requestedAtTime = r.requestedAt ? toLocalHHmm(r.requestedAt) : null;
       let eta = null;
       let etaKm = null;
@@ -445,10 +451,13 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
         scheduledAt: toLocalISOString(r.scheduledAt),
         scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
         vehicleType: r.vehicleType,
+        serviceType: r.serviceType,
+        categoryName: r.categoryName,
         destinationName: r.destinationName,
         note: r.note,
         status: r.status,
         acceptedAt: toLocalISOString(r.acceptedAt),
+        requestedAt: toLocalISOString(r.requestedAt),
         requestedAtTime,
         driver: r.driver
           ? {
@@ -468,13 +477,13 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       };
     });
 
-    console.log("Ride IDs returned:", formattedRides.map(r => r.id));
     res.json(formattedRides);
   } catch (error) {
     console.error("Error fetching all rides for customer:", error);
     next(error);
   }
 };
+// -----------------------------------------------------------------
 
 export const getAllDriverRides = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -528,18 +537,6 @@ export const getAllDriverRides = async (req: Request, res: Response, next: NextF
     next(error);
   }
 };
-
-function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 export const getAvailableRequests = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -634,7 +631,6 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         orderBy: { scheduledAt: "asc" }
       });
     }
-    // Provider job categories (not vehicle-based roles)
     else if (
       provider.mainProviderCategory === "CLEANER" ||
       provider.mainProviderCategory === "HAIR_DRESSER" ||
@@ -661,14 +657,12 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
         },
         orderBy: { scheduledAt: "asc" }
       });
-      // Subtype filtering for HAIR_DRESSER
       if (provider.mainProviderCategory === "HAIR_DRESSER" && provider.hairType) {
         rides = rides.filter(r =>
           !r.note ||
           r.note.toLowerCase().includes((provider.hairType ?? "").toLowerCase())
         );
       }
-      // Service filtering for INSTITUTE
       if (provider.mainProviderCategory === "INSTITUTE" && provider.beautyServices) {
         const serviceKeywords = provider.beautyServices.split(",").map(s => s.trim().toLowerCase());
         rides = rides.filter(r =>
@@ -689,7 +683,7 @@ export const getAvailableRequests = async (req: Request, res: Response, next: Ne
           typeof ride.originLat !== "number" ||
           typeof ride.originLng !== "number"
         ) return false;
-        const distKm = haversineDistanceKm(lat, lng, ride.originLat, ride.originLng);
+        const distKm = getDistanceKm(lat, lng, ride.originLat, ride.originLng);
         return distKm <= 33;
       });
     }
