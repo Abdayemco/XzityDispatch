@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_URL = "https://xzitydispatch-b.onrender.com"; // <-- update accordingly!
+// Update with your backend API URL
+const API_URL = "https://xzitydispatch-b.onrender.com";
 
 export type UserRequest = {
   id: number;
@@ -28,28 +29,32 @@ export function useUserRequests(pollingIntervalMs: number = 10000) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get the user ID from async storage
-  const fetchUserId = useCallback(async () => {
+  // Get the user ID from async storage (always returns a number or null)
+  const fetchUserId = useCallback(async (): Promise<number | null> => {
     const raw = await AsyncStorage.getItem("userId");
-    const id = raw ? Number(raw) : null;
+    if (!raw) return null;
+    const id = Number(raw);
     return (!isNaN(id) && Number.isInteger(id)) ? id : null;
   }, []);
 
+  // Fetch the user's requests list from backend
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const customerId = await fetchUserId();
       const token = await AsyncStorage.getItem("token");
-      if (!customerId) throw new Error("No customer ID");
+      if (customerId === null || typeof customerId !== "number" || isNaN(customerId)) {
+        throw new Error("No valid customer ID");
+      }
       const res = await fetch(`${API_URL}/api/rides/all?customerId=${customerId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       Array.isArray(data) ? setRequests(data) : setRequests([]);
-    } catch (err) {
-      setError(String(err));
+    } catch (err: any) {
+      setError(typeof err === "string" ? err : err?.message ?? "Unknown error");
       setRequests([]);
     } finally {
       setLoading(false);
