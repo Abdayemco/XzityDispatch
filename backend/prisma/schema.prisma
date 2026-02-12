@@ -259,7 +259,8 @@ model Ride {
   cancelledAt       DateTime?
   status            RideStatus  @default(PENDING)
   vehicleType       VehicleType?
-  level String?  
+  level             String?  
+  description       String?
   categoryName      String?
   subType           String?
 
