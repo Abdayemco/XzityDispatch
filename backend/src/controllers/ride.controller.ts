@@ -461,56 +461,57 @@ export const getAllCustomerRides = async (req: Request, res: Response, next: Nex
       return a_expiry - b_expiry;
     });
 
-    const formattedRides = sortedRides.map(r => {
-      const requestedAtTime = r.requestedAt ? toLocalHHmm(r.requestedAt) : null;
-      let eta = null;
-      let etaKm = null;
-      let etaMin = null;
-      if (
-        r.driver &&
-        r.driver.lastKnownLat != null && r.driver.lastKnownLng != null &&
-        r.originLat != null && r.originLng != null
-      ) {
-        const distanceKm = getDistanceKm(
-          r.driver.lastKnownLat,
-          r.driver.lastKnownLng,
-          r.originLat,
-          r.originLng
-        );
-        etaKm = Number(distanceKm.toFixed(1));
-        etaMin = estimateTimeMin(distanceKm);
-        eta = { etaMin, etaKm };
-      }
-      return {
-        id: r.id,
-        scheduledAt: toLocalISOString(r.scheduledAt),
-        scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
-        vehicleType: r.vehicleType,
-        // serviceType: r.serviceType,
-        categoryName: r.categoryName,
-        destinationName: r.destinationName,
-        note: r.note,
-        status: r.status,
-        acceptedAt: toLocalISOString(r.acceptedAt),
-        requestedAt: toLocalISOString(r.requestedAt),
-        requestedAtTime,
-        driver: r.driver
-          ? {
-              id: r.driver.id,
-              name: r.driver.name,
-              vehicleType: r.driver.vehicleType,
-              lastKnownLat: r.driver.lastKnownLat,
-              lastKnownLng: r.driver.lastKnownLng,
-              acceptedAt: toLocalISOString(r.acceptedAt),
-            }
-          : undefined,
-        etaMin: etaMin ?? null,
-        etaKm: etaKm ?? null,
-        rated: r.rating !== null && r.rating !== undefined,
-        subType: r.subType ?? null,
-        imageUri: r.imageUri ?? null,
-      };
-    });
+    // ...
+const formattedRides = sortedRides.map(r => {
+  const requestedAtTime = r.requestedAt ? toLocalHHmm(r.requestedAt) : null;
+  let eta = null;
+  let etaKm = null;
+  let etaMin = null;
+  if (
+    r.driver &&
+    r.driver.lastKnownLat != null && r.driver.lastKnownLng != null &&
+    r.originLat != null && r.originLng != null
+  ) {
+    const distanceKm = getDistanceKm(
+      r.driver.lastKnownLat,
+      r.driver.lastKnownLng,
+      r.originLat,
+      r.originLng
+    );
+    etaKm = Number(distanceKm.toFixed(1));
+    etaMin = estimateTimeMin(distanceKm);
+    eta = { etaMin, etaKm };
+  }
+  return {
+    id: r.id,
+    scheduledAt: toLocalISOString(r.scheduledAt),
+    scheduledAtDisplay: toLocalDisplay(r.scheduledAt),
+    vehicleType: r.vehicleType,
+    categoryName: r.categoryName,
+    destinationName: r.destinationName,
+    note: r.note,
+    status: r.status,
+    acceptedAt: toLocalISOString(r.acceptedAt),
+    requestedAt: toLocalISOString(r.requestedAt),
+    requestedAtTime,
+    driver: r.driver
+      ? {
+          id: r.driver.id,
+          name: r.driver.name,
+          vehicleType: r.driver.vehicleType,
+          lastKnownLat: r.driver.lastKnownLat,
+          lastKnownLng: r.driver.lastKnownLng,
+          acceptedAt: toLocalISOString(r.acceptedAt),
+        }
+      : undefined,
+    etaMin: etaMin ?? null,
+    etaKm: etaKm ?? null,
+    rated: r.rating !== null && r.rating !== undefined,
+    subType: r.subType ?? null,
+    imageUri: r.imageUri ?? null,
+    level: r.level ?? null, // <<< ADD THIS LINE!
+  };
+});
 
     res.json(formattedRides);
   } catch (error) {
