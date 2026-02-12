@@ -6,6 +6,7 @@ import { DateTime } from "luxon";
 
 const LOCAL_TZ = "Africa/Cairo";
 
+// Utility functions
 function normalizeVehicleType(input: any): VehicleType | undefined {
   if (!input || typeof input !== "string") return undefined;
   const upper = input.trim().toUpperCase();
@@ -167,12 +168,14 @@ export const requestRide = async (
       serviceCategoryId,
       serviceSubTypeId,
       jobDetails,
+      level, // <-- Here for Tutor jobs
     } = req.body;
 
     const isShopping = serviceType === "SHOPPING";
     const isBeauty = serviceType === "BEAUTY";
     const isHairDresser = serviceType === "HAIR_DRESSER";
     const isCleaning = serviceType === "CLEANING";
+    const isTutor = serviceType === "TUTOR";
 
     const normalizedVehicleType = normalizeVehicleType(vehicleType);
 
@@ -198,6 +201,11 @@ export const requestRide = async (
       (!subType || typeof subType !== "string" || !subType.trim())
     ) {
       return res.status(400).json({ error: "Missing subType for beauty or hair dresser" });
+    }
+
+    // Tutor validation
+    if (isTutor && (!level || typeof level !== "string")) {
+      return res.status(400).json({ error: "Missing tutor level" });
     }
 
     let scheduledAtUTC: Date | undefined = undefined;
@@ -239,6 +247,11 @@ export const requestRide = async (
     if (description) {
       (baseData as any).description = description;
     }
+    if (isTutor && level) {
+      (baseData as any).level = level;
+    }
+
+    console.log("Ride baseData:", baseData);
 
     const ride = await prisma.ride.create({
       data: baseData,
@@ -254,12 +267,34 @@ export const requestRide = async (
       subType: ride.subType,
       imageUri: ride.imageUri,
       categoryName: ride.categoryName,
+      level: ride.level, // Return for provider UI/filtering
     });
   } catch (error) {
     console.error("Error creating ride:", error);
     next(error);
   }
 };
+
+// ----------- The rest of your controller unchanged -----------
+
+// cleanupUnacceptedRides
+// cleanupStuckRides
+// editScheduledRide
+// cancelRide
+// markRideAsDone
+// getAllCustomerRides
+// getAllDriverRides
+// getAvailableRequests
+// acceptRide
+// startRide
+// markRideNoShow
+// getRideStatus
+// rateRide
+// getCurrentRide
+// updateCustomerLocation
+// getAvailableRides
+
+// Paste your unchanged code for the above endpoints (or keep your existing file).
 
 export const editScheduledRide = async (
   req: Request,
